@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard - Kacak Arac Tespit Sistemi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes alarm-flash {
+            0%, 100% { background-color: rgba(220, 38, 38, 0.15); }
+            50% { background-color: rgba(220, 38, 38, 0.4); }
+        }
+        .alarm-active {
+            animation: alarm-flash 0.8s ease-in-out infinite;
+        }
+        @keyframes pulse-border {
+            0%, 100% { border-color: #dc2626; }
+            50% { border-color: #fca5a5; }
+        }
+        .alarm-border {
+            animation: pulse-border 1s ease-in-out infinite;
+        }
+        .passage-enter {
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+    <!-- Alarm Overlay -->
+    <div id="alarm-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center alarm-active">
+        <div class="bg-gray-900/95 border-4 border-red-500 alarm-border rounded-2xl p-10 max-w-lg w-full mx-4 text-center shadow-2xl">
+            <div class="text-red-500 text-6xl mb-4">&#9888;</div>
+            <h2 class="text-3xl font-black text-red-500 mb-2">KACAK GECIS!</h2>
+            <p id="alarm-plate" class="text-5xl font-mono font-bold text-white mb-4"></p>
+            <p id="alarm-time" class="text-gray-400 mb-4"></p>
+            <img id="alarm-screenshot" class="w-full rounded-lg mb-6 hidden" alt="Kacak arac">
+            <button onclick="silenceAlarm()" class="bg-red-600 hover:bg-red-700 text-white text-2xl font-bold py-4 px-12 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg">
+                ALARM SUSTUR
+            </button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div id="status-dot" class="w-3 h-3 rounded-full bg-green-500"></div>
+            <h1 class="text-lg font-bold">GateGuard</h1>
+            <span class="text-xs text-gray-500 font-mono">Kacak Arac Tespit Sistemi</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="ws-status" class="text-xs text-gray-500">Baglaniyor...</span>
+            <button onclick="triggerSync()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700 transition">
+                MDB Senkronize Et
+            </button>
+        </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex h-[calc(100vh-52px)]">
+        <!-- Left panel — passages list -->
+        <div class="flex-1 flex flex-col border-r border-gray-800">
+            <div class="px-4 py-3 bg-gray-900/50 border-b border-gray-800 flex items-center justify-between">
+                <h2 class="font-semibold text-sm">Son Gecisler</h2>
+                <span id="passage-count" class="text-xs text-gray-500">0 gecis</span>
+            </div>
+            <div id="passages-list" class="flex-1 overflow-y-auto p-2 space-y-1">
+                <div class="text-center text-gray-600 py-20 text-sm">
+                    Bekleniyor... Sistem aktif oldugunda gecisler burada gorunecek.
+                </div>
+            </div>
+        </div>
+
+        <!-- Right panel — stats + alarm info -->
+        <div class="w-80 flex flex-col bg-gray-900/30">
+            <!-- Alarm status -->
+            <div id="alarm-status-panel" class="p-4 border-b border-gray-800">
+                <div class="flex items-center gap-2 mb-3">
+                    <div id="alarm-indicator" class="w-4 h-4 rounded-full bg-green-500"></div>
+                    <span id="alarm-status-text" class="font-semibold text-sm">Normal</span>
+                </div>
+                <div id="last-alarm-info" class="hidden">
+                    <p class="text-xs text-gray-500 mb-1">Son Kacak:</p>
+                    <p id="last-alarm-plate-text" class="text-xl font-mono font-bold text-red-400"></p>
+                    <p id="last-alarm-time-text" class="text-xs text-gray-500"></p>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="p-4 border-b border-gray-800">
+                <h3 class="text-xs text-gray-500 uppercase tracking-wide mb-3">Bugunun Istatistikleri</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gray-800/50 rounded-lg p-3">
+                        <div class="text-2xl font-bold" id="stat-total">0</div>
+                        <div class="text-xs text-gray-500">Toplam</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-lg p-3">
+                        <div class="text-2xl font-bold text-green-400" id="stat-authorized">0</div>
+                        <div class="text-xs text-gray-500">Yetkili</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-lg p-3">
+                        <div class="text-2xl font-bold text-red-400" id="stat-unauthorized">0</div>
+                        <div class="text-xs text-gray-500">Kacak</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-lg p-3">
+                        <div class="text-2xl font-bold text-blue-400" id="stat-rate">0%</div>
+                        <div class="text-xs text-gray-500">Dogruluk</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System info -->
+            <div class="p-4 flex-1">
+                <h3 class="text-xs text-gray-500 uppercase tracking-wide mb-3">Sistem</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Son Sync:</span>
+                        <span id="last-sync-time" class="text-gray-300">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">WebSocket:</span>
+                        <span id="ws-connection-text" class="text-gray-300">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Mod:</span>
+                        <span id="mode-text" class="text-yellow-400">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sync status toast -->
+            <div id="sync-toast" class="hidden p-3 mx-4 mb-4 rounded-lg bg-green-900/50 border border-green-700 text-green-300 text-sm">
+                Senkronizasyon tamamlandi!
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- State ---
+        let ws = null;
+        let passages = [];
+        let alarmActive = false;
+        const MAX_PASSAGES = 100;
+
+        // --- WebSocket ---
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                document.getElementById('ws-status').textContent = 'Bagli';
+                document.getElementById('ws-status').className = 'text-xs text-green-400';
+                document.getElementById('ws-connection-text').textContent = 'Bagli';
+                fetchStatus();
+                fetchStats();
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            };
+
+            ws.onclose = () => {
+                document.getElementById('ws-status').textContent = 'Baglanti kesildi';
+                document.getElementById('ws-status').className = 'text-xs text-red-400';
+                document.getElementById('ws-connection-text').textContent = 'Kesildi';
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = () => {
+                ws.close();
+            };
+        }
+
+        // --- Message handlers ---
+        function handleMessage(msg) {
+            switch (msg.type) {
+                case 'passage':
+                    addPassage(msg.data);
+                    fetchStats();
+                    break;
+                case 'alarm_on':
+                    addPassage(msg.data);
+                    showAlarm(msg.data);
+                    fetchStats();
+                    break;
+                case 'alarm_off':
+                    hideAlarm();
+                    break;
+                case 'sync_complete':
+                    showSyncToast(msg.data);
+                    break;
+            }
+        }
+
+        // --- Passages ---
+        function addPassage(data) {
+            passages.unshift(data);
+            if (passages.length > MAX_PASSAGES) passages.pop();
+            renderPassages();
+        }
+
+        function renderPassages() {
+            const list = document.getElementById('passages-list');
+            document.getElementById('passage-count').textContent = `${passages.length} gecis`;
+
+            if (passages.length === 0) {
+                list.innerHTML = '<div class="text-center text-gray-600 py-20 text-sm">Henuz gecis yok.</div>';
+                return;
+            }
+
+            list.innerHTML = passages.map((p, i) => {
+                const time = new Date(p.detected_at).toLocaleTimeString('tr-TR');
+                const isAuth = p.is_authorized;
+                const bgClass = isAuth ? 'bg-gray-800/50 border-gray-700' : 'bg-red-950/30 border-red-900/50';
+                const statusIcon = isAuth ? '&#10003;' : '&#10007;';
+                const statusColor = isAuth ? 'text-green-400' : 'text-red-400';
+                const statusText = isAuth ? 'Yetkili' : 'KACAK';
+                const enterClass = i === 0 ? 'passage-enter' : '';
+
+                return `
+                    <div class="flex items-center gap-3 p-3 rounded-lg border ${bgClass} ${enterClass}">
+                        ${!isAuth && p.screenshot_url ?
+                            `<img src="${p.screenshot_url}" class="w-16 h-12 object-cover rounded border border-gray-700" alt="screenshot">` :
+                            `<div class="w-16 h-12 bg-gray-800 rounded flex items-center justify-center text-gray-600 text-xs">-</div>`
+                        }
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono font-bold text-sm">${p.plate}</span>
+                                <span class="${statusColor} text-xs font-semibold">${statusIcon} ${statusText}</span>
+                            </div>
+                            <div class="text-xs text-gray-500 flex gap-3">
+                                <span>${time}</span>
+                                ${p.owner_name ? `<span>${p.owner_name}</span>` : ''}
+                                <span>%${p.confidence.toFixed(0)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // --- Alarm ---
+        function showAlarm(data) {
+            alarmActive = true;
+            document.getElementById('alarm-overlay').classList.remove('hidden');
+            document.getElementById('alarm-plate').textContent = data.plate;
+            document.getElementById('alarm-time').textContent = new Date(data.detected_at).toLocaleString('tr-TR');
+
+            const img = document.getElementById('alarm-screenshot');
+            if (data.screenshot_url) {
+                img.src = data.screenshot_url;
+                img.classList.remove('hidden');
+            } else {
+                img.classList.add('hidden');
+            }
+
+            // Update sidebar
+            document.getElementById('alarm-indicator').className = 'w-4 h-4 rounded-full bg-red-500 animate-pulse';
+            document.getElementById('alarm-status-text').textContent = 'ALARM AKTIF!';
+            document.getElementById('alarm-status-text').className = 'font-semibold text-sm text-red-400';
+            document.getElementById('status-dot').className = 'w-3 h-3 rounded-full bg-red-500 animate-pulse';
+
+            document.getElementById('last-alarm-info').classList.remove('hidden');
+            document.getElementById('last-alarm-plate-text').textContent = data.plate;
+            document.getElementById('last-alarm-time-text').textContent = new Date(data.detected_at).toLocaleTimeString('tr-TR');
+        }
+
+        function hideAlarm() {
+            alarmActive = false;
+            document.getElementById('alarm-overlay').classList.add('hidden');
+            document.getElementById('alarm-indicator').className = 'w-4 h-4 rounded-full bg-green-500';
+            document.getElementById('alarm-status-text').textContent = 'Normal';
+            document.getElementById('alarm-status-text').className = 'font-semibold text-sm text-green-400';
+            document.getElementById('status-dot').className = 'w-3 h-3 rounded-full bg-green-500';
+        }
+
+        async function silenceAlarm() {
+            try {
+                await fetch('/alarm/off', { method: 'POST' });
+            } catch (e) {
+                console.error('Alarm susturma hatasi:', e);
+            }
+        }
+
+        // --- Sync ---
+        async function triggerSync() {
+            try {
+                const resp = await fetch('/api/sync', { method: 'POST' });
+                const data = await resp.json();
+                showSyncToast(data);
+            } catch (e) {
+                console.error('Sync hatasi:', e);
+            }
+        }
+
+        function showSyncToast(data) {
+            const toast = document.getElementById('sync-toast');
+            if (data.errors && data.errors.length > 0) {
+                toast.textContent = `Sync hatasi: ${data.errors[0]}`;
+                toast.className = 'p-3 mx-4 mb-4 rounded-lg bg-red-900/50 border border-red-700 text-red-300 text-sm';
+            } else {
+                toast.textContent = `Senkronizasyon tamamlandi! ${data.total} plaka (${data.new} yeni, ${data.updated} guncellendi)`;
+                toast.className = 'p-3 mx-4 mb-4 rounded-lg bg-green-900/50 border border-green-700 text-green-300 text-sm';
+            }
+            toast.classList.remove('hidden');
+            if (data.timestamp) {
+                document.getElementById('last-sync-time').textContent = new Date(data.timestamp).toLocaleTimeString('tr-TR');
+            }
+            setTimeout(() => toast.classList.add('hidden'), 5000);
+        }
+
+        // --- Stats ---
+        async function fetchStats() {
+            try {
+                const resp = await fetch('/api/stats');
+                const data = await resp.json();
+                document.getElementById('stat-total').textContent = data.today_total;
+                document.getElementById('stat-authorized').textContent = data.today_authorized;
+                document.getElementById('stat-unauthorized').textContent = data.today_unauthorized;
+                document.getElementById('stat-rate').textContent = `${data.auth_rate}%`;
+            } catch (e) {}
+        }
+
+        async function fetchStatus() {
+            try {
+                const resp = await fetch('/api/status');
+                const data = await resp.json();
+                if (data.last_sync) {
+                    document.getElementById('last-sync-time').textContent = new Date(data.last_sync).toLocaleTimeString('tr-TR');
+                }
+                document.getElementById('mode-text').textContent = data.mock_mode ? 'Mock (Test)' : 'Canli';
+            } catch (e) {}
+        }
+
+        // --- Init ---
+        connectWebSocket();
+        setInterval(fetchStats, 30000);
+    </script>
+</body>
+</html>
