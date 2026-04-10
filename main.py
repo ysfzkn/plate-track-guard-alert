@@ -119,7 +119,7 @@ async def lifespan(app: FastAPI):
     )
 
     # Initialize routes with shared instances
-    init_routes(db, alarm, ws_manager, settings.MDB_PATH)
+    init_routes(db, alarm, ws_manager, settings.MDB_PATH, camera)
 
     # Start detection engine
     engine = DetectionEngine(
@@ -134,7 +134,14 @@ async def lifespan(app: FastAPI):
     )
     await engine.start()
 
-    logger.info("All systems online. Monitoring active.")
+    # Cleanup old screenshots on startup
+    try:
+        from app.screenshot import cleanup_old_screenshots
+        cleanup_old_screenshots(settings.SCREENSHOT_DIR, retention_days=90)
+    except Exception:
+        logger.exception("Screenshot cleanup failed")
+
+    logger.info("Tum sistemler aktif. Izleme baslatildi.")
 
     yield
 

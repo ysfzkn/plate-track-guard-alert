@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import threading
 from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
@@ -52,6 +53,7 @@ class Database:
     def __init__(self, db_path: str):
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.db_path = db_path
+        self._lock = threading.Lock()
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
@@ -105,37 +107,38 @@ class Database:
     # --- Vehicle operations ---
 
     def upsert_vehicles(self, vehicles: list[Vehicle]) -> tuple[int, int]:
-        """Bulk upsert vehicles. Returns (new_count, updated_count)."""
+        """Bulk upsert vehicles. Returns (new_count, updated_count). Thread-safe."""
         new_count = 0
         updated_count = 0
-        for v in vehicles:
-            cursor = self.conn.execute(
-                "SELECT id FROM vehicles WHERE moonwell_id = ?", (v.moonwell_id,)
-            )
-            existing = cursor.fetchone()
-            if existing:
-                self.conn.execute(
-                    """UPDATE vehicles
-                       SET plate=?, plate_normalized=?, owner_name=?,
-                           block_no=?, apartment=?, user_type=?, kart_id=?,
-                           synced_at=CURRENT_TIMESTAMP
-                       WHERE moonwell_id=?""",
-                    (v.plate, v.plate_normalized, v.owner_name,
-                     v.block_no, v.apartment, v.user_type, v.kart_id,
-                     v.moonwell_id),
+        with self._lock:
+            for v in vehicles:
+                cursor = self.conn.execute(
+                    "SELECT id FROM vehicles WHERE moonwell_id = ?", (v.moonwell_id,)
                 )
-                updated_count += 1
-            else:
-                self.conn.execute(
-                    """INSERT INTO vehicles
-                       (moonwell_id, plate, plate_normalized, owner_name,
-                        block_no, apartment, user_type, kart_id)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (v.moonwell_id, v.plate, v.plate_normalized, v.owner_name,
-                     v.block_no, v.apartment, v.user_type, v.kart_id),
-                )
-                new_count += 1
-        self.conn.commit()
+                existing = cursor.fetchone()
+                if existing:
+                    self.conn.execute(
+                        """UPDATE vehicles
+                           SET plate=?, plate_normalized=?, owner_name=?,
+                               block_no=?, apartment=?, user_type=?, kart_id=?,
+                               synced_at=CURRENT_TIMESTAMP
+                           WHERE moonwell_id=?""",
+                        (v.plate, v.plate_normalized, v.owner_name,
+                         v.block_no, v.apartment, v.user_type, v.kart_id,
+                         v.moonwell_id),
+                    )
+                    updated_count += 1
+                else:
+                    self.conn.execute(
+                        """INSERT INTO vehicles
+                           (moonwell_id, plate, plate_normalized, owner_name,
+                            block_no, apartment, user_type, kart_id)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (v.moonwell_id, v.plate, v.plate_normalized, v.owner_name,
+                         v.block_no, v.apartment, v.user_type, v.kart_id),
+                    )
+                    new_count += 1
+            self.conn.commit()
         return new_count, updated_count
 
     def lookup_plate(self, normalized: str) -> Optional[Vehicle]:
@@ -174,18 +177,25 @@ class Database:
 
     # --- Passage operations ---
 
+    def get_vehicle_count(self) -> int:
+        """Return total number of registered vehicles."""
+        row = self.conn.execute("SELECT COUNT(*) as cnt FROM vehicles").fetchone()
+        return row["cnt"] if row else 0
+
     def add_passage(self, record: PassageRecord) -> int:
-        cursor = self.conn.execute(
-            """INSERT INTO passages
-               (plate, plate_normalized, detected_at, is_authorized,
-                owner_name, confidence, screenshot_path)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (record.plate, record.plate_normalized, record.detected_at.isoformat(),
-             int(record.is_authorized), record.owner_name,
-             record.confidence, record.screenshot_path),
-        )
-        self.conn.commit()
-        return cursor.lastrowid
+        """Insert a passage record. Thread-safe."""
+        with self._lock:
+            cursor = self.conn.execute(
+                """INSERT INTO passages
+                   (plate, plate_normalized, detected_at, is_authorized,
+                    owner_name, confidence, screenshot_path)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (record.plate, record.plate_normalized, record.detected_at.isoformat(),
+                 int(record.is_authorized), record.owner_name,
+                 record.confidence, record.screenshot_path),
+            )
+            self.conn.commit()
+            return cursor.lastrowid
 
     def get_recent_passages(self, limit: int = 50) -> list[dict]:
         rows = self.conn.execute(

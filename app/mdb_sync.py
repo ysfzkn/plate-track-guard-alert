@@ -30,6 +30,9 @@ def _sync_blocking(mdb_path: str, db: Database) -> dict:
         db.log_sync(0, 0, 0, status="error", error=msg)
         return {"total": 0, "new": 0, "updated": 0, "errors": [msg], "timestamp": datetime.now().isoformat()}
 
+    # Resolve to absolute path
+    mdb_path = str(Path(mdb_path).resolve())
+
     conn_str = (
         r"Driver={Microsoft Access Driver (*.mdb, *.accdb)};"
         f"DBQ={mdb_path};"
@@ -41,7 +44,7 @@ def _sync_blocking(mdb_path: str, db: Database) -> dict:
 
     for attempt in range(max_retries):
         try:
-            conn = pyodbc.connect(conn_str)
+            conn = pyodbc.connect(conn_str, autocommit=True)
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT ID, [Kart ID], Adi, Soyadi, Plaka, [Blok No], Daire, [Kullanici Tipi] "

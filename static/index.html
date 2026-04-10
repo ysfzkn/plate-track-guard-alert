@@ -3,344 +3,482 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GateGuard - Kacak Arac Tespit Sistemi</title>
+    <title>GateGuard — Kaçak Araç Tespit Sistemi</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes alarm-flash {
-            0%, 100% { background-color: rgba(220, 38, 38, 0.15); }
-            50% { background-color: rgba(220, 38, 38, 0.4); }
+            0%, 100% { background-color: rgba(220, 38, 38, 0.1); }
+            50% { background-color: rgba(220, 38, 38, 0.45); }
         }
-        .alarm-active {
-            animation: alarm-flash 0.8s ease-in-out infinite;
-        }
+        .alarm-bg { animation: alarm-flash 0.7s ease-in-out infinite; }
+
         @keyframes pulse-border {
-            0%, 100% { border-color: #dc2626; }
-            50% { border-color: #fca5a5; }
+            0%, 100% { border-color: #dc2626; box-shadow: 0 0 20px rgba(220,38,38,0.3); }
+            50% { border-color: #fca5a5; box-shadow: 0 0 40px rgba(220,38,38,0.6); }
         }
-        .alarm-border {
-            animation: pulse-border 1s ease-in-out infinite;
-        }
-        .passage-enter {
-            animation: slideIn 0.3s ease-out;
-        }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(-10px); }
+        .alarm-border { animation: pulse-border 0.8s ease-in-out infinite; }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-12px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        .passage-enter { animation: slideDown 0.3s ease-out; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+
+        .toast-enter { animation: slideDown 0.3s ease-out; }
+        .toast-exit { animation: slideDown 0.3s ease-in reverse; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+        /* Alarm button hover glow */
+        .alarm-btn:hover { box-shadow: 0 0 30px rgba(220,38,38,0.5); }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
+<body class="bg-gray-950 text-gray-100 min-h-screen select-none">
 
-    <!-- Alarm Overlay -->
-    <div id="alarm-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center alarm-active">
-        <div class="bg-gray-900/95 border-4 border-red-500 alarm-border rounded-2xl p-10 max-w-lg w-full mx-4 text-center shadow-2xl">
-            <div class="text-red-500 text-6xl mb-4">&#9888;</div>
-            <h2 class="text-3xl font-black text-red-500 mb-2">KACAK GECIS!</h2>
-            <p id="alarm-plate" class="text-5xl font-mono font-bold text-white mb-4"></p>
-            <p id="alarm-time" class="text-gray-400 mb-4"></p>
-            <img id="alarm-screenshot" class="w-full rounded-lg mb-6 hidden" alt="Kacak arac">
-            <button onclick="silenceAlarm()" class="bg-red-600 hover:bg-red-700 text-white text-2xl font-bold py-4 px-12 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg">
-                ALARM SUSTUR
+    <!-- ====== ALARM OVERLAY ====== -->
+    <div id="alarm-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center alarm-bg">
+        <div class="bg-gray-900/95 border-4 border-red-500 alarm-border rounded-2xl p-8 max-w-xl w-full mx-4 text-center shadow-2xl fade-in">
+            <div class="text-7xl mb-3">🚨</div>
+            <h2 class="text-4xl font-black text-red-500 mb-1 tracking-wide">KAÇAK GEÇİŞ!</h2>
+            <p class="text-gray-400 text-sm mb-4">Yetkisiz araç tespit edildi</p>
+
+            <p id="alarm-plate" class="text-6xl font-mono font-black text-white mb-2 tracking-widest"></p>
+            <p id="alarm-time" class="text-gray-400 text-sm mb-5"></p>
+
+            <img id="alarm-screenshot" class="w-full max-h-64 object-contain rounded-lg mb-6 hidden border border-gray-700" alt="Kaçak araç görüntüsü">
+
+            <button onclick="susturAlarm()"
+                class="alarm-btn bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-2xl font-black py-5 px-16 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg uppercase tracking-wider">
+                🔇 ALARMI SUSTUR
             </button>
         </div>
     </div>
 
-    <!-- Header -->
+    <!-- ====== HEADER ====== -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
         <div class="flex items-center gap-3">
-            <div id="status-dot" class="w-3 h-3 rounded-full bg-green-500"></div>
-            <h1 class="text-lg font-bold">GateGuard</h1>
-            <span class="text-xs text-gray-500 font-mono">Kacak Arac Tespit Sistemi</span>
+            <div id="status-dot" class="w-3 h-3 rounded-full bg-green-500 transition-colors"></div>
+            <h1 class="text-lg font-bold tracking-tight">🛡️ GateGuard</h1>
+            <span class="text-xs text-gray-500 font-mono hidden sm:inline">Kaçak Araç Tespit Sistemi</span>
         </div>
-        <div class="flex items-center gap-4">
-            <span id="ws-status" class="text-xs text-gray-500">Baglaniyor...</span>
-            <button onclick="triggerSync()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700 transition">
-                MDB Senkronize Et
+        <div class="flex items-center gap-3">
+            <div id="ws-badge" class="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">
+                <div id="ws-dot" class="w-2 h-2 rounded-full bg-yellow-500 transition-colors"></div>
+                <span id="ws-status">Bağlanıyor...</span>
+            </div>
+            <button onclick="senkronizeEt()" id="sync-btn"
+                class="text-xs bg-gray-800 hover:bg-gray-700 active:bg-gray-600 px-3 py-1.5 rounded-lg border border-gray-700 transition flex items-center gap-1.5">
+                <span id="sync-icon">🔄</span> Veritabanı Güncelle
             </button>
         </div>
     </header>
 
-    <!-- Main content -->
+    <!-- ====== ANA İÇERİK ====== -->
     <main class="flex h-[calc(100vh-52px)]">
-        <!-- Left panel — passages list -->
-        <div class="flex-1 flex flex-col border-r border-gray-800">
-            <div class="px-4 py-3 bg-gray-900/50 border-b border-gray-800 flex items-center justify-between">
-                <h2 class="font-semibold text-sm">Son Gecisler</h2>
-                <span id="passage-count" class="text-xs text-gray-500">0 gecis</span>
+
+        <!-- ===== SOL PANEL — GEÇİŞ LİSTESİ ===== -->
+        <div class="flex-1 flex flex-col border-r border-gray-800 min-w-0">
+            <div class="px-4 py-3 bg-gray-900/50 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
+                <h2 class="font-semibold text-sm flex items-center gap-2">
+                    📋 Son Geçişler
+                </h2>
+                <span id="passage-count" class="text-xs text-gray-500 font-mono">0 geçiş</span>
             </div>
             <div id="passages-list" class="flex-1 overflow-y-auto p-2 space-y-1">
-                <div class="text-center text-gray-600 py-20 text-sm">
-                    Bekleniyor... Sistem aktif oldugunda gecisler burada gorunecek.
+                <div id="empty-state" class="text-center py-20">
+                    <div class="text-4xl mb-3">🚗</div>
+                    <p class="text-gray-500 text-sm">Sistem aktif. Araç geçişleri burada listelenecek.</p>
+                    <p class="text-gray-600 text-xs mt-1">Plaka tespit edildiğinde otomatik olarak görünür.</p>
                 </div>
             </div>
         </div>
 
-        <!-- Right panel — stats + alarm info -->
-        <div class="w-80 flex flex-col bg-gray-900/30">
-            <!-- Alarm status -->
+        <!-- ===== SAĞ PANEL — ALARM + İSTATİSTİK ===== -->
+        <div class="w-80 flex flex-col bg-gray-900/30 flex-shrink-0">
+
+            <!-- Alarm Durumu -->
             <div id="alarm-status-panel" class="p-4 border-b border-gray-800">
-                <div class="flex items-center gap-2 mb-3">
-                    <div id="alarm-indicator" class="w-4 h-4 rounded-full bg-green-500"></div>
-                    <span id="alarm-status-text" class="font-semibold text-sm">Normal</span>
+                <div class="flex items-center gap-2.5 mb-3">
+                    <div id="alarm-indicator" class="w-4 h-4 rounded-full bg-green-500 transition-colors"></div>
+                    <span id="alarm-status-text" class="font-semibold text-sm text-green-400">Sistem Normal</span>
                 </div>
-                <div id="last-alarm-info" class="hidden">
-                    <p class="text-xs text-gray-500 mb-1">Son Kacak:</p>
-                    <p id="last-alarm-plate-text" class="text-xl font-mono font-bold text-red-400"></p>
-                    <p id="last-alarm-time-text" class="text-xs text-gray-500"></p>
+                <div id="last-alarm-info" class="hidden bg-red-950/30 rounded-lg p-3 border border-red-900/40">
+                    <p class="text-xs text-gray-500 mb-1">Son Kaçak Geçiş:</p>
+                    <p id="last-alarm-plate-text" class="text-2xl font-mono font-bold text-red-400 tracking-wider"></p>
+                    <p id="last-alarm-time-text" class="text-xs text-gray-500 mt-1"></p>
                 </div>
             </div>
 
-            <!-- Stats -->
+            <!-- İstatistikler -->
             <div class="p-4 border-b border-gray-800">
-                <h3 class="text-xs text-gray-500 uppercase tracking-wide mb-3">Bugunun Istatistikleri</h3>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="bg-gray-800/50 rounded-lg p-3">
-                        <div class="text-2xl font-bold" id="stat-total">0</div>
-                        <div class="text-xs text-gray-500">Toplam</div>
+                <h3 class="text-xs text-gray-500 uppercase tracking-wider mb-3 font-semibold">📊 Bugünün İstatistikleri</h3>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
+                        <div class="text-2xl font-bold text-gray-200" id="stat-total">0</div>
+                        <div class="text-xs text-gray-500">Toplam Geçiş</div>
                     </div>
-                    <div class="bg-gray-800/50 rounded-lg p-3">
+                    <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
                         <div class="text-2xl font-bold text-green-400" id="stat-authorized">0</div>
                         <div class="text-xs text-gray-500">Yetkili</div>
                     </div>
-                    <div class="bg-gray-800/50 rounded-lg p-3">
+                    <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
                         <div class="text-2xl font-bold text-red-400" id="stat-unauthorized">0</div>
-                        <div class="text-xs text-gray-500">Kacak</div>
+                        <div class="text-xs text-gray-500">Kaçak</div>
                     </div>
-                    <div class="bg-gray-800/50 rounded-lg p-3">
-                        <div class="text-2xl font-bold text-blue-400" id="stat-rate">0%</div>
-                        <div class="text-xs text-gray-500">Dogruluk</div>
+                    <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
+                        <div class="text-2xl font-bold text-blue-400" id="stat-rate">—</div>
+                        <div class="text-xs text-gray-500">Yetki Oranı</div>
                     </div>
                 </div>
             </div>
 
-            <!-- System info -->
+            <!-- Sistem Bilgisi -->
             <div class="p-4 flex-1">
-                <h3 class="text-xs text-gray-500 uppercase tracking-wide mb-3">Sistem</h3>
-                <div class="space-y-2 text-sm">
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Son Sync:</span>
-                        <span id="last-sync-time" class="text-gray-300">-</span>
+                <h3 class="text-xs text-gray-500 uppercase tracking-wider mb-3 font-semibold">⚙️ Sistem Durumu</h3>
+                <div class="space-y-2.5 text-sm">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">Kamera:</span>
+                        <span id="camera-status" class="text-gray-300 flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-yellow-500 inline-block"></span> Bekleniyor
+                        </span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">WebSocket:</span>
-                        <span id="ws-connection-text" class="text-gray-300">-</span>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">Son Güncelleme:</span>
+                        <span id="last-sync-time" class="text-gray-300">—</span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Mod:</span>
-                        <span id="mode-text" class="text-yellow-400">-</span>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">Bağlantı:</span>
+                        <span id="ws-connection-text" class="text-gray-300">—</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">Çalışma Modu:</span>
+                        <span id="mode-text" class="text-yellow-400 font-mono text-xs">—</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">Kayıtlı Plaka:</span>
+                        <span id="vehicle-count" class="text-gray-300 font-mono">—</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Sync status toast -->
-            <div id="sync-toast" class="hidden p-3 mx-4 mb-4 rounded-lg bg-green-900/50 border border-green-700 text-green-300 text-sm">
-                Senkronizasyon tamamlandi!
-            </div>
+            <!-- Bildirim Alanı -->
+            <div id="toast-container" class="px-4 pb-4 space-y-2"></div>
         </div>
     </main>
 
     <script>
-        // --- State ---
-        let ws = null;
-        let passages = [];
-        let alarmActive = false;
-        const MAX_PASSAGES = 100;
+    // ============================================================
+    //  DURUM
+    // ============================================================
+    let ws = null;
+    let gecisler = [];
+    let alarmAktif = false;
+    const MAX_GECIS = 100;
+    let yenidenBaglanmaSayaci = 0;
 
-        // --- WebSocket ---
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
-            ws = new WebSocket(wsUrl);
+    // ============================================================
+    //  WEBSOCKET
+    // ============================================================
+    function baglan() {
+        const protokol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protokol}//${location.host}/ws`);
 
-            ws.onopen = () => {
-                document.getElementById('ws-status').textContent = 'Bagli';
-                document.getElementById('ws-status').className = 'text-xs text-green-400';
-                document.getElementById('ws-connection-text').textContent = 'Bagli';
-                fetchStatus();
-                fetchStats();
-            };
+        ws.onopen = () => {
+            yenidenBaglanmaSayaci = 0;
+            durumGuncelle('bagli');
+            durumBilgisiAl();
+            istatistikAl();
+        };
 
-            ws.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                handleMessage(msg);
-            };
-
-            ws.onclose = () => {
-                document.getElementById('ws-status').textContent = 'Baglanti kesildi';
-                document.getElementById('ws-status').className = 'text-xs text-red-400';
-                document.getElementById('ws-connection-text').textContent = 'Kesildi';
-                setTimeout(connectWebSocket, 3000);
-            };
-
-            ws.onerror = () => {
-                ws.close();
-            };
-        }
-
-        // --- Message handlers ---
-        function handleMessage(msg) {
-            switch (msg.type) {
-                case 'passage':
-                    addPassage(msg.data);
-                    fetchStats();
-                    break;
-                case 'alarm_on':
-                    addPassage(msg.data);
-                    showAlarm(msg.data);
-                    fetchStats();
-                    break;
-                case 'alarm_off':
-                    hideAlarm();
-                    break;
-                case 'sync_complete':
-                    showSyncToast(msg.data);
-                    break;
+        ws.onmessage = (e) => {
+            try {
+                const mesaj = JSON.parse(e.data);
+                mesajIsle(mesaj);
+            } catch (err) {
+                console.error('Mesaj ayrıştırma hatası:', err);
             }
+        };
+
+        ws.onclose = () => {
+            durumGuncelle('kopuk');
+            yenidenBaglanmaSayaci++;
+            const bekleme = Math.min(3000 * yenidenBaglanmaSayaci, 30000);
+            setTimeout(baglan, bekleme);
+        };
+
+        ws.onerror = () => ws.close();
+    }
+
+    function durumGuncelle(durum) {
+        const dot = document.getElementById('ws-dot');
+        const text = document.getElementById('ws-status');
+        const connText = document.getElementById('ws-connection-text');
+
+        if (durum === 'bagli') {
+            dot.className = 'w-2 h-2 rounded-full bg-green-500';
+            text.textContent = 'Bağlı';
+            connText.textContent = 'Bağlı';
+            connText.className = 'text-green-400';
+        } else {
+            dot.className = 'w-2 h-2 rounded-full bg-red-500';
+            text.textContent = 'Bağlantı Kesildi';
+            connText.textContent = 'Kesildi';
+            connText.className = 'text-red-400';
         }
+    }
 
-        // --- Passages ---
-        function addPassage(data) {
-            passages.unshift(data);
-            if (passages.length > MAX_PASSAGES) passages.pop();
-            renderPassages();
+    // ============================================================
+    //  MESAJ İŞLEME
+    // ============================================================
+    function mesajIsle(mesaj) {
+        switch (mesaj.type) {
+            case 'passage':
+                gecisEkle(mesaj.data);
+                istatistikAl();
+                break;
+            case 'alarm_on':
+                gecisEkle(mesaj.data);
+                alarmGoster(mesaj.data);
+                istatistikAl();
+                break;
+            case 'alarm_off':
+                alarmKapat();
+                break;
+            case 'sync_complete':
+                senkBildirimiGoster(mesaj.data);
+                break;
         }
+    }
 
-        function renderPassages() {
-            const list = document.getElementById('passages-list');
-            document.getElementById('passage-count').textContent = `${passages.length} gecis`;
+    // ============================================================
+    //  GEÇİŞ LİSTESİ
+    // ============================================================
+    function gecisEkle(veri) {
+        gecisler.unshift(veri);
+        if (gecisler.length > MAX_GECIS) gecisler.pop();
+        gecisleriCiz();
+    }
 
-            if (passages.length === 0) {
-                list.innerHTML = '<div class="text-center text-gray-600 py-20 text-sm">Henuz gecis yok.</div>';
-                return;
-            }
+    function gecisleriCiz() {
+        const liste = document.getElementById('passages-list');
+        const bos = document.getElementById('empty-state');
+        document.getElementById('passage-count').textContent = `${gecisler.length} geçiş`;
 
-            list.innerHTML = passages.map((p, i) => {
-                const time = new Date(p.detected_at).toLocaleTimeString('tr-TR');
-                const isAuth = p.is_authorized;
-                const bgClass = isAuth ? 'bg-gray-800/50 border-gray-700' : 'bg-red-950/30 border-red-900/50';
-                const statusIcon = isAuth ? '&#10003;' : '&#10007;';
-                const statusColor = isAuth ? 'text-green-400' : 'text-red-400';
-                const statusText = isAuth ? 'Yetkili' : 'KACAK';
-                const enterClass = i === 0 ? 'passage-enter' : '';
+        if (gecisler.length === 0) {
+            if (bos) bos.classList.remove('hidden');
+            return;
+        }
+        if (bos) bos.classList.add('hidden');
 
-                return `
-                    <div class="flex items-center gap-3 p-3 rounded-lg border ${bgClass} ${enterClass}">
-                        ${!isAuth && p.screenshot_url ?
-                            `<img src="${p.screenshot_url}" class="w-16 h-12 object-cover rounded border border-gray-700" alt="screenshot">` :
-                            `<div class="w-16 h-12 bg-gray-800 rounded flex items-center justify-center text-gray-600 text-xs">-</div>`
-                        }
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2">
-                                <span class="font-mono font-bold text-sm">${p.plate}</span>
-                                <span class="${statusColor} text-xs font-semibold">${statusIcon} ${statusText}</span>
-                            </div>
-                            <div class="text-xs text-gray-500 flex gap-3">
-                                <span>${time}</span>
-                                ${p.owner_name ? `<span>${p.owner_name}</span>` : ''}
-                                <span>%${p.confidence.toFixed(0)}</span>
-                            </div>
+        liste.innerHTML = gecisler.map((g, i) => {
+            const saat = new Date(g.detected_at).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+            const yetkili = g.is_authorized;
+            const arkaplan = yetkili ? 'bg-gray-800/40 border-gray-700/50 hover:bg-gray-800/60' : 'bg-red-950/25 border-red-900/40 hover:bg-red-950/40';
+            const ikon = yetkili ? '<span class="text-green-400">✓</span>' : '<span class="text-red-400">✗</span>';
+            const durumMetni = yetkili ? '<span class="text-green-400 font-semibold">Yetkili</span>' : '<span class="text-red-400 font-bold">KAÇAK</span>';
+            const animasyon = i === 0 ? 'passage-enter' : '';
+
+            return `
+                <div class="flex items-center gap-3 p-3 rounded-lg border ${arkaplan} ${animasyon} transition-colors cursor-default">
+                    ${!yetkili && g.screenshot_url
+                        ? `<img src="${g.screenshot_url}" class="w-16 h-12 object-cover rounded border border-gray-700 flex-shrink-0" alt="Ekran görüntüsü" loading="lazy">`
+                        : `<div class="w-16 h-12 bg-gray-800/60 rounded flex items-center justify-center text-gray-600 text-lg flex-shrink-0">${yetkili ? '🚗' : '🚨'}</div>`
+                    }
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-bold text-sm tracking-wide">${g.plate}</span>
+                            ${ikon} ${durumMetni}
+                        </div>
+                        <div class="text-xs text-gray-500 flex gap-2 mt-0.5">
+                            <span>🕐 ${saat}</span>
+                            ${g.owner_name ? `<span>👤 ${g.owner_name}</span>` : ''}
+                            <span>📊 %${g.confidence?.toFixed(0) || '?'}</span>
                         </div>
                     </div>
-                `;
-            }).join('');
+                </div>`;
+        }).join('');
+    }
+
+    // ============================================================
+    //  ALARM
+    // ============================================================
+    function alarmGoster(veri) {
+        alarmAktif = true;
+        const overlay = document.getElementById('alarm-overlay');
+        overlay.classList.remove('hidden');
+        document.getElementById('alarm-plate').textContent = veri.plate;
+        document.getElementById('alarm-time').textContent =
+            new Date(veri.detected_at).toLocaleString('tr-TR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+        const img = document.getElementById('alarm-screenshot');
+        if (veri.screenshot_url) {
+            img.src = veri.screenshot_url;
+            img.classList.remove('hidden');
+        } else {
+            img.classList.add('hidden');
         }
 
-        // --- Alarm ---
-        function showAlarm(data) {
-            alarmActive = true;
-            document.getElementById('alarm-overlay').classList.remove('hidden');
-            document.getElementById('alarm-plate').textContent = data.plate;
-            document.getElementById('alarm-time').textContent = new Date(data.detected_at).toLocaleString('tr-TR');
+        // Yan panel güncelle
+        document.getElementById('alarm-indicator').className = 'w-4 h-4 rounded-full bg-red-500 animate-pulse';
+        document.getElementById('alarm-status-text').textContent = '🚨 ALARM AKTİF!';
+        document.getElementById('alarm-status-text').className = 'font-semibold text-sm text-red-400';
+        document.getElementById('status-dot').className = 'w-3 h-3 rounded-full bg-red-500 animate-pulse transition-colors';
 
-            const img = document.getElementById('alarm-screenshot');
-            if (data.screenshot_url) {
-                img.src = data.screenshot_url;
-                img.classList.remove('hidden');
+        document.getElementById('last-alarm-info').classList.remove('hidden');
+        document.getElementById('last-alarm-plate-text').textContent = veri.plate;
+        document.getElementById('last-alarm-time-text').textContent =
+            new Date(veri.detected_at).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+        // Ses uyarısı (tarayıcı izin verirse)
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 880;
+            gain.gain.value = 0.3;
+            osc.start();
+            setTimeout(() => { osc.stop(); ctx.close(); }, 500);
+        } catch(e) {}
+    }
+
+    function alarmKapat() {
+        alarmAktif = false;
+        document.getElementById('alarm-overlay').classList.add('hidden');
+        document.getElementById('alarm-indicator').className = 'w-4 h-4 rounded-full bg-green-500 transition-colors';
+        document.getElementById('alarm-status-text').textContent = 'Sistem Normal';
+        document.getElementById('alarm-status-text').className = 'font-semibold text-sm text-green-400';
+        document.getElementById('status-dot').className = 'w-3 h-3 rounded-full bg-green-500 transition-colors';
+    }
+
+    async function susturAlarm() {
+        try {
+            const resp = await fetch('/alarm/off', { method: 'POST' });
+            if (!resp.ok) bildirimGoster('Alarm susturma başarısız!', 'hata');
+        } catch (e) {
+            bildirimGoster('Sunucuya bağlanılamadı!', 'hata');
+        }
+    }
+
+    // ============================================================
+    //  SENKRONIZASYON
+    // ============================================================
+    async function senkronizeEt() {
+        const btn = document.getElementById('sync-btn');
+        const icon = document.getElementById('sync-icon');
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        icon.textContent = '⏳';
+
+        try {
+            const resp = await fetch('/api/sync', { method: 'POST' });
+            const veri = await resp.json();
+            senkBildirimiGoster(veri);
+        } catch (e) {
+            bildirimGoster('Senkronizasyon başarısız! Sunucuya bağlanılamadı.', 'hata');
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            icon.textContent = '🔄';
+        }
+    }
+
+    function senkBildirimiGoster(veri) {
+        if (veri.errors && veri.errors.length > 0) {
+            bildirimGoster(`Senkronizasyon hatası: ${veri.errors[0]}`, 'hata');
+        } else {
+            bildirimGoster(`Güncelleme tamamlandı! ${veri.total} plaka (${veri.new} yeni, ${veri.updated} güncellendi)`, 'basari');
+        }
+        if (veri.timestamp) {
+            document.getElementById('last-sync-time').textContent =
+                new Date(veri.timestamp).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'});
+        }
+        durumBilgisiAl();
+    }
+
+    // ============================================================
+    //  BİLDİRİM (TOAST)
+    // ============================================================
+    function bildirimGoster(mesaj, tip = 'bilgi') {
+        const kapsayici = document.getElementById('toast-container');
+        const renkler = {
+            basari: 'bg-green-900/60 border-green-700 text-green-300',
+            hata: 'bg-red-900/60 border-red-700 text-red-300',
+            bilgi: 'bg-blue-900/60 border-blue-700 text-blue-300',
+        };
+        const ikonlar = { basari: '✅', hata: '❌', bilgi: 'ℹ️' };
+
+        const el = document.createElement('div');
+        el.className = `p-3 rounded-lg border text-sm toast-enter flex items-start gap-2 ${renkler[tip] || renkler.bilgi}`;
+        el.innerHTML = `<span>${ikonlar[tip] || ikonlar.bilgi}</span><span>${mesaj}</span>`;
+        kapsayici.appendChild(el);
+
+        setTimeout(() => {
+            el.style.opacity = '0';
+            el.style.transition = 'opacity 0.3s';
+            setTimeout(() => el.remove(), 300);
+        }, 5000);
+    }
+
+    // ============================================================
+    //  API SORGULARI
+    // ============================================================
+    async function istatistikAl() {
+        try {
+            const resp = await fetch('/api/stats');
+            const veri = await resp.json();
+            document.getElementById('stat-total').textContent = veri.today_total;
+            document.getElementById('stat-authorized').textContent = veri.today_authorized;
+            document.getElementById('stat-unauthorized').textContent = veri.today_unauthorized;
+            document.getElementById('stat-rate').textContent = veri.today_total > 0 ? `%${veri.auth_rate}` : '—';
+        } catch (e) {}
+    }
+
+    async function durumBilgisiAl() {
+        try {
+            const resp = await fetch('/api/status');
+            const veri = await resp.json();
+            if (veri.last_sync) {
+                document.getElementById('last-sync-time').textContent =
+                    new Date(veri.last_sync).toLocaleString('tr-TR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+            }
+            document.getElementById('mode-text').textContent = veri.mock_mode ? 'Test (Mock)' : 'Canlı';
+            document.getElementById('mode-text').className = veri.mock_mode ? 'text-yellow-400 font-mono text-xs' : 'text-green-400 font-mono text-xs';
+
+            // Kamera durumu
+            const kamDurum = document.getElementById('camera-status');
+            if (veri.camera_connected) {
+                kamDurum.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500 inline-block"></span> Bağlı';
+            } else if (veri.mock_mode) {
+                kamDurum.innerHTML = '<span class="w-2 h-2 rounded-full bg-yellow-500 inline-block"></span> Mock';
             } else {
-                img.classList.add('hidden');
+                kamDurum.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Bağlantı Yok';
             }
 
-            // Update sidebar
-            document.getElementById('alarm-indicator').className = 'w-4 h-4 rounded-full bg-red-500 animate-pulse';
-            document.getElementById('alarm-status-text').textContent = 'ALARM AKTIF!';
-            document.getElementById('alarm-status-text').className = 'font-semibold text-sm text-red-400';
-            document.getElementById('status-dot').className = 'w-3 h-3 rounded-full bg-red-500 animate-pulse';
-
-            document.getElementById('last-alarm-info').classList.remove('hidden');
-            document.getElementById('last-alarm-plate-text').textContent = data.plate;
-            document.getElementById('last-alarm-time-text').textContent = new Date(data.detected_at).toLocaleTimeString('tr-TR');
-        }
-
-        function hideAlarm() {
-            alarmActive = false;
-            document.getElementById('alarm-overlay').classList.add('hidden');
-            document.getElementById('alarm-indicator').className = 'w-4 h-4 rounded-full bg-green-500';
-            document.getElementById('alarm-status-text').textContent = 'Normal';
-            document.getElementById('alarm-status-text').className = 'font-semibold text-sm text-green-400';
-            document.getElementById('status-dot').className = 'w-3 h-3 rounded-full bg-green-500';
-        }
-
-        async function silenceAlarm() {
-            try {
-                await fetch('/alarm/off', { method: 'POST' });
-            } catch (e) {
-                console.error('Alarm susturma hatasi:', e);
+            // Kayıtlı plaka sayısı
+            if (veri.vehicle_count !== undefined) {
+                document.getElementById('vehicle-count').textContent = veri.vehicle_count;
             }
-        }
+        } catch (e) {}
+    }
 
-        // --- Sync ---
-        async function triggerSync() {
-            try {
-                const resp = await fetch('/api/sync', { method: 'POST' });
-                const data = await resp.json();
-                showSyncToast(data);
-            } catch (e) {
-                console.error('Sync hatasi:', e);
-            }
-        }
-
-        function showSyncToast(data) {
-            const toast = document.getElementById('sync-toast');
-            if (data.errors && data.errors.length > 0) {
-                toast.textContent = `Sync hatasi: ${data.errors[0]}`;
-                toast.className = 'p-3 mx-4 mb-4 rounded-lg bg-red-900/50 border border-red-700 text-red-300 text-sm';
-            } else {
-                toast.textContent = `Senkronizasyon tamamlandi! ${data.total} plaka (${data.new} yeni, ${data.updated} guncellendi)`;
-                toast.className = 'p-3 mx-4 mb-4 rounded-lg bg-green-900/50 border border-green-700 text-green-300 text-sm';
-            }
-            toast.classList.remove('hidden');
-            if (data.timestamp) {
-                document.getElementById('last-sync-time').textContent = new Date(data.timestamp).toLocaleTimeString('tr-TR');
-            }
-            setTimeout(() => toast.classList.add('hidden'), 5000);
-        }
-
-        // --- Stats ---
-        async function fetchStats() {
-            try {
-                const resp = await fetch('/api/stats');
-                const data = await resp.json();
-                document.getElementById('stat-total').textContent = data.today_total;
-                document.getElementById('stat-authorized').textContent = data.today_authorized;
-                document.getElementById('stat-unauthorized').textContent = data.today_unauthorized;
-                document.getElementById('stat-rate').textContent = `${data.auth_rate}%`;
-            } catch (e) {}
-        }
-
-        async function fetchStatus() {
-            try {
-                const resp = await fetch('/api/status');
-                const data = await resp.json();
-                if (data.last_sync) {
-                    document.getElementById('last-sync-time').textContent = new Date(data.last_sync).toLocaleTimeString('tr-TR');
-                }
-                document.getElementById('mode-text').textContent = data.mock_mode ? 'Mock (Test)' : 'Canli';
-            } catch (e) {}
-        }
-
-        // --- Init ---
-        connectWebSocket();
-        setInterval(fetchStats, 30000);
+    // ============================================================
+    //  BAŞLATMA
+    // ============================================================
+    baglan();
+    setInterval(istatistikAl, 30000);
+    setInterval(durumBilgisiAl, 60000);
     </script>
 </body>
 </html>
