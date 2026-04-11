@@ -1,12 +1,11 @@
-"""
-Frame Extractor — Guvenlik kamerasi videolarindan eğitim icin frame cikarir.
+"""Frame extractor — extracts training frames from gate camera recordings.
 
-Kullanim:
-  1. Videolarinizi data/raw_videos/ klasorune koyun (.mp4, .avi)
-  2. Bu scripti calistirin: python extract_frames.py
-  3. Cikarilan kareler data/extracted_frames/ klasorunde olacak
+Usage:
+  1. Place your video files in data/raw_videos/ (.mp4, .avi, .mkv, .mov)
+  2. Run this script: python extract_frames.py
+  3. Extracted frames will be saved to data/extracted_frames/
 
-Saniyede 1-2 frame alir (fazla benzer kareleri atlar).
+Captures ~2 frames per second, skipping near-duplicate frames automatically.
 """
 
 import os
@@ -15,16 +14,16 @@ from pathlib import Path
 
 import cv2
 
-# --- Konfigürasyon ---
+# --- Configuration ---
 RAW_VIDEOS_DIR = Path("data/raw_videos")
 OUTPUT_DIR = Path("data/extracted_frames")
-FRAMES_PER_SECOND = 2      # Saniyede kac kare alinacak
-MIN_FRAME_DIFF = 30.0       # Birbirine cok benzer kareleri atlamak icin esik degeri
+FRAMES_PER_SECOND = 2       # How many frames to capture per second
+MIN_FRAME_DIFF = 30.0        # Threshold for skipping near-identical frames
 SUPPORTED_EXTENSIONS = {".mp4", ".avi", ".mkv", ".mov"}
 
 
 def calculate_frame_diff(prev_frame, curr_frame):
-    """Iki frame arasindaki farki hesaplar (benzerlik kontrolu icin)."""
+    """Calculate mean pixel difference between two frames (for dedup)."""
     if prev_frame is None:
         return float("inf")
     diff = cv2.absdiff(
@@ -35,10 +34,10 @@ def calculate_frame_diff(prev_frame, curr_frame):
 
 
 def extract_frames_from_video(video_path: Path, output_dir: Path, video_index: int):
-    """Tek bir videodan frame cikarir."""
+    """Extract frames from a single video file."""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
-        print(f"  [HATA] Video acilamadi: {video_path}")
+        print(f"  [ERROR] Cannot open video: {video_path}")
         return 0
 
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -46,15 +45,15 @@ def extract_frames_from_video(video_path: Path, output_dir: Path, video_index: i
     duration = total_frames / fps if fps > 0 else 0
 
     print(f"  Video: {video_path.name}")
-    print(f"  FPS: {fps:.0f} | Toplam: {total_frames} frame | Sure: {duration:.0f}sn")
+    print(f"  FPS: {fps:.0f} | Total: {total_frames} frames | Duration: {duration:.0f}s")
 
-    # Her kac frame'de bir isleyecegiz
+    # Process every N-th frame based on target FPS
     frame_interval = max(1, int(fps / FRAMES_PER_SECOND))
 
     frame_count = 0
     saved_count = 0
     prev_frame = None
-    video_name = video_path.stem  # Dosya adi (uzantisiz)
+    video_name = video_path.stem
 
     while True:
         ret, frame = cap.read()
@@ -63,53 +62,51 @@ def extract_frames_from_video(video_path: Path, output_dir: Path, video_index: i
 
         frame_count += 1
 
-        # Sadece belirli araliklarla isle
+        # Only process at the configured interval
         if frame_count % frame_interval != 0:
             continue
 
-        # Benzerlik kontrolu — cok benzer kareleri atla
+        # Dedup check — skip near-identical frames
         diff = calculate_frame_diff(prev_frame, frame)
         if diff < MIN_FRAME_DIFF:
             continue
 
         prev_frame = frame.copy()
 
-        # Kaydet
+        # Save frame
         filename = f"{video_name}_frame_{saved_count:04d}.jpg"
         filepath = output_dir / filename
         cv2.imwrite(str(filepath), frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
         saved_count += 1
 
     cap.release()
-    print(f"  Kaydedilen: {saved_count} frame")
+    print(f"  Saved: {saved_count} frames")
     return saved_count
 
 
 def main():
-    # Klasorleri kontrol et
     if not RAW_VIDEOS_DIR.exists():
         RAW_VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-        print(f"[UYARI] '{RAW_VIDEOS_DIR}' klasoru olusturuldu.")
-        print("  Lutfen videolarinizi bu klasore koyup scripti tekrar calistirin.")
+        print(f"[INFO] Created '{RAW_VIDEOS_DIR}' directory.")
+        print("  Place your gate camera video files here and re-run this script.")
         sys.exit(0)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Videolari bul
     videos = [
         f for f in RAW_VIDEOS_DIR.iterdir()
         if f.suffix.lower() in SUPPORTED_EXTENSIONS
     ]
 
     if not videos:
-        print(f"[UYARI] '{RAW_VIDEOS_DIR}' klasorunde video bulunamadi!")
-        print(f"  Desteklenen formatlar: {', '.join(SUPPORTED_EXTENSIONS)}")
+        print(f"[WARNING] No videos found in '{RAW_VIDEOS_DIR}'")
+        print(f"  Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
         sys.exit(0)
 
     print("=" * 60)
-    print(f"  FRAME CIKARMA ARACI")
-    print(f"  {len(videos)} video bulundu")
-    print(f"  Saniyede {FRAMES_PER_SECOND} frame alinacak")
+    print(f"  FRAME EXTRACTION TOOL")
+    print(f"  Found {len(videos)} video(s)")
+    print(f"  Target: {FRAMES_PER_SECOND} frames per second")
     print("=" * 60)
 
     total_saved = 0
@@ -119,21 +116,21 @@ def main():
         total_saved += count
 
     print("\n" + "=" * 60)
-    print(f"  TAMAMLANDI!")
-    print(f"  Toplam: {total_saved} frame kaydedildi")
-    print(f"  Konum: {OUTPUT_DIR.absolute()}")
+    print(f"  DONE!")
+    print(f"  Total: {total_saved} frames saved")
+    print(f"  Output: {OUTPUT_DIR.absolute()}")
     print("=" * 60)
     print()
-    print("SONRAKI ADIM:")
-    print("  Bu frame'leri bir etiketleme aracina yukleyin:")
-    print("  - Roboflow (https://roboflow.com) — En kolay, web tabanli")
-    print("  - CVAT (https://cvat.ai) — Acik kaynak, guclü")
-    print("  - LabelImg — Masaustu uygulama")
+    print("NEXT STEP:")
+    print("  Upload these frames to a labeling tool:")
+    print("  - Roboflow (https://roboflow.com) — easiest, web-based")
+    print("  - CVAT (https://cvat.ai) — open-source, powerful")
+    print("  - LabelImg — desktop app")
     print()
-    print("  Her frame'deki plakalarin etrafina kutu cizin (bounding box).")
-    print("  Sinif adi: 'plate'")
-    print("  Export formati: YOLO format (.txt dosyalari)")
-    print("  Ciktilari data/dataset/labels/ klasorune koyun.")
+    print("  Draw bounding boxes around every license plate.")
+    print("  Class name: 'plate'")
+    print("  Export format: YOLO (.txt label files)")
+    print("  Place exported labels in data/dataset/labels/")
 
 
 if __name__ == "__main__":

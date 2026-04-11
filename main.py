@@ -19,7 +19,7 @@ from app.alarm_manager import AlarmManager
 from app.camera import CameraStream, MockCamera
 from app.database import Database
 from app.detection_engine import DetectionEngine
-from app.plate_detector import EasyOCRDetector, MockPlateDetector
+from app.plate_detector import EasyOCRDetector, MockPlateDetector, YOLOv8Detector
 from app.routes import init_routes, router
 from app.websocket_manager import ConnectionManager
 
@@ -108,8 +108,15 @@ async def lifespan(app: FastAPI):
     # Initialize plate detector
     if settings.MOCK_MODE:
         detector = MockPlateDetector()
+    elif settings.USE_YOLO:
+        detector = YOLOv8Detector(
+            weights_path=settings.YOLO_WEIGHTS,
+            confidence_threshold=settings.CONFIDENCE_THRESHOLD,
+        )
+        logger.info("Using YOLOv8 + EasyOCR hybrid detector: %s", settings.YOLO_WEIGHTS)
     else:
         detector = EasyOCRDetector(confidence_threshold=settings.CONFIDENCE_THRESHOLD)
+        logger.info("Using EasyOCR contour detector")
 
     # Initialize alarm manager
     alarm = AlarmManager(
@@ -141,7 +148,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Screenshot cleanup failed")
 
-    logger.info("Tum sistemler aktif. Izleme baslatildi.")
+    logger.info("All systems online. Detection active.")
 
     yield
 
@@ -162,7 +169,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="GateGuard",
-    description="Kacak Arac Tespit ve Fiziksel Alarm Sistemi",
+    description="Camera-based unauthorized vehicle detection and physical alarm system",
     version="1.0.0",
     lifespan=lifespan,
 )

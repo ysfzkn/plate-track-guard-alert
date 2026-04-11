@@ -47,7 +47,7 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            logger.debug("WS alindi: %s", data)
+            logger.debug("WS received: %s", data)
     except WebSocketDisconnect:
         _ws_manager.disconnect(websocket)
     except Exception:
@@ -56,7 +56,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @router.post("/alarm/off")
 async def alarm_off():
-    """Alarmi sustur."""
+    """Silence the active alarm."""
     if _alarm:
         await _alarm.silence_alarm()
     if _ws_manager:
@@ -66,9 +66,9 @@ async def alarm_off():
 
 @router.post("/api/sync")
 async def trigger_sync():
-    """MDB senkronizasyonunu manuel tetikle."""
+    """Trigger manual MDB-to-SQLite sync."""
     if not _db:
-        return JSONResponse({"errors": ["Veritabani hazir degil"]}, status_code=503)
+        return JSONResponse({"errors": ["Database not ready"]}, status_code=503)
     try:
         from app.mdb_sync import sync_mdb_to_sqlite
         result = await sync_mdb_to_sqlite(_mdb_path, _db)
@@ -76,7 +76,7 @@ async def trigger_sync():
             await _ws_manager.broadcast({"type": "sync_complete", "data": result})
         return JSONResponse(result)
     except Exception as e:
-        logger.exception("Senkronizasyon hatasi")
+        logger.exception("MDB sync error")
         return JSONResponse(
             {"total": 0, "new": 0, "updated": 0, "errors": [str(e)], "timestamp": ""},
             status_code=500,
@@ -85,33 +85,33 @@ async def trigger_sync():
 
 @router.get("/api/passages")
 async def get_passages(limit: int = 50):
-    """Son gecisleri getir."""
+    """Get recent passage records."""
     if not _db:
         return JSONResponse([])
     try:
         passages = _db.get_recent_passages(limit)
         return JSONResponse(passages)
     except Exception as e:
-        logger.exception("Gecis sorgulama hatasi")
+        logger.exception("Passage query failed")
         return JSONResponse([], status_code=500)
 
 
 @router.get("/api/stats")
 async def get_stats():
-    """Bugunun istatistiklerini getir."""
+    """Get today's detection statistics."""
     if not _db:
         return JSONResponse({"today_total": 0, "today_authorized": 0, "today_unauthorized": 0, "auth_rate": 0})
     try:
         stats = _db.get_stats()
         return JSONResponse(stats)
     except Exception as e:
-        logger.exception("Istatistik sorgulama hatasi")
+        logger.exception("Stats query failed")
         return JSONResponse({"today_total": 0, "today_authorized": 0, "today_unauthorized": 0, "auth_rate": 0})
 
 
 @router.get("/api/status")
 async def get_status():
-    """Sistem durumunu getir."""
+    """Get system status (camera, alarm, sync, vehicle count)."""
     from config import settings
 
     camera_connected = False

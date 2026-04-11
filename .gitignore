@@ -16,3 +16,18 @@ dist/
 build/
 .pytest_cache/
 /moonwel_db
+
+# Trained model weights (too large for git)
+models/*.pt
+models/*.onnx
+!models/.gitkeep
+
+# YOLO training artifacts
+yolo_training/data/raw_videos/
+yolo_training/data/extracted_frames/
+yolo_training/data/dataset/images/
+yolo_training/data/dataset/labels/
+yolo_training/runs/
+
+# NSSM binary
+nssm.exe

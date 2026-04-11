@@ -112,12 +112,12 @@ def save_screenshot(
 
         # Save
         img.save(str(filepath), "JPEG", quality=85)
-        logger.info("Ekran goruntusu kaydedildi: %s", filepath)
+        logger.info("Screenshot saved: %s", filepath)
 
         return f"/static/screenshots/{filename}"
 
     except Exception:
-        logger.exception("Ekran goruntusu kaydetme hatasi")
+        logger.exception("Failed to save screenshot")
         return ""
 
 
@@ -140,8 +140,8 @@ def cleanup_old_screenshots(screenshot_dir: str, retention_days: int = 90) -> in
                 continue
 
         if deleted > 0:
-            logger.info("Eski ekran goruntuleri temizlendi: %d dosya silindi", deleted)
+            logger.info("Screenshot cleanup: %d old files deleted", deleted)
     except Exception:
-        logger.exception("Ekran goruntusu temizleme hatasi")
+        logger.exception("Screenshot cleanup failed")
 
     return deleted

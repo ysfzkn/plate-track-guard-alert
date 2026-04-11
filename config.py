@@ -24,11 +24,15 @@ class Settings:
     SCREENSHOT_DIR: str = os.getenv("SCREENSHOT_DIR", str(BASE_DIR / "static" / "screenshots"))
 
     # Detection
-    MOCK_MODE: bool = os.getenv("MOCK_MODE", "true").lower() == "true"
+    MOCK_MODE: bool = os.getenv("MOCK_MODE", "false").lower() == "true"
     PROCESS_FPS: int = int(os.getenv("PROCESS_FPS", "2"))
     CONFIDENCE_THRESHOLD: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.4"))
     ALARM_COOLDOWN_SEC: int = int(os.getenv("ALARM_COOLDOWN_SEC", "60"))
     FUZZY_TOLERANCE: int = int(os.getenv("FUZZY_TOLERANCE", "1"))
+
+    # YOLO (optional — set USE_YOLO=true after training a custom model)
+    USE_YOLO: bool = os.getenv("USE_YOLO", "false").lower() == "true"
+    YOLO_WEIGHTS: str = os.getenv("YOLO_WEIGHTS", str(BASE_DIR / "models" / "plate_detector.pt"))
 
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")

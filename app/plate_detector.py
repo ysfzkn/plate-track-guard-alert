@@ -145,6 +145,98 @@ class EasyOCRDetector(BasePlateDetector):
         return keep
 
 
+class YOLOv8Detector(BasePlateDetector):
+    """Detects license plates using a fine-tuned YOLOv8 model + EasyOCR for text.
+
+    Hybrid pipeline:
+      1. YOLOv8 localizes the plate region in the frame (fast, accurate)
+      2. EasyOCR reads the text from the cropped plate region
+
+    This is more accurate than pure EasyOCR contour detection because
+    the YOLO model is trained on actual frames from the gate camera.
+    """
+
+    def __init__(self, weights_path: str, confidence_threshold: float = 0.25):
+        self.weights_path = weights_path
+        self.confidence_threshold = confidence_threshold
+        self._model = None
+        self._ocr_reader = None
+        self._loaded = False
+
+    def _ensure_loaded(self):
+        if self._loaded:
+            return
+        logger.info("Loading YOLOv8 model: %s", self.weights_path)
+        try:
+            from ultralytics import YOLO
+            self._model = YOLO(self.weights_path)
+            logger.info("YOLOv8 model loaded successfully")
+        except ImportError:
+            raise ImportError(
+                "ultralytics package not installed. Run: pip install ultralytics"
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to load YOLO weights '{self.weights_path}': {e}")
+
+        logger.info("Loading EasyOCR for text extraction...")
+        import easyocr
+        self._ocr_reader = easyocr.Reader(["en"], gpu=False)
+        logger.info("EasyOCR loaded — YOLO+OCR hybrid pipeline ready")
+        self._loaded = True
+
+    def detect(self, frame: np.ndarray) -> list[DetectionResult]:
+        self._ensure_loaded()
+        results: list[DetectionResult] = []
+
+        # Step 1: YOLO detection — find plate bounding boxes
+        yolo_results = self._model.predict(
+            source=frame,
+            conf=self.confidence_threshold,
+            verbose=False,
+        )
+
+        if not yolo_results or len(yolo_results[0].boxes) == 0:
+            return results
+
+        for box in yolo_results[0].boxes:
+            x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+            yolo_conf = float(box.conf[0])
+
+            # Clamp to frame boundaries with slight padding
+            pad = 5
+            y1c = max(0, y1 - pad)
+            y2c = min(frame.shape[0], y2 + pad)
+            x1c = max(0, x1 - pad)
+            x2c = min(frame.shape[1], x2 + pad)
+            crop = frame[y1c:y2c, x1c:x2c]
+
+            if crop.size == 0:
+                continue
+
+            # Step 2: EasyOCR — read text from the cropped plate region
+            ocr_results = self._ocr_reader.readtext(crop)
+
+            for _, text, ocr_conf in ocr_results:
+                normalized = normalize_plate(text)
+                if len(normalized) < 5 or not is_valid_turkish_plate(normalized):
+                    continue
+
+                # Combined confidence: geometric mean of YOLO and OCR
+                combined_conf = (yolo_conf * ocr_conf) ** 0.5
+
+                results.append(DetectionResult(
+                    plate_text=text.strip(),
+                    normalized_plate=normalized,
+                    confidence=combined_conf,
+                    bbox=(x1, y1, x2 - x1, y2 - y1),
+                    timestamp=datetime.now(),
+                    frame=frame,
+                ))
+                break  # One plate text per YOLO box is enough
+
+        return results
+
+
 class MockPlateDetector(BasePlateDetector):
     """Returns randomly generated plate detections for testing."""
 
