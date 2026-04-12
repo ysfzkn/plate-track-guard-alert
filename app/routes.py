@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import cv2
+import numpy as np
+from fastapi import APIRouter, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+
+from app.database import is_valid_turkish_plate
 
 if TYPE_CHECKING:
     from app.alarm_manager import AlarmManager
     from app.camera import CameraStream, MockCamera
     from app.database import Database
+    from app.plate_detector import BasePlateDetector
     from app.websocket_manager import ConnectionManager
 
 logger = logging.getLogger("gateguard.app")
@@ -23,6 +29,7 @@ _db: Database | None = None
 _alarm: AlarmManager | None = None
 _ws_manager: ConnectionManager | None = None
 _camera: CameraStream | MockCamera | None = None
+_detector: BasePlateDetector | None = None
 _mdb_path: str = ""
 
 
@@ -32,13 +39,15 @@ def init_routes(
     ws_manager: ConnectionManager,
     mdb_path: str,
     camera: CameraStream | MockCamera | None = None,
+    detector: BasePlateDetector | None = None,
 ):
-    global _db, _alarm, _ws_manager, _mdb_path, _camera
+    global _db, _alarm, _ws_manager, _mdb_path, _camera, _detector
     _db = db
     _alarm = alarm
     _ws_manager = ws_manager
     _mdb_path = mdb_path
     _camera = camera
+    _detector = detector
 
 
 @router.websocket("/ws")
@@ -135,3 +144,67 @@ async def get_status():
         "camera_connected": camera_connected,
         "vehicle_count": vehicle_count,
     })
+
+
+# ── ALPR Test Endpoint ─────────────────────────────────────
+
+@router.post("/api/test-detect")
+async def test_detect(file: UploadFile):
+    """Run ALPR detection on an uploaded image. Returns plates + annotated image."""
+    if not _detector:
+        return JSONResponse({"error": "Detector not initialized"}, status_code=503)
+
+    try:
+        # Read uploaded image bytes into numpy array
+        contents = await file.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if frame is None:
+            return JSONResponse({"error": "Invalid image file"}, status_code=400)
+
+        # Run detection (in thread executor to avoid blocking)
+        import asyncio
+        loop = asyncio.get_event_loop()
+        detections = await loop.run_in_executor(None, _detector.detect, frame)
+
+        # Draw bounding boxes on a copy
+        annotated = frame.copy()
+        plates = []
+
+        for det in detections:
+            valid = is_valid_turkish_plate(det.normalized_plate)
+            color = (0, 200, 0) if valid else (0, 140, 255)  # Green if valid, orange if not
+
+            if det.bbox:
+                x, y, w, h = det.bbox
+                cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 2)
+                # Label above the box
+                label = f"{det.normalized_plate} {det.confidence:.0%}"
+                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+                cv2.rectangle(annotated, (x, y - th - 10), (x + tw + 4, y), color, -1)
+                cv2.putText(annotated, label, (x + 2, y - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+            plates.append({
+                "text": det.plate_text,
+                "normalized": det.normalized_plate,
+                "confidence": round(det.confidence, 4),
+                "valid": valid,
+                "bbox": list(det.bbox) if det.bbox else None,
+            })
+
+        # Encode annotated image as base64 JPEG
+        _, buffer = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        b64_img = base64.b64encode(buffer).decode("utf-8")
+
+        return JSONResponse({
+            "plates": plates,
+            "annotated_image": f"data:image/jpeg;base64,{b64_img}",
+            "filename": file.filename or "unknown",
+            "image_size": {"width": frame.shape[1], "height": frame.shape[0]},
+        })
+
+    except Exception:
+        logger.exception("Test detection failed")
+        return JSONResponse({"error": "Detection failed"}, status_code=500)

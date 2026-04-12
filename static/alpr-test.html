@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard — ALPR Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        .card-enter { animation: slideUp 0.35s ease-out; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin 0.8s linear infinite; }
+        .drop-active { border-color: #22d3ee !important; background: rgba(34,211,238,0.08) !important; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <a href="/" class="text-gray-500 hover:text-gray-300 transition text-sm">← Ana Panel</a>
+            <div class="w-px h-5 bg-gray-700"></div>
+            <h1 class="text-lg font-bold">🔬 ALPR Test</h1>
+            <span class="text-xs text-gray-500 font-mono">Plaka Tanıma Doğruluk Testi</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="engine-badge" class="text-xs px-2.5 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-400">Motor: —</span>
+            <button onclick="temizle()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">
+                🗑️ Tümünü Temizle
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-6 space-y-6">
+
+        <!-- Upload Zone -->
+        <div id="drop-zone"
+             class="border-2 border-dashed border-gray-700 rounded-2xl p-10 text-center cursor-pointer
+                    hover:border-gray-500 transition-all relative"
+             onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input" class="hidden" accept="image/*" multiple>
+            <div id="upload-idle">
+                <div class="text-5xl mb-3">📸</div>
+                <p class="text-lg font-semibold text-gray-300">Görselleri sürükle & bırak veya tıkla</p>
+                <p class="text-sm text-gray-500 mt-1">JPG, PNG — tek veya çoklu seçim</p>
+            </div>
+            <div id="upload-busy" class="hidden">
+                <div class="w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full spinner mx-auto mb-3"></div>
+                <p class="text-gray-400" id="progress-text">İşleniyor...</p>
+            </div>
+        </div>
+
+        <!-- Summary Bar -->
+        <div id="summary-bar" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center justify-between">
+            <div class="flex gap-6 text-sm">
+                <div>
+                    <span class="text-gray-500">Toplam:</span>
+                    <span id="s-total" class="font-bold ml-1">0</span>
+                </div>
+                <div>
+                    <span class="text-gray-500">Tespit:</span>
+                    <span id="s-detected" class="font-bold text-blue-400 ml-1">0</span>
+                </div>
+                <div>
+                    <span class="text-gray-500">Geçerli TR:</span>
+                    <span id="s-valid" class="font-bold text-green-400 ml-1">0</span>
+                </div>
+                <div>
+                    <span class="text-gray-500">Başarı:</span>
+                    <span id="s-rate" class="font-bold text-cyan-400 ml-1">—</span>
+                </div>
+            </div>
+            <div class="flex gap-2 text-xs text-gray-500">
+                <span id="s-time"></span>
+            </div>
+        </div>
+
+        <!-- Results Grid -->
+        <div id="results-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        </div>
+
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
+
+    <script>
+    // ============================================================
+    //  State
+    // ============================================================
+    let sonuclar = [];
+    let islemde = 0;
+
+    // ============================================================
+    //  Engine info
+    // ============================================================
+    fetch('/api/status').then(r => r.json()).then(d => {
+        const badge = document.getElementById('engine-badge');
+        // LPR_ENGINE is not directly exposed, but mock_mode tells us
+        badge.textContent = d.mock_mode ? 'Motor: Mock' : 'Motor: fast-alpr';
+        badge.className = d.mock_mode
+            ? 'text-xs px-2.5 py-1 rounded-full bg-yellow-900/40 border border-yellow-700 text-yellow-400'
+            : 'text-xs px-2.5 py-1 rounded-full bg-green-900/40 border border-green-700 text-green-400';
+    }).catch(() => {});
+
+    // ============================================================
+    //  Drag & Drop + File Input
+    // ============================================================
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    ['dragenter', 'dragover'].forEach(ev => {
+        dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('drop-active'); });
+    });
+    ['dragleave', 'drop'].forEach(ev => {
+        dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('drop-active'); });
+    });
+    dropZone.addEventListener('drop', e => {
+        const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+        if (files.length) dosyalariIsle(files);
+    });
+    fileInput.addEventListener('change', e => {
+        const files = [...e.target.files];
+        if (files.length) dosyalariIsle(files);
+        fileInput.value = '';
+    });
+
+    // ============================================================
+    //  Process Files
+    // ============================================================
+    async function dosyalariIsle(files) {
+        const basla = performance.now();
+        islemde = files.length;
+        gosterIlerleme(0, files.length);
+
+        for (let i = 0; i < files.length; i++) {
+            gosterIlerleme(i, files.length);
+            // Add placeholder card
+            const placeholderId = ekleYerTutucu(files[i].name);
+            try {
+                const sonuc = await tespitYap(files[i]);
+                sonuclar.push(sonuc);
+                guncellePlaceholder(placeholderId, sonuc);
+            } catch (err) {
+                hataPlaceholder(placeholderId, files[i].name, err.message);
+            }
+        }
+
+        islemde = 0;
+        gizleIlerleme();
+        const sure = ((performance.now() - basla) / 1000).toFixed(1);
+        document.getElementById('s-time').textContent = `${sure}s`;
+        guncelleOzet();
+    }
+
+    async function tespitYap(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const resp = await fetch('/api/test-detect', { method: 'POST', body: formData });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || `HTTP ${resp.status}`);
+        }
+        return await resp.json();
+    }
+
+    // ============================================================
+    //  UI: Progress
+    // ============================================================
+    function gosterIlerleme(current, total) {
+        document.getElementById('upload-idle').classList.add('hidden');
+        document.getElementById('upload-busy').classList.remove('hidden');
+        document.getElementById('progress-text').textContent = `İşleniyor... ${current + 1} / ${total}`;
+    }
+    function gizleIlerleme() {
+        document.getElementById('upload-idle').classList.remove('hidden');
+        document.getElementById('upload-busy').classList.add('hidden');
+    }
+
+    // ============================================================
+    //  UI: Result Cards
+    // ============================================================
+    let cardCounter = 0;
+
+    function ekleYerTutucu(filename) {
+        const id = `card-${++cardCounter}`;
+        const grid = document.getElementById('results-grid');
+        const card = document.createElement('div');
+        card.id = id;
+        card.className = 'bg-gray-900 border border-gray-800 rounded-xl overflow-hidden card-enter';
+        card.innerHTML = `
+            <div class="aspect-video bg-gray-800 flex items-center justify-center">
+                <div class="text-center">
+                    <div class="w-7 h-7 border-2 border-cyan-400 border-t-transparent rounded-full spinner mx-auto mb-2"></div>
+                    <p class="text-xs text-gray-500">${escapeHtml(filename)}</p>
+                </div>
+            </div>
+        `;
+        grid.prepend(card);
+        return id;
+    }
+
+    function guncellePlaceholder(id, sonuc) {
+        const card = document.getElementById(id);
+        if (!card) return;
+
+        const plakalar = sonuc.plates || [];
+        const varMi = plakalar.length > 0;
+        const gecerliVar = plakalar.some(p => p.valid);
+
+        let plakaHTML = '';
+        if (plakalar.length === 0) {
+            plakaHTML = '<p class="text-gray-500 text-sm italic">Plaka tespit edilemedi</p>';
+        } else {
+            plakaHTML = plakalar.map(p => {
+                const renk = p.valid ? 'text-green-400 border-green-800 bg-green-950/30' : 'text-orange-400 border-orange-800 bg-orange-950/30';
+                const badge = p.valid
+                    ? '<span class="text-[10px] bg-green-800 text-green-200 px-1.5 py-0.5 rounded-full">TR ✓</span>'
+                    : '<span class="text-[10px] bg-orange-800 text-orange-200 px-1.5 py-0.5 rounded-full">?</span>';
+                return `
+                    <div class="flex items-center justify-between p-2 rounded-lg border ${renk}">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-bold tracking-wider">${escapeHtml(p.normalized || p.text)}</span>
+                            ${badge}
+                        </div>
+                        <span class="text-xs text-gray-400">%${(p.confidence * 100).toFixed(0)}</span>
+                    </div>`;
+            }).join('');
+        }
+
+        const borderColor = gecerliVar ? 'border-green-800/50' : (varMi ? 'border-orange-800/50' : 'border-gray-800');
+
+        card.className = `bg-gray-900 border ${borderColor} rounded-xl overflow-hidden card-enter`;
+        card.innerHTML = `
+            <div class="relative">
+                <img src="${sonuc.annotated_image}" class="w-full aspect-video object-contain bg-black" alt="Annotated">
+                <div class="absolute top-2 right-2 flex gap-1">
+                    ${plakalar.length > 0 ? `<span class="text-[10px] bg-blue-800/80 text-blue-200 px-1.5 py-0.5 rounded-full">${plakalar.length} plaka</span>` : ''}
+                </div>
+            </div>
+            <div class="p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-gray-500 truncate flex-1" title="${escapeHtml(sonuc.filename)}">${escapeHtml(sonuc.filename)}</p>
+                    <p class="text-[10px] text-gray-600 ml-2">${sonuc.image_size?.width}×${sonuc.image_size?.height}</p>
+                </div>
+                ${plakaHTML}
+            </div>`;
+    }
+
+    function hataPlaceholder(id, filename, message) {
+        const card = document.getElementById(id);
+        if (!card) return;
+        card.className = 'bg-gray-900 border border-red-900/50 rounded-xl overflow-hidden card-enter';
+        card.innerHTML = `
+            <div class="aspect-video bg-red-950/20 flex items-center justify-center">
+                <div class="text-center p-4">
+                    <div class="text-3xl mb-2">❌</div>
+                    <p class="text-red-400 text-sm font-semibold">Hata</p>
+                    <p class="text-xs text-gray-500 mt-1">${escapeHtml(message)}</p>
+                </div>
+            </div>
+            <div class="p-3">
+                <p class="text-xs text-gray-500 truncate">${escapeHtml(filename)}</p>
+            </div>`;
+    }
+
+    // ============================================================
+    //  UI: Summary
+    // ============================================================
+    function guncelleOzet() {
+        const bar = document.getElementById('summary-bar');
+        if (sonuclar.length === 0) { bar.classList.add('hidden'); return; }
+        bar.classList.remove('hidden');
+
+        const toplam = sonuclar.length;
+        let tespit = 0, gecerli = 0;
+        for (const s of sonuclar) {
+            if (s.plates?.length > 0) tespit++;
+            if (s.plates?.some(p => p.valid)) gecerli++;
+        }
+
+        document.getElementById('s-total').textContent = toplam;
+        document.getElementById('s-detected').textContent = tespit;
+        document.getElementById('s-valid').textContent = gecerli;
+        document.getElementById('s-rate').textContent = toplam > 0 ? `%${(gecerli / toplam * 100).toFixed(0)}` : '—';
+    }
+
+    // ============================================================
+    //  Clear
+    // ============================================================
+    function temizle() {
+        sonuclar = [];
+        document.getElementById('results-grid').innerHTML = '';
+        document.getElementById('summary-bar').classList.add('hidden');
+    }
+
+    // ============================================================
+    //  Helpers
+    // ============================================================
+    function escapeHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str || '';
+        return d.innerHTML;
+    }
+    </script>
+</body>
+</html>

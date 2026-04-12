@@ -19,7 +19,10 @@ from app.alarm_manager import AlarmManager
 from app.camera import CameraStream, MockCamera
 from app.database import Database
 from app.detection_engine import DetectionEngine
-from app.plate_detector import EasyOCRDetector, MockPlateDetector, YOLOv8Detector
+from app.plate_detector import (
+    BasePlateDetector, EasyOCRDetector, FastALPRDetector,
+    MockPlateDetector, YOLOv8Detector,
+)
 from app.routes import init_routes, router
 from app.websocket_manager import ConnectionManager
 
@@ -105,18 +108,29 @@ async def lifespan(app: FastAPI):
         camera = CameraStream(settings.RTSP_URL)
     camera.start()
 
-    # Initialize plate detector
-    if settings.MOCK_MODE:
+    # Initialize plate detector based on LPR_ENGINE config
+    engine = settings.LPR_ENGINE if not settings.MOCK_MODE else "mock"
+    # Backward compat: USE_YOLO=true overrides to yolo_easyocr
+    if settings.USE_YOLO and engine not in ("mock",):
+        engine = "yolo_easyocr"
+
+    if engine == "mock":
         detector = MockPlateDetector()
-    elif settings.USE_YOLO:
+    elif engine == "fast_alpr":
+        detector = FastALPRDetector(confidence_threshold=settings.CONFIDENCE_THRESHOLD)
+        logger.info("LPR engine: fast-alpr (built-in detector + OCR)")
+    elif engine == "yolo_easyocr":
         detector = YOLOv8Detector(
             weights_path=settings.YOLO_WEIGHTS,
             confidence_threshold=settings.CONFIDENCE_THRESHOLD,
         )
-        logger.info("Using YOLOv8 + EasyOCR hybrid detector: %s", settings.YOLO_WEIGHTS)
-    else:
+        logger.info("LPR engine: YOLOv8 + EasyOCR (%s)", settings.YOLO_WEIGHTS)
+    elif engine == "easyocr":
         detector = EasyOCRDetector(confidence_threshold=settings.CONFIDENCE_THRESHOLD)
-        logger.info("Using EasyOCR contour detector")
+        logger.info("LPR engine: EasyOCR (contour-based)")
+    else:
+        logger.warning("Unknown LPR_ENGINE '%s', falling back to fast_alpr", engine)
+        detector = FastALPRDetector(confidence_threshold=settings.CONFIDENCE_THRESHOLD)
 
     # Initialize alarm manager
     alarm = AlarmManager(
@@ -126,7 +140,7 @@ async def lifespan(app: FastAPI):
     )
 
     # Initialize routes with shared instances
-    init_routes(db, alarm, ws_manager, settings.MDB_PATH, camera)
+    init_routes(db, alarm, ws_manager, settings.MDB_PATH, camera, detector)
 
     # Start detection engine
     engine = DetectionEngine(
@@ -184,6 +198,11 @@ app.include_router(router)
 @app.get("/")
 async def index():
     return FileResponse("static/index.html")
+
+
+@app.get("/alpr-test")
+async def alpr_test():
+    return FileResponse("static/alpr-test.html")
 
 
 if __name__ == "__main__":

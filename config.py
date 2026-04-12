@@ -30,9 +30,12 @@ class Settings:
     ALARM_COOLDOWN_SEC: int = int(os.getenv("ALARM_COOLDOWN_SEC", "60"))
     FUZZY_TOLERANCE: int = int(os.getenv("FUZZY_TOLERANCE", "1"))
 
-    # YOLO (optional — set USE_YOLO=true after training a custom model)
-    USE_YOLO: bool = os.getenv("USE_YOLO", "false").lower() == "true"
+    # LPR Engine selection: "fast_alpr" (best), "yolo_easyocr", "easyocr", "mock"
+    LPR_ENGINE: str = os.getenv("LPR_ENGINE", "fast_alpr")
     YOLO_WEIGHTS: str = os.getenv("YOLO_WEIGHTS", str(BASE_DIR / "models" / "plate_detector.pt"))
+
+    # Backward compat: USE_YOLO=true maps to yolo_easyocr engine
+    USE_YOLO: bool = os.getenv("USE_YOLO", "false").lower() == "true"
 
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")

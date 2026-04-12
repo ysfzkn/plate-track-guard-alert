@@ -1,0 +1,50 @@
+[project]
+name = "gateguard"
+version = "1.0.0"
+description = "Camera-based unauthorized vehicle detection and physical alarm system"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Yusuf Ozkan" },
+]
+
+# ── Core dependencies (uv sync) ──────────────────────────
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+    "pyodbc>=5.0.0",
+    "httpx>=0.25.0",
+    "python-dotenv>=1.0.0",
+    "aiosqlite>=0.19.0",
+    "python-multipart>=0.0.6",
+    "fast-alpr[onnx]>=0.1.0",
+]
+
+# ── Optional dependency groups ────────────────────────────
+#   uv sync --extra yolo      → YOLO training pipeline
+#   uv sync --extra easyocr   → EasyOCR engine (fallback)
+#   uv sync --extra dev       → dev/test tools
+#   uv sync --all-extras      → everything
+[project.optional-dependencies]
+yolo = [
+    "ultralytics>=8.0.0",
+    "pyyaml>=6.0",
+    "tensorboard>=2.14.0",
+]
+easyocr = [
+    "easyocr>=1.7.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.4.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "ruff>=0.4.0",
+]

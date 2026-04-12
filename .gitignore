@@ -29,5 +29,10 @@ yolo_training/data/dataset/images/
 yolo_training/data/dataset/labels/
 yolo_training/runs/
 
+runs/detect/test_output
+runs/detect/runs/detect/plate_detector
+
 # NSSM binary
 nssm.exe
+
+uv.lock
