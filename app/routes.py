@@ -93,29 +93,53 @@ async def trigger_sync():
 
 
 @router.get("/api/passages")
-async def get_passages(limit: int = 50):
-    """Get recent passage records."""
+async def get_passages(
+    limit: int = 50,
+    offset: int = 0,
+    start: str | None = None,
+    end: str | None = None,
+    direction: str | None = None,
+    authorized: str | None = None,
+    plate: str | None = None,
+):
+    """Get passage records with optional filters and pagination."""
     if not _db:
-        return JSONResponse([])
+        return JSONResponse({"passages": [], "total": 0})
     try:
-        passages = _db.get_recent_passages(limit)
-        return JSONResponse(passages)
-    except Exception as e:
+        auth_bool = None
+        if authorized == "true":
+            auth_bool = True
+        elif authorized == "false":
+            auth_bool = False
+
+        passages, total = _db.get_passages_filtered(
+            start_date=start,
+            end_date=end,
+            direction=direction,
+            authorized=auth_bool,
+            plate_search=plate,
+            limit=limit,
+            offset=offset,
+        )
+        return JSONResponse({"passages": passages, "total": total})
+    except Exception:
         logger.exception("Passage query failed")
-        return JSONResponse([], status_code=500)
+        return JSONResponse({"passages": [], "total": 0}, status_code=500)
 
 
 @router.get("/api/stats")
-async def get_stats():
-    """Get today's detection statistics."""
+async def get_stats(start: str | None = None, end: str | None = None):
+    """Get detection statistics, optionally filtered by date range."""
+    empty = {"today_total": 0, "today_authorized": 0, "today_unauthorized": 0,
+             "today_entries": 0, "today_exits": 0, "auth_rate": 0}
     if not _db:
-        return JSONResponse({"today_total": 0, "today_authorized": 0, "today_unauthorized": 0, "auth_rate": 0})
+        return JSONResponse(empty)
     try:
-        stats = _db.get_stats()
+        stats = _db.get_stats(start_date=start, end_date=end)
         return JSONResponse(stats)
-    except Exception as e:
+    except Exception:
         logger.exception("Stats query failed")
-        return JSONResponse({"today_total": 0, "today_authorized": 0, "today_unauthorized": 0, "auth_rate": 0})
+        return JSONResponse(empty)
 
 
 @router.get("/api/status")

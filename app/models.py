@@ -43,7 +43,19 @@ class PassageRecord:
     owner_name: str = ""
     confidence: float = 0.0
     screenshot_path: str = ""
+    direction: str = "unknown"  # "entry", "exit", "unknown"
     id: int | None = None
+
+
+@dataclass
+class PlateTrack:
+    """Tracks a plate's position across frames for direction detection."""
+    first_seen: datetime
+    first_y: float    # Y-center of bbox on first detection
+    last_y: float     # Y-center of bbox on latest detection
+    frame_count: int = 1
+    plate_text: str = ""
+    normalized: str = ""
 
 
 # --- Pydantic models (API responses) ---
@@ -67,6 +79,7 @@ class PassageOut(BaseModel):
     owner_name: str
     confidence: float
     screenshot_url: str
+    direction: str = "unknown"
 
 
 class StatsOut(BaseModel):

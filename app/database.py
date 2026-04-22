@@ -86,7 +86,8 @@ class Database:
                 is_authorized INTEGER NOT NULL DEFAULT 0,
                 owner_name TEXT DEFAULT '',
                 confidence REAL DEFAULT 0.0,
-                screenshot_path TEXT DEFAULT ''
+                screenshot_path TEXT DEFAULT '',
+                direction TEXT DEFAULT 'unknown'
             );
 
             CREATE INDEX IF NOT EXISTS idx_passages_date
@@ -103,6 +104,15 @@ class Database:
             );
         """)
         self.conn.commit()
+        self._migrate()
+
+    def _migrate(self):
+        """Add columns that may not exist in older databases."""
+        try:
+            self.conn.execute("SELECT direction FROM passages LIMIT 1")
+        except sqlite3.OperationalError:
+            self.conn.execute("ALTER TABLE passages ADD COLUMN direction TEXT DEFAULT 'unknown'")
+            self.conn.commit()
 
     # --- Vehicle operations ---
 
@@ -188,11 +198,11 @@ class Database:
             cursor = self.conn.execute(
                 """INSERT INTO passages
                    (plate, plate_normalized, detected_at, is_authorized,
-                    owner_name, confidence, screenshot_path)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    owner_name, confidence, screenshot_path, direction)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (record.plate, record.plate_normalized, record.detected_at.isoformat(),
                  int(record.is_authorized), record.owner_name,
-                 record.confidence, record.screenshot_path),
+                 record.confidence, record.screenshot_path, record.direction),
             )
             self.conn.commit()
             return cursor.lastrowid
@@ -200,31 +210,94 @@ class Database:
     def get_recent_passages(self, limit: int = 50) -> list[dict]:
         rows = self.conn.execute(
             """SELECT id, plate, plate_normalized, detected_at, is_authorized,
-                      owner_name, confidence, screenshot_path
+                      owner_name, confidence, screenshot_path, direction
                FROM passages ORDER BY detected_at DESC LIMIT ?""",
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_stats(self) -> dict:
-        today = date.today().isoformat()
+    def get_passages_filtered(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        direction: str | None = None,
+        authorized: bool | None = None,
+        plate_search: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict], int]:
+        """Filtered passage query with pagination. Returns (rows, total_count)."""
+        where_clauses = []
+        params = []
+
+        if start_date:
+            where_clauses.append("detected_at >= ?")
+            params.append(start_date)
+        if end_date:
+            where_clauses.append("detected_at < date(?, '+1 day')")
+            params.append(end_date)
+        if direction and direction != "all":
+            where_clauses.append("direction = ?")
+            params.append(direction)
+        if authorized is not None:
+            where_clauses.append("is_authorized = ?")
+            params.append(int(authorized))
+        if plate_search:
+            where_clauses.append("plate_normalized LIKE ?")
+            params.append(f"%{plate_search.upper()}%")
+
+        where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+        # Total count
+        count_row = self.conn.execute(
+            f"SELECT COUNT(*) as cnt FROM passages{where_sql}", params
+        ).fetchone()
+        total = count_row["cnt"] if count_row else 0
+
+        # Paginated data
+        rows = self.conn.execute(
+            f"""SELECT id, plate, plate_normalized, detected_at, is_authorized,
+                       owner_name, confidence, screenshot_path, direction
+                FROM passages{where_sql}
+                ORDER BY detected_at DESC LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        ).fetchall()
+
+        return [dict(r) for r in rows], total
+
+    def get_stats(self, start_date: str | None = None, end_date: str | None = None) -> dict:
+        """Get passage statistics. Defaults to today if no dates given."""
+        if not start_date:
+            start_date = date.today().isoformat()
+
+        params = [start_date]
+        date_filter = "WHERE detected_at >= ?"
+        if end_date:
+            date_filter += " AND detected_at < date(?, '+1 day')"
+            params.append(end_date)
+
         row = self.conn.execute(
-            """SELECT
+            f"""SELECT
                  COUNT(*) as total,
                  SUM(CASE WHEN is_authorized = 1 THEN 1 ELSE 0 END) as authorized,
-                 SUM(CASE WHEN is_authorized = 0 THEN 1 ELSE 0 END) as unauthorized
-               FROM passages
-               WHERE detected_at >= ?""",
-            (today,),
+                 SUM(CASE WHEN is_authorized = 0 THEN 1 ELSE 0 END) as unauthorized,
+                 SUM(CASE WHEN direction = 'entry' THEN 1 ELSE 0 END) as entries,
+                 SUM(CASE WHEN direction = 'exit' THEN 1 ELSE 0 END) as exits
+               FROM passages {date_filter}""",
+            params,
         ).fetchone()
         total = row["total"] or 0
         authorized = row["authorized"] or 0
         unauthorized = row["unauthorized"] or 0
+        entries = row["entries"] or 0
+        exits = row["exits"] or 0
         auth_rate = (authorized / total * 100) if total > 0 else 0.0
         return {
             "today_total": total,
             "today_authorized": authorized,
             "today_unauthorized": unauthorized,
+            "today_entries": entries,
+            "today_exits": exits,
             "auth_rate": round(auth_rate, 1),
         }
 

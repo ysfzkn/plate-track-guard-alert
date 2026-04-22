@@ -1,12 +1,18 @@
 """Application configuration loaded from .env file."""
 
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# When running as a frozen exe (PyInstaller), use the exe's directory.
+# Otherwise use the source file's directory.
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
 
-BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 
 class Settings:
@@ -29,6 +35,11 @@ class Settings:
     CONFIDENCE_THRESHOLD: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.4"))
     ALARM_COOLDOWN_SEC: int = int(os.getenv("ALARM_COOLDOWN_SEC", "60"))
     FUZZY_TOLERANCE: int = int(os.getenv("FUZZY_TOLERANCE", "1"))
+
+    # Direction detection: which frame movement direction means "entry"
+    # "down" = plate moving downward in frame = vehicle approaching = entry (default)
+    # "up"   = plate moving upward in frame = vehicle approaching = entry
+    CAMERA_ENTRY_DIRECTION: str = os.getenv("CAMERA_ENTRY_DIRECTION", "down")
 
     # LPR Engine selection: "fast_alpr" (best), "yolo_easyocr", "easyocr", "mock"
     LPR_ENGINE: str = os.getenv("LPR_ENGINE", "fast_alpr")

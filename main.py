@@ -152,6 +152,7 @@ async def lifespan(app: FastAPI):
         process_fps=settings.PROCESS_FPS,
         fuzzy_tolerance=settings.FUZZY_TOLERANCE,
         screenshot_dir=settings.SCREENSHOT_DIR,
+        entry_direction=settings.CAMERA_ENTRY_DIRECTION,
     )
     await engine.start()
 
@@ -163,6 +164,15 @@ async def lifespan(app: FastAPI):
         logger.exception("Screenshot cleanup failed")
 
     logger.info("All systems online. Detection active.")
+
+    # Auto-open browser (works in both script and frozen exe)
+    import threading
+    import webbrowser
+    def _open():
+        import time
+        time.sleep(2)
+        webbrowser.open("http://localhost:8000")
+    threading.Thread(target=_open, daemon=True).start()
 
     yield
 
@@ -179,6 +189,12 @@ async def lifespan(app: FastAPI):
     logger.info("Shutdown complete.")
 
 
+# --- Resolve paths (works both as script and frozen exe) ---
+
+from config import BASE_DIR
+
+STATIC_DIR = str(BASE_DIR / "static")
+
 # --- FastAPI app ---
 
 app = FastAPI(
@@ -189,7 +205,7 @@ app = FastAPI(
 )
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Include routes
 app.include_router(router)
@@ -197,14 +213,27 @@ app.include_router(router)
 
 @app.get("/")
 async def index():
-    return FileResponse("static/index.html")
+    return FileResponse(str(BASE_DIR / "static" / "index.html"))
 
 
 @app.get("/alpr-test")
 async def alpr_test():
-    return FileResponse("static/alpr-test.html")
+    return FileResponse(str(BASE_DIR / "static" / "alpr-test.html"))
 
 
 if __name__ == "__main__":
+    import sys
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    try:
+        if getattr(sys, "frozen", False):
+            # Frozen exe: pass the app object directly (string import won't work)
+            uvicorn.run(app, host="0.0.0.0", port=8000)
+        else:
+            # Dev mode: string import enables --reload
+            uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    except Exception as e:
+        print(f"\n\n[HATA] {e}\n")
+        import traceback
+        traceback.print_exc()
+        if getattr(sys, "frozen", False):
+            input("\nDevam etmek icin Enter'a basin...")
