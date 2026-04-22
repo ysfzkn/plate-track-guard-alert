@@ -234,6 +234,30 @@ async def test_detect(file: UploadFile):
         return JSONResponse({"error": "Detection failed"}, status_code=500)
 
 
+# ── Shutdown Endpoint ──────────────────────────────────────
+
+@router.post("/api/shutdown")
+async def shutdown():
+    """Gracefully shut down the server process.
+
+    Called from the UI when the operator wants to close the app.
+    Returns immediately, then exits the process after a short delay
+    so the HTTP response reaches the browser.
+    """
+    import os
+    import sys
+    import threading
+    import time
+
+    def _delayed_exit():
+        time.sleep(0.8)  # Let the HTTP response complete
+        logger.info("Shutdown requested via API — exiting process")
+        os._exit(0)
+
+    threading.Thread(target=_delayed_exit, daemon=True).start()
+    return JSONResponse({"status": "shutting_down", "message": "Sunucu kapatılıyor..."})
+
+
 # ── Camera Test Endpoints ──────────────────────────────────
 
 @router.get("/api/camera/snapshot")

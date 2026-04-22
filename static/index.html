@@ -8,11 +8,22 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <script src="/static/tailwind.js"></script>
     <style>
-        @keyframes alarm-flash { 0%,100%{background:rgba(220,38,38,.1)} 50%{background:rgba(220,38,38,.45)} }
-        @keyframes pulse-border { 0%,100%{border-color:#dc2626;box-shadow:0 0 20px rgba(220,38,38,.3)} 50%{border-color:#fca5a5;box-shadow:0 0 40px rgba(220,38,38,.6)} }
+        @keyframes alarm-banner-flash {
+            0%,100%{background:linear-gradient(to right,rgba(127,29,29,.95),rgba(15,23,42,.95),rgba(127,29,29,.95))}
+            50%{background:linear-gradient(to right,rgba(220,38,38,.95),rgba(69,10,10,.95),rgba(220,38,38,.95))}
+        }
+        @keyframes alarm-slide-in { from{transform:translateY(-100%)} to{transform:translateY(0)} }
+        @keyframes alarm-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.2)} }
+        @keyframes alarm-btn-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.7)} 70%{box-shadow:0 0 0 12px rgba(220,38,38,0)} }
         @keyframes slideDown { from{opacity:0;transform:translateY(-12px)} to{opacity:1;transform:translateY(0)} }
-        .alarm-bg{animation:alarm-flash .7s ease-in-out infinite}
-        .alarm-border{animation:pulse-border .8s ease-in-out infinite}
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes body-border-flash { 0%,100%{box-shadow:inset 0 0 0 4px rgba(220,38,38,.3)} 50%{box-shadow:inset 0 0 0 4px rgba(220,38,38,.9)} }
+
+        .alarm-banner-bg{animation:alarm-banner-flash 1s ease-in-out infinite, alarm-slide-in .3s ease-out}
+        .alarm-pulse{animation:alarm-pulse .8s ease-in-out infinite; display:inline-block}
+        .alarm-btn-pulse{animation:alarm-btn-pulse 1.2s infinite}
+        body.alarm-active{animation:body-border-flash 1s ease-in-out infinite}
+
         .card-enter{animation:slideDown .3s ease-out}
         ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-track{background:#111827} ::-webkit-scrollbar-thumb{background:#374151;border-radius:3px}
         .tab-btn{transition:all .15s} .tab-btn.active{border-bottom:2px solid #22d3ee;color:#22d3ee}
@@ -21,18 +32,35 @@
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen select-none">
 
-<!-- ====== ALARM OVERLAY ====== -->
-<div id="alarm-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center alarm-bg">
-    <div class="bg-gray-900/95 border-4 border-red-500 alarm-border rounded-2xl p-8 max-w-xl w-full mx-4 text-center shadow-2xl">
-        <div class="text-7xl mb-3">🚨</div>
-        <h2 class="text-4xl font-black text-red-500 mb-1">KAÇAK GEÇİŞ!</h2>
-        <p class="text-gray-400 text-sm mb-4">Yetkisiz araç tespit edildi</p>
-        <p id="alarm-plate" class="text-6xl font-mono font-black text-white mb-1"></p>
-        <p id="alarm-dir" class="text-lg font-semibold mb-2"></p>
-        <p id="alarm-time" class="text-gray-400 text-sm mb-4"></p>
-        <img id="alarm-screenshot" class="w-full max-h-64 object-contain rounded-lg mb-6 hidden border border-gray-700" alt="">
-        <button onclick="susturAlarm()" class="bg-red-600 hover:bg-red-700 text-white text-2xl font-black py-5 px-16 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg uppercase tracking-wider">
-            🔇 ALARMI SUSTUR
+<!-- ====== ALARM BANNER (top sticky, compact) ====== -->
+<div id="alarm-overlay" class="hidden fixed top-0 left-0 right-0 z-50 alarm-banner-bg border-b-4 border-red-500 shadow-2xl">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
+        <!-- Left: icon + labels -->
+        <div class="flex items-center gap-3 flex-shrink-0">
+            <div class="text-3xl alarm-pulse">🚨</div>
+            <div>
+                <div class="text-red-400 text-xs font-bold uppercase tracking-wider">KAÇAK GEÇİŞ</div>
+                <div class="text-gray-400 text-[10px]">Yetkisiz araç tespit edildi</div>
+            </div>
+        </div>
+
+        <!-- Middle: plate info -->
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+            <img id="alarm-screenshot" class="w-20 h-14 object-cover rounded border-2 border-red-500 flex-shrink-0 hidden cursor-pointer" alt="" onclick="fotoAc(this.src, document.getElementById('alarm-plate').textContent, document.getElementById('alarm-time').textContent, currentAlarmDir)">
+            <div class="min-w-0">
+                <p id="alarm-plate" class="text-3xl font-mono font-black text-white leading-tight truncate"></p>
+                <p class="text-xs text-gray-400 flex items-center gap-2">
+                    <span id="alarm-dir"></span>
+                    <span>·</span>
+                    <span id="alarm-time"></span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Right: silence button -->
+        <button onclick="susturAlarm()" class="bg-red-600 hover:bg-red-700 text-white font-black py-3 px-6 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg uppercase tracking-wider text-sm flex-shrink-0 flex items-center gap-2 alarm-btn-pulse">
+            <span class="text-xl">🔇</span>
+            <span>SUSTUR</span>
         </button>
     </div>
 </div>
@@ -57,8 +85,31 @@
             <span id="ws-status">Bağlanıyor</span>
         </div>
         <button onclick="senkronizeEt()" title="MDB Senkronize Et" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🔄</button>
+        <button onclick="kapatmaOnay()" title="Uygulamayı Kapat" class="text-xs bg-gray-800 hover:bg-red-900 px-3 py-1.5 rounded-lg border border-gray-700 hover:border-red-700 transition">⏻</button>
     </div>
 </header>
+
+<!-- ====== SHUTDOWN CONFIRMATION MODAL ====== -->
+<div id="shutdown-modal" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-sm w-full mx-4 text-center">
+        <div class="text-5xl mb-3">⚠️</div>
+        <h3 class="text-xl font-bold mb-2">Uygulamayı Kapat</h3>
+        <p class="text-sm text-gray-400 mb-5">Sunucu tamamen kapatılacak. Tekrar başlatmak için masaüstündeki GateGuard ikonunu kullanın.</p>
+        <div class="flex gap-3 justify-center">
+            <button onclick="document.getElementById('shutdown-modal').classList.add('hidden')" class="bg-gray-700 hover:bg-gray-600 text-white px-5 py-2 rounded-lg font-semibold transition">İptal</button>
+            <button onclick="uygulamayiKapat()" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-semibold transition">Evet, Kapat</button>
+        </div>
+    </div>
+</div>
+
+<!-- Shutdown in-progress overlay -->
+<div id="shutdown-progress" class="hidden fixed inset-0 z-[70] bg-gray-950/95 flex items-center justify-center">
+    <div class="text-center">
+        <div class="w-12 h-12 border-4 border-red-500 border-t-transparent rounded-full mx-auto mb-4" style="animation: spin 0.8s linear infinite"></div>
+        <p class="text-2xl font-bold text-red-400 mb-2">Uygulama Kapatılıyor</p>
+        <p class="text-sm text-gray-500">Bu pencereyi kapatabilirsiniz.</p>
+    </div>
+</div>
 
 <!-- ====== TAB: CANLI İZLEME ====== -->
 <div id="tab-canli" class="flex h-[calc(100vh-48px)]">
@@ -211,6 +262,16 @@ const MAX_GECIS = 100;
 let gecmisPage = 0, gecmisTotal = 0;
 const PAGE_SIZE = 50;
 
+// Siren audio state
+let sirenCtx = null;
+let sirenOsc = null;
+let sirenGain = null;
+let sirenLfo = null;
+let sirenLfoGain = null;
+let currentAlarmDir = '';
+let alarmAutoSilenceTimer = null;
+const ALARM_AUTO_SILENCE_MS = 7000; // 7 seconds
+
 // ============================================================
 //  TABS
 // ============================================================
@@ -297,34 +358,132 @@ function gecisleriCiz() {
 }
 
 // ============================================================
-//  ALARM
+//  ALARM — Compact banner + looping siren
 // ============================================================
 function alarmGoster(v) {
     alarmAktif = true;
+    currentAlarmDir = v.direction || '';
+
     document.getElementById('alarm-overlay').classList.remove('hidden');
+    document.body.classList.add('alarm-active');
+
     document.getElementById('alarm-plate').textContent = v.plate;
     document.getElementById('alarm-dir').innerHTML = dirBadge(v.direction);
-    document.getElementById('alarm-time').textContent = new Date(v.detected_at).toLocaleString('tr-TR');
+    document.getElementById('alarm-time').textContent =
+        new Date(v.detected_at).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
     const img = document.getElementById('alarm-screenshot');
-    if (v.screenshot_url) { img.src = v.screenshot_url; img.classList.remove('hidden'); } else { img.classList.add('hidden'); }
+    if (v.screenshot_url) { img.src = v.screenshot_url; img.classList.remove('hidden'); }
+    else { img.classList.add('hidden'); }
+
+    // Update sidebar indicator
     document.getElementById('alarm-indicator').className = 'w-4 h-4 rounded-full bg-red-500 animate-pulse';
     document.getElementById('alarm-status-text').textContent = '🚨 ALARM!';
     document.getElementById('alarm-status-text').className = 'font-semibold text-sm text-red-400';
     document.getElementById('status-dot').className = 'w-3 h-3 rounded-full bg-red-500 animate-pulse';
     document.getElementById('last-alarm-info').classList.remove('hidden');
     document.getElementById('last-alarm-plate-text').textContent = v.plate;
-    document.getElementById('last-alarm-time-text').textContent = new Date(v.detected_at).toLocaleTimeString('tr-TR');
-    try { const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.3;o.start();setTimeout(()=>{o.stop();c.close()},500); } catch(e){}
+    document.getElementById('last-alarm-time-text').textContent =
+        new Date(v.detected_at).toLocaleTimeString('tr-TR');
+
+    // Start looping siren
+    sirenBaslat();
+
+    // Auto-silence after 7 seconds (reset timer if a new alarm fires)
+    if (alarmAutoSilenceTimer) clearTimeout(alarmAutoSilenceTimer);
+    alarmAutoSilenceTimer = setTimeout(() => {
+        if (alarmAktif) susturAlarm();
+    }, ALARM_AUTO_SILENCE_MS);
 }
+
 function alarmKapat() {
     alarmAktif = false;
+    if (alarmAutoSilenceTimer) { clearTimeout(alarmAutoSilenceTimer); alarmAutoSilenceTimer = null; }
     document.getElementById('alarm-overlay').classList.add('hidden');
+    document.body.classList.remove('alarm-active');
     document.getElementById('alarm-indicator').className = 'w-4 h-4 rounded-full bg-green-500';
     document.getElementById('alarm-status-text').textContent = 'Normal';
     document.getElementById('alarm-status-text').className = 'font-semibold text-sm text-green-400';
     document.getElementById('status-dot').className = 'w-3 h-3 rounded-full bg-green-500';
+    sirenDurdur();
 }
-async function susturAlarm() { try { await fetch('/alarm/off',{method:'POST'}); } catch(e) { bildirim('Bağlantı hatası','hata'); } }
+
+async function susturAlarm() {
+    if (alarmAutoSilenceTimer) { clearTimeout(alarmAutoSilenceTimer); alarmAutoSilenceTimer = null; }
+    sirenDurdur(); // Immediate audio cut for operator feedback
+    try { await fetch('/alarm/off', {method:'POST'}); }
+    catch(e) { bildirim('Bağlantı hatası', 'hata'); }
+}
+
+// ============================================================
+//  UYGULAMAYI KAPAT (shutdown)
+// ============================================================
+function kapatmaOnay() {
+    document.getElementById('shutdown-modal').classList.remove('hidden');
+}
+
+async function uygulamayiKapat() {
+    document.getElementById('shutdown-modal').classList.add('hidden');
+    document.getElementById('shutdown-progress').classList.remove('hidden');
+    // Ensure any active alarm sound stops
+    sirenDurdur();
+    try {
+        await fetch('/api/shutdown', {method: 'POST'});
+    } catch(e) {
+        // Expected — server is going down, fetch may fail
+    }
+    // After a short wait, close the browser tab (if allowed)
+    setTimeout(() => {
+        try { window.close(); } catch(e) {}
+    }, 1500);
+}
+
+// --- Continuous siren (wail-style frequency sweep) ---
+function sirenBaslat() {
+    sirenDurdur(); // cleanup any previous
+    try {
+        sirenCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Main tone oscillator
+        sirenOsc = sirenCtx.createOscillator();
+        sirenOsc.type = 'sawtooth';
+        sirenOsc.frequency.value = 600;
+
+        // Volume gain
+        sirenGain = sirenCtx.createGain();
+        sirenGain.gain.value = 0.15; // keep moderate, not deafening
+
+        // LFO for frequency modulation (classic police siren wail)
+        sirenLfo = sirenCtx.createOscillator();
+        sirenLfo.type = 'sine';
+        sirenLfo.frequency.value = 1.5; // 1.5 Hz wail speed
+
+        sirenLfoGain = sirenCtx.createGain();
+        sirenLfoGain.gain.value = 300; // frequency swing +/- 300 Hz
+
+        // Connect: LFO → LFO gain → oscillator frequency
+        sirenLfo.connect(sirenLfoGain);
+        sirenLfoGain.connect(sirenOsc.frequency);
+
+        // Connect: oscillator → gain → speakers
+        sirenOsc.connect(sirenGain);
+        sirenGain.connect(sirenCtx.destination);
+
+        sirenOsc.start();
+        sirenLfo.start();
+    } catch (e) {
+        console.warn('Siren start failed:', e);
+    }
+}
+
+function sirenDurdur() {
+    try { if (sirenOsc) { sirenOsc.stop(); sirenOsc.disconnect(); } } catch(e) {}
+    try { if (sirenLfo) { sirenLfo.stop(); sirenLfo.disconnect(); } } catch(e) {}
+    try { if (sirenGain) sirenGain.disconnect(); } catch(e) {}
+    try { if (sirenLfoGain) sirenLfoGain.disconnect(); } catch(e) {}
+    try { if (sirenCtx && sirenCtx.state !== 'closed') sirenCtx.close(); } catch(e) {}
+    sirenOsc = sirenLfo = sirenGain = sirenLfoGain = sirenCtx = null;
+}
 
 // ============================================================
 //  GEÇMİŞ TAB
