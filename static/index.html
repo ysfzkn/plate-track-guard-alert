@@ -50,11 +50,13 @@
         <button class="tab-btn px-4 py-2 text-sm font-semibold text-gray-500" onclick="tabDegistir('galeri')">📸 Galeri</button>
     </div>
     <div class="flex items-center gap-2">
+        <a href="/camera-test" title="Kamera Testi" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">📹</a>
+        <a href="/alpr-test" title="ALPR Test" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🔬</a>
         <div id="ws-badge" class="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">
             <div id="ws-dot" class="w-2 h-2 rounded-full bg-yellow-500"></div>
             <span id="ws-status">Bağlanıyor</span>
         </div>
-        <button onclick="senkronizeEt()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🔄</button>
+        <button onclick="senkronizeEt()" title="MDB Senkronize Et" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🔄</button>
     </div>
 </header>
 

@@ -221,6 +221,11 @@ async def alpr_test():
     return FileResponse(str(BASE_DIR / "static" / "alpr-test.html"))
 
 
+@app.get("/camera-test")
+async def camera_test_page():
+    return FileResponse(str(BASE_DIR / "static" / "camera-test.html"))
+
+
 if __name__ == "__main__":
     import sys
     import uvicorn

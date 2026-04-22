@@ -22,6 +22,7 @@ The authorized vehicle database is synced from an existing **Moonwell MW-305** U
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Running the Application](#running-the-application)
+- [Building for Deployment (USB Distribution)](#building-for-deployment-usb-distribution)
 - [Windows Auto-Start (Production Deployment)](#windows-auto-start-production-deployment)
 - [Web UI](#web-ui)
 - [API Reference](#api-reference)
@@ -207,6 +208,200 @@ python main.py
 ```
 
 The server starts on `http://0.0.0.0:8000`. Open it from any device on the same network.
+
+---
+
+## Building for Deployment (USB Distribution)
+
+This section covers how to **package GateGuard into a standalone Windows distribution** that runs on any Windows 10/11 PC without requiring Python to be installed. The output is a folder you can copy to a USB drive and deploy on the target security PC.
+
+### What You'll Produce
+
+A self-contained folder (~4-5 GB) containing:
+
+- `GateGuard.exe` — the main executable (no Python install needed on target PC)
+- `.env` — configuration file (edit per deployment site)
+- `static/` — web UI files (HTML, CSS, JS, icons)
+- `models/` — optional fine-tuned YOLO weights
+- `_internal/` — bundled dependencies (PyTorch, OpenCV, fast-alpr, etc.)
+- `moonwel_db/` — empty placeholder (target site MDB goes here)
+- `data/`, `logs/` — auto-created at runtime
+
+### Prerequisites for Building
+
+On the **build machine** (your development PC), you need:
+
+- Python 3.10+ installed
+- `uv` package manager installed (`pip install uv`)
+- All project dependencies installed (`uv sync`)
+- Fine-tuned YOLO model in `models/plate_detector.pt` (optional — system works with fast-alpr alone)
+- Custom icon in `static/favicon.ico` (optional — see icon section below)
+
+### Step 1: Verify Development Setup
+
+Before building, make sure the app runs correctly in development mode:
+
+```powershell
+# Activate the venv
+.venv\Scripts\activate
+
+# Run the app locally
+python main.py
+```
+
+Open `http://localhost:8000` and verify:
+- Main dashboard loads
+- `/alpr-test` works (upload an image)
+- `/camera-test` shows camera status
+- Detection engine is running (check logs/app.log)
+
+If everything works in dev mode, stop the server (`Ctrl+C`) and proceed.
+
+### Step 2: Clean Previous Build Artifacts
+
+```powershell
+# Delete old build/dist folders and spec file
+Remove-Item -Recurse -Force build, dist, GateGuard.spec -ErrorAction SilentlyContinue
+
+# Optional: clear PyInstaller's global cache
+ie4uinit.exe -ClearIconCache
+```
+
+### Step 3: Run the Build Script
+
+```powershell
+python build.py
+```
+
+This automated script:
+1. Installs PyInstaller (if missing)
+2. Bundles the entire app into a single executable folder via PyInstaller
+3. Copies `static/`, `app/`, `config.py`, and `models/` into the dist folder
+4. Copies `.env.example` as `.env` in the distribution (if missing)
+5. Creates empty runtime directories (`data/`, `logs/`, `moonwel_db/`)
+6. Reports the final distribution size
+
+**Build time:** ~5-10 minutes on a decent machine. Output goes to `dist/GateGuard/`.
+
+### Step 4: Verify the Built Executable
+
+Before copying to USB, test the exe locally:
+
+```powershell
+cd dist\GateGuard
+
+# Optional: edit .env to test with mock mode first
+# (set MOCK_MODE=true in .env)
+
+# Run it
+.\GateGuard.exe
+```
+
+You should see:
+- Console window opens (stays open — this is normal)
+- 2-3 seconds later, browser opens to `http://localhost:8000`
+- Detection starts working (mock mode shows fake plates)
+
+Press `Ctrl+C` in the console to stop.
+
+### Step 5: Regenerate the Icon (Optional)
+
+If you want to refresh the app icon from an SVG/PNG source:
+
+```powershell
+# From a 1024x1024 PNG (best source):
+python -c "from PIL import Image; img = Image.open('static/icon_1024.png').convert('RGBA'); sizes = [16,24,32,48,64,128,256]; frames = [img.resize((s,s), Image.LANCZOS) for s in sizes]; frames[-1].save('static/favicon.ico', format='ICO', sizes=[(s,s) for s in sizes], append_images=frames[:-1])"
+```
+
+After regenerating the icon, rebuild with `python build.py` so the exe picks up the new icon.
+
+> **Note:** Windows caches icons aggressively. If the old icon still shows on the exe after rebuild, restart Windows Explorer (`Ctrl+Shift+Esc` → Task Manager → Windows Explorer → Restart).
+
+### Step 6: Prepare the USB Drive
+
+Copy these items to a USB stick (16 GB or larger recommended):
+
+```
+USB_DRIVE/
+├── GateGuard/                          ← entire dist/GateGuard/ folder
+├── KURULUM.md                          ← Turkish deployment guide
+├── README.md                           ← this file
+├── AccessDatabaseEngine_X64.exe        ← Microsoft Access Database Engine
+│                                         (download from microsoft.com)
+├── vlc-installer.exe                   ← VLC Media Player (for camera testing)
+│                                         (download from videolan.org)
+└── esp32_relay.ino                     ← (optional) ESP32 firmware source
+```
+
+PowerShell command to zip the dist folder for easier transfer:
+
+```powershell
+Compress-Archive -Path dist\GateGuard -DestinationPath GateGuard-v1.0.zip -Force
+```
+
+### Step 7: Double-Check Distribution Contents
+
+Before heading to the deployment site, verify the distribution:
+
+```powershell
+# Check total size
+(Get-ChildItem dist\GateGuard -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
+
+# Verify key files exist
+Test-Path dist\GateGuard\GateGuard.exe
+Test-Path dist\GateGuard\.env
+Test-Path dist\GateGuard\static\index.html
+Test-Path dist\GateGuard\static\favicon.ico
+Test-Path dist\GateGuard\app\routes.py
+```
+
+All should return `True`.
+
+### One-Liner Build + Zip
+
+For quick iteration:
+
+```powershell
+Remove-Item -Recurse -Force build, dist, GateGuard.spec -ErrorAction SilentlyContinue; python build.py; Compress-Archive -Path dist\GateGuard -DestinationPath GateGuard-deploy.zip -Force
+```
+
+### Rebuilding After Code Changes
+
+If you change code after building:
+
+```powershell
+# Full rebuild
+python build.py
+```
+
+If you only change `.env` or static files (HTML, CSS, JS), you can skip the rebuild — just copy the changed files into `dist/GateGuard/` manually:
+
+```powershell
+Copy-Item static\*.html dist\GateGuard\static\ -Force
+Copy-Item .env dist\GateGuard\.env -Force
+```
+
+### Troubleshooting Build Issues
+
+**"No module named pip"** → venv was created without pip. The build script uses `uv pip install` which handles this.
+
+**"cannot import name 'X'" at runtime** → Missing hidden import. Add to `build.py` in the `hidden_imports` list, then rebuild.
+
+**Exe starts then closes immediately** → Run from terminal to see the error:
+```powershell
+cd dist\GateGuard
+.\GateGuard.exe
+```
+
+**Icon not updating** → Windows icon cache. Restart Explorer or reboot.
+
+**dist folder > 6 GB** → Development venv has extra packages. Consider creating a fresh minimal venv for building:
+```powershell
+python -m venv build-venv
+.\build-venv\Scripts\activate
+pip install -r requirements.txt
+python build.py
+```
 
 ---
 

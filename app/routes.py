@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 from fastapi import APIRouter, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.database import is_valid_turkish_plate
 
@@ -232,3 +232,56 @@ async def test_detect(file: UploadFile):
     except Exception:
         logger.exception("Test detection failed")
         return JSONResponse({"error": "Detection failed"}, status_code=500)
+
+
+# ── Camera Test Endpoints ──────────────────────────────────
+
+@router.get("/api/camera/snapshot")
+async def camera_snapshot():
+    """Return the latest camera frame as JPEG."""
+    if not _camera:
+        return JSONResponse({"error": "Camera not initialized"}, status_code=503)
+
+    frame = _camera.get_frame()
+    if frame is None:
+        return JSONResponse({"error": "No frame available"}, status_code=404)
+
+    try:
+        success, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if not success:
+            return JSONResponse({"error": "Encoding failed"}, status_code=500)
+        return Response(content=buffer.tobytes(), media_type="image/jpeg",
+                        headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+    except Exception:
+        logger.exception("Snapshot failed")
+        return JSONResponse({"error": "Snapshot failed"}, status_code=500)
+
+
+@router.get("/api/camera/test")
+async def camera_test():
+    """Test RTSP connection and return status + frame info."""
+    from config import settings
+
+    result = {
+        "rtsp_url": settings.RTSP_URL if not settings.MOCK_MODE else "mock://camera",
+        "mock_mode": settings.MOCK_MODE,
+        "connected": False,
+        "frame_available": False,
+        "frame_size": None,
+        "error": None,
+    }
+
+    if not _camera:
+        result["error"] = "Kamera başlatılmamış"
+        return JSONResponse(result)
+
+    result["connected"] = _camera.is_connected
+
+    frame = _camera.get_frame()
+    if frame is not None:
+        result["frame_available"] = True
+        result["frame_size"] = {"width": frame.shape[1], "height": frame.shape[0]}
+    else:
+        result["error"] = "Kameradan henüz görüntü alınamadı (bağlantı kurulmamış olabilir)"
+
+    return JSONResponse(result)

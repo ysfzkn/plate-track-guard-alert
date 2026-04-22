@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard — Kamera Testi</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/tailwind.js"></script>
+    <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin 0.8s linear infinite; }
+        @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+        .pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
+        ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-track{background:#111827} ::-webkit-scrollbar-thumb{background:#374151;border-radius:3px}
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+<header class="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        <a href="/" class="text-gray-500 hover:text-gray-300 text-sm">← Ana Panel</a>
+        <div class="w-px h-5 bg-gray-700"></div>
+        <h1 class="text-lg font-bold">📹 Kamera Testi</h1>
+        <span class="text-xs text-gray-500 font-mono hidden sm:inline">RTSP Bağlantı Kontrolü</span>
+    </div>
+    <div class="flex items-center gap-2">
+        <label class="text-xs text-gray-500">Yenileme:</label>
+        <select id="refresh-rate" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs">
+            <option value="500">Hızlı (2 FPS)</option>
+            <option value="1000" selected>Normal (1 FPS)</option>
+            <option value="3000">Yavaş (0.3 FPS)</option>
+            <option value="0">Durdur</option>
+        </select>
+        <button onclick="testEt()" id="test-btn" class="bg-cyan-700 hover:bg-cyan-600 text-white text-sm px-4 py-1.5 rounded-lg transition">🔄 Yeniden Test Et</button>
+    </div>
+</header>
+
+<main class="max-w-5xl mx-auto p-6 space-y-6">
+
+    <!-- Connection Status Card -->
+    <div id="status-card" class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div class="flex items-center gap-3 mb-4">
+            <div id="status-dot" class="w-4 h-4 rounded-full bg-yellow-500 pulse-dot"></div>
+            <h2 id="status-title" class="text-xl font-bold">Bağlantı test ediliyor...</h2>
+        </div>
+        <div id="status-details" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <!-- populated by JS -->
+        </div>
+    </div>
+
+    <!-- Live Preview -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="font-semibold text-sm">📺 Canlı Görüntü</span>
+                <span id="feed-status" class="text-xs text-gray-500">—</span>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-gray-500">
+                <span id="fps-counter">0.0 FPS</span>
+                <span id="frame-size">—</span>
+            </div>
+        </div>
+        <div class="relative bg-black flex items-center justify-center" style="min-height:400px">
+            <img id="camera-feed" class="max-w-full max-h-[60vh] hidden" alt="Kamera görüntüsü">
+            <div id="feed-placeholder" class="text-center p-8">
+                <div class="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full spinner mx-auto mb-3"></div>
+                <p class="text-gray-400">Görüntü bekleniyor...</p>
+                <p class="text-xs text-gray-600 mt-2">Kamera bağlantısı kurulana kadar bu ekran görünür.<br>Canlı modda 5-30 saniye sürebilir.</p>
+            </div>
+            <div id="feed-error" class="hidden text-center p-8">
+                <div class="text-5xl mb-3">⚠️</div>
+                <p class="text-red-400 font-semibold">Görüntü alınamıyor</p>
+                <p id="feed-error-msg" class="text-xs text-gray-500 mt-2"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Troubleshooting -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <h3 class="text-lg font-bold mb-3">🔧 Sorun Giderme</h3>
+        <div class="space-y-3 text-sm text-gray-400">
+            <div>
+                <span class="font-semibold text-gray-200">Görüntü gelmiyor:</span>
+                <ul class="list-disc list-inside ml-2 mt-1 space-y-1 text-xs">
+                    <li>Kamera ve bilgisayarın aynı ağda olduğunu kontrol edin (<code class="bg-gray-800 px-1 rounded">ping 192.168.1.100</code>)</li>
+                    <li>.env dosyasında RTSP_URL doğru mu? (kullanıcı adı, şifre, IP, port)</li>
+                    <li>Windows Güvenlik Duvarı 554 portunu engelliyor olabilir</li>
+                    <li>Kamerayı VLC Media Player ile test edin: Media → Open Network Stream → RTSP URL yapıştır</li>
+                </ul>
+            </div>
+            <div>
+                <span class="font-semibold text-gray-200">RTSP URL formatı (Dahua):</span>
+                <code class="block bg-gray-800 p-2 rounded mt-1 text-[11px] text-cyan-400 break-all">rtsp://admin:SIFRE@192.168.1.100:554/cam/realmonitor?channel=1&amp;subtype=0</code>
+            </div>
+            <div>
+                <span class="font-semibold text-gray-200">RTSP URL formatı (Hikvision):</span>
+                <code class="block bg-gray-800 p-2 rounded mt-1 text-[11px] text-cyan-400 break-all">rtsp://admin:SIFRE@192.168.1.100:554/Streaming/Channels/101</code>
+            </div>
+            <div>
+                <span class="font-semibold text-gray-200">Test modu:</span>
+                <p class="text-xs mt-1">.env dosyasında <code class="bg-gray-800 px-1 rounded">MOCK_MODE=true</code> yaparsanız, gerçek kamera olmadan sahte bir kamera akışı görürsünüz.</p>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+let refreshInterval = null;
+let frameCount = 0, fpsStart = Date.now();
+
+async function testEt() {
+    const btn = document.getElementById('test-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Test ediliyor...';
+
+    try {
+        const resp = await fetch('/api/camera/test');
+        const data = await resp.json();
+        durumGuncelle(data);
+    } catch (e) {
+        durumGuncelle({connected: false, error: 'Sunucuya bağlanılamadı: ' + e.message});
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Yeniden Test Et';
+    }
+}
+
+function durumGuncelle(data) {
+    const dot = document.getElementById('status-dot');
+    const title = document.getElementById('status-title');
+    const details = document.getElementById('status-details');
+
+    const ok = data.connected && data.frame_available;
+    dot.classList.remove('pulse-dot');
+
+    if (ok) {
+        dot.className = 'w-4 h-4 rounded-full bg-green-500';
+        title.textContent = '✓ Kamera bağlı ve görüntü alınıyor';
+        title.className = 'text-xl font-bold text-green-400';
+    } else if (data.connected && !data.frame_available) {
+        dot.className = 'w-4 h-4 rounded-full bg-yellow-500 pulse-dot';
+        title.textContent = '⚠ Bağlantı var ama görüntü gelmiyor';
+        title.className = 'text-xl font-bold text-yellow-400';
+    } else if (data.mock_mode) {
+        dot.className = 'w-4 h-4 rounded-full bg-blue-500';
+        title.textContent = 'ℹ Mock modda çalışıyor (sahte kamera)';
+        title.className = 'text-xl font-bold text-blue-400';
+    } else {
+        dot.className = 'w-4 h-4 rounded-full bg-red-500';
+        title.textContent = '✗ Kamera bağlantısı kurulamadı';
+        title.className = 'text-xl font-bold text-red-400';
+    }
+
+    const rows = [
+        ['RTSP URL', data.rtsp_url ? `<code class="text-cyan-400 text-[11px] break-all">${data.rtsp_url}</code>` : '—'],
+        ['Çalışma Modu', data.mock_mode ? '<span class="text-yellow-400">Test (Mock)</span>' : '<span class="text-green-400">Canlı (Gerçek Kamera)</span>'],
+        ['Bağlantı', data.connected ? '<span class="text-green-400">✓ Aktif</span>' : '<span class="text-red-400">✗ Kopuk</span>'],
+        ['Görüntü', data.frame_available ? '<span class="text-green-400">✓ Alınıyor</span>' : '<span class="text-red-400">✗ Gelmiyor</span>'],
+    ];
+    if (data.frame_size) {
+        rows.push(['Çözünürlük', `<span class="font-mono">${data.frame_size.width} × ${data.frame_size.height}</span>`]);
+    }
+    if (data.error) {
+        rows.push(['Hata', `<span class="text-red-400">${data.error}</span>`]);
+    }
+
+    details.innerHTML = rows.map(([k, v]) =>
+        `<div class="flex justify-between bg-gray-800/40 rounded p-2"><span class="text-gray-500">${k}:</span><span>${v}</span></div>`
+    ).join('');
+}
+
+function snapshotYukle() {
+    const img = document.getElementById('camera-feed');
+    const placeholder = document.getElementById('feed-placeholder');
+    const errBox = document.getElementById('feed-error');
+
+    // Cache-bust
+    const url = '/api/camera/snapshot?t=' + Date.now();
+
+    // Preload into a hidden Image so we only swap when ready
+    const tmp = new Image();
+    tmp.onload = () => {
+        img.src = url;
+        img.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+        errBox.classList.add('hidden');
+
+        // FPS tracking
+        frameCount++;
+        const elapsed = (Date.now() - fpsStart) / 1000;
+        if (elapsed >= 2) {
+            document.getElementById('fps-counter').textContent = (frameCount / elapsed).toFixed(1) + ' FPS';
+            frameCount = 0;
+            fpsStart = Date.now();
+        }
+        document.getElementById('feed-status').textContent = 'Canlı';
+        if (img.naturalWidth) {
+            document.getElementById('frame-size').textContent = `${img.naturalWidth}×${img.naturalHeight}`;
+        }
+    };
+    tmp.onerror = () => {
+        img.classList.add('hidden');
+        placeholder.classList.add('hidden');
+        errBox.classList.remove('hidden');
+        document.getElementById('feed-error-msg').textContent =
+            'Sunucu görüntü döndürmedi. Kamera bağlantısını kontrol edin.';
+        document.getElementById('feed-status').textContent = 'Yok';
+    };
+    tmp.src = url;
+}
+
+function refreshRateChanged() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    const rate = parseInt(document.getElementById('refresh-rate').value);
+    if (rate > 0) {
+        refreshInterval = setInterval(snapshotYukle, rate);
+        snapshotYukle(); // immediate
+    }
+}
+
+document.getElementById('refresh-rate').addEventListener('change', refreshRateChanged);
+
+// Bootstrap
+testEt();
+refreshRateChanged();
+// Periodic status refresh
+setInterval(testEt, 10000);
+</script>
+</body>
+</html>
