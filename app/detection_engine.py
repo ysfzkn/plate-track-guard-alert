@@ -1,4 +1,9 @@
-"""Detection engine — orchestrates camera → ALPR → DB lookup → direction → alarm."""
+"""Detection engine — orchestrates camera -> ALPR -> tracker -> DB lookup -> alarm.
+
+Uses the track-based multi-frame consensus pipeline from app/tracker.py.
+A passage is committed ONCE per vehicle track, after the vehicle leaves
+the detection window or the track's max duration is reached.
+"""
 
 from __future__ import annotations
 
@@ -7,9 +12,10 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from app.database import Database, normalize_plate
-from app.models import PassageRecord, PlateTrack
+from app.database import Database
+from app.models import PassageRecord
 from app.screenshot import save_screenshot
+from app.tracker import PlateTracker, Track
 
 if TYPE_CHECKING:
     from app.alarm_manager import AlarmManager
@@ -24,15 +30,23 @@ passages_logger = logging.getLogger("gateguard.passages")
 class DetectionEngine:
     def __init__(
         self,
-        camera: CameraStream | MockCamera,
-        detector: BasePlateDetector,
+        camera: "CameraStream | MockCamera",
+        detector: "BasePlateDetector",
         db: Database,
-        alarm: AlarmManager,
-        ws_manager: ConnectionManager,
+        alarm: "AlarmManager",
+        ws_manager: "ConnectionManager",
         process_fps: int = 2,
         fuzzy_tolerance: int = 1,
         screenshot_dir: str = "static/screenshots",
-        entry_direction: str = "down",
+        # Tracker config
+        min_frames_for_commit: int = 2,
+        track_idle_frames: int = 2,
+        track_max_duration_sec: float = 15.0,
+        track_iou_threshold: float = 0.25,
+        track_fuzzy_tolerance: int = 2,
+        direction_area_ratio: float = 1.2,
+        entry_size_change: str = "approach",
+        entry_y_direction: str = "down",
     ):
         self.camera = camera
         self.detector = detector
@@ -40,24 +54,35 @@ class DetectionEngine:
         self.alarm = alarm
         self.ws_manager = ws_manager
         self.process_fps = process_fps
-        self.fuzzy_tolerance = fuzzy_tolerance
+        self.fuzzy_tolerance = fuzzy_tolerance  # for DB lookup (different from tracker fuzzy)
         self.screenshot_dir = screenshot_dir
-        self.entry_direction = entry_direction  # "down" or "up"
+
+        self.tracker = PlateTracker(
+            iou_threshold=track_iou_threshold,
+            fuzzy_tolerance=track_fuzzy_tolerance,
+            idle_frames=track_idle_frames,
+            max_duration_sec=track_max_duration_sec,
+            min_frames_for_commit=min_frames_for_commit,
+            direction_area_ratio=direction_area_ratio,
+            entry_size_change=entry_size_change,
+            entry_y_direction=entry_y_direction,
+        )
+
         self._running = False
         self._task: asyncio.Task | None = None
-
-        # Plate tracking: normalized_plate → PlateTrack
-        self._plate_tracks: dict[str, PlateTrack] = {}
-        self._dedup_window_sec = 60
-        # Minimum Y-movement (pixels) to classify direction
-        self._min_direction_delta = 15
 
     async def start(self):
         if self._running:
             return
         self._running = True
         self._task = asyncio.create_task(self._loop())
-        logger.info("Detection engine started (fps=%d, entry_dir=%s)", self.process_fps, self.entry_direction)
+        logger.info(
+            "Detection engine started (fps=%d, entry_size=%s, entry_y=%s, min_frames=%d)",
+            self.process_fps,
+            self.tracker.entry_size_change,
+            self.tracker.entry_y_direction,
+            self.tracker.min_frames_for_commit,
+        )
 
     async def stop(self):
         self._running = False
@@ -79,142 +104,97 @@ class DetectionEngine:
             await asyncio.sleep(interval)
 
     async def _process_frame(self):
+        """One tick: detect -> update tracker -> reap finalized tracks -> commit."""
+        now = datetime.now()
         frame = self.camera.get_frame()
-        if frame is None:
+
+        detections = []
+        if frame is not None:
+            loop = asyncio.get_event_loop()
+            try:
+                detections = await loop.run_in_executor(None, self.detector.detect, frame)
+            except Exception:
+                logger.exception("Detector crashed")
+                detections = []
+
+        # Attach current frame to each detection for screenshot-on-commit
+        for det in detections:
+            if det.frame is None:
+                det.frame = frame
+
+        # Phase 1: Update tracker with this frame's detections
+        self.tracker.update(detections)
+
+        # Phase 2: Reap tracks that should be finalized now
+        finalized_tracks = self.tracker.reap(now)
+
+        # Phase 3: Commit each finalized track (if it qualifies)
+        for track in finalized_tracks:
+            await self._commit_track(track)
+
+    async def _commit_track(self, track: Track):
+        """Turn a finalized track into a passage record + alarm + broadcast."""
+        best = self.tracker.pick_best_reading(track)
+        if best is None:
+            # Not enough valid readings — silently drop
+            valid_count = sum(1 for r in track.readings if r.valid)
+            logger.info(
+                "Track %d dropped: %d valid readings of %d total (need %d)",
+                track.id, valid_count, len(track.readings),
+                self.tracker.min_frames_for_commit,
+            )
             return
 
-        loop = asyncio.get_event_loop()
-        detections = await loop.run_in_executor(None, self.detector.detect, frame)
+        direction = self.tracker.classify_direction(track)
 
-        for det in detections:
-            normalized = det.normalized_plate
-            bbox_y = self._get_bbox_center_y(det.bbox)
+        # DB lookup
+        vehicle = self.db.find_vehicle(best.normalized, self.fuzzy_tolerance)
+        is_authorized = vehicle is not None
+        owner_name = vehicle.owner_name if vehicle else ""
 
-            # Update plate tracking (for direction detection)
-            track = self._update_track(normalized, bbox_y, det)
-
-            # Dedup: only process once per dedup window, but keep tracking position
-            if track.frame_count > 1 and not self._is_first_process(track):
-                continue
-
-            # Determine direction from accumulated tracking data
-            direction = self._classify_direction(track)
-
-            # DB lookup
-            vehicle = self.db.find_vehicle(normalized, self.fuzzy_tolerance)
-            is_authorized = vehicle is not None
-            owner_name = vehicle.owner_name if vehicle else ""
-
-            # Screenshot (only for unauthorized)
-            screenshot_url = ""
-            if not is_authorized:
-                screenshot_url = save_screenshot(
-                    frame, det.plate_text, det.bbox, self.screenshot_dir
-                )
-
-            record = PassageRecord(
-                plate=det.plate_text,
-                plate_normalized=normalized,
-                detected_at=det.timestamp,
-                is_authorized=is_authorized,
-                owner_name=owner_name,
-                confidence=det.confidence,
-                screenshot_path=screenshot_url,
-                direction=direction,
-            )
-            record.id = self.db.add_passage(record)
-
-            # Log
-            status = "AUTHORIZED" if is_authorized else "UNAUTHORIZED"
-            dir_label = {"entry": "ENTRY", "exit": "EXIT"}.get(direction, "???")
-            passages_logger.info(
-                "Plate: %s | %s | %s | Conf: %.1f%% | Owner: %s",
-                normalized, dir_label, status, det.confidence * 100, owner_name,
+        # Screenshot (unauthorized only, using the best/sharpest frame)
+        screenshot_url = ""
+        if not is_authorized and best.frame is not None:
+            screenshot_url = save_screenshot(
+                best.frame, best.plate_text, best.bbox, self.screenshot_dir
             )
 
-            # Build WebSocket data payload
-            ws_data = {
-                "id": record.id,
-                "plate": det.plate_text,
-                "detected_at": det.timestamp.isoformat(),
-                "is_authorized": is_authorized,
-                "owner_name": owner_name,
-                "confidence": round(det.confidence * 100, 1),
-                "screenshot_url": screenshot_url,
-                "direction": direction,
-            }
-
-            if is_authorized:
-                await self.ws_manager.broadcast({"type": "passage", "data": ws_data})
-            else:
-                if self.alarm.should_trigger(normalized):
-                    await self.alarm.trigger_alarm(det.plate_text, normalized)
-                await self.ws_manager.broadcast({"type": "alarm_on", "data": ws_data})
-
-    # --- Direction detection helpers ---
-
-    @staticmethod
-    def _get_bbox_center_y(bbox) -> float:
-        """Get vertical center of a bounding box."""
-        if bbox is None:
-            return -1.0
-        _, y, _, h = bbox
-        return float(y + h / 2)
-
-    def _update_track(self, normalized: str, bbox_y: float, det) -> PlateTrack:
-        """Update or create a plate track entry."""
-        now = datetime.now()
-
-        if normalized in self._plate_tracks:
-            track = self._plate_tracks[normalized]
-            elapsed = (now - track.first_seen).total_seconds()
-            if elapsed < self._dedup_window_sec:
-                # Same plate still in dedup window — update last position
-                if bbox_y >= 0:
-                    track.last_y = bbox_y
-                track.frame_count += 1
-                return track
-            # Expired — treat as new
-
-        # New plate track
-        track = PlateTrack(
-            first_seen=now,
-            first_y=bbox_y,
-            last_y=bbox_y,
-            frame_count=1,
-            plate_text=det.plate_text,
-            normalized=normalized,
+        record = PassageRecord(
+            plate=best.plate_text,
+            plate_normalized=best.normalized,
+            detected_at=best.timestamp,
+            is_authorized=is_authorized,
+            owner_name=owner_name,
+            confidence=best.confidence,
+            screenshot_path=screenshot_url,
+            direction=direction,
         )
-        self._plate_tracks[normalized] = track
+        record.id = self.db.add_passage(record)
 
-        # Cleanup old tracks
-        self._plate_tracks = {
-            k: v for k, v in self._plate_tracks.items()
-            if (now - v.first_seen).total_seconds() < self._dedup_window_sec * 2
+        status = "AUTHORIZED" if is_authorized else "UNAUTHORIZED"
+        dir_label = {"entry": "ENTRY", "exit": "EXIT"}.get(direction, "???")
+        valid_count = sum(1 for r in track.readings if r.valid)
+        passages_logger.info(
+            "Plate: %s | %s | %s | Conf: %.1f%% | Owner: %s | Frames: %d/%d valid",
+            best.normalized, dir_label, status,
+            best.confidence * 100, owner_name,
+            valid_count, len(track.readings),
+        )
+
+        ws_data = {
+            "id": record.id,
+            "plate": best.plate_text,
+            "detected_at": best.timestamp.isoformat(),
+            "is_authorized": is_authorized,
+            "owner_name": owner_name,
+            "confidence": round(best.confidence * 100, 1),
+            "screenshot_url": screenshot_url,
+            "direction": direction,
         }
 
-        return track
-
-    def _is_first_process(self, track: PlateTrack) -> bool:
-        """Return True only on the second frame (when we have direction data)."""
-        return track.frame_count == 2
-
-    def _classify_direction(self, track: PlateTrack) -> str:
-        """Classify entry/exit based on Y-movement across frames."""
-        if track.first_y < 0 or track.last_y < 0:
-            return "unknown"
-
-        delta = track.last_y - track.first_y
-
-        if abs(delta) < self._min_direction_delta:
-            # Not enough movement — try to guess from single-frame position
-            # If plate is in lower half of typical 480p frame, likely entry
-            return "unknown"
-
-        # delta > 0 means plate moved DOWN in frame
-        moving_down = delta > 0
-
-        if self.entry_direction == "down":
-            return "entry" if moving_down else "exit"
-        else:  # entry_direction == "up"
-            return "entry" if not moving_down else "exit"
+        if is_authorized:
+            await self.ws_manager.broadcast({"type": "passage", "data": ws_data})
+        else:
+            if self.alarm.should_trigger(best.normalized):
+                await self.alarm.trigger_alarm(best.plate_text, best.normalized)
+            await self.ws_manager.broadcast({"type": "alarm_on", "data": ws_data})

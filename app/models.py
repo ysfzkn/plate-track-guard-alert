@@ -47,15 +47,8 @@ class PassageRecord:
     id: int | None = None
 
 
-@dataclass
-class PlateTrack:
-    """Tracks a plate's position across frames for direction detection."""
-    first_seen: datetime
-    first_y: float    # Y-center of bbox on first detection
-    last_y: float     # Y-center of bbox on latest detection
-    frame_count: int = 1
-    plate_text: str = ""
-    normalized: str = ""
+# NOTE: PlateTrack has been replaced by Track + Reading in app/tracker.py.
+# See the track-based multi-frame consensus architecture.
 
 
 # --- Pydantic models (API responses) ---

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard — Hırsızlık Tespit Testi</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/tailwind.js"></script>
+    <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin 0.8s linear infinite; }
+        .drop-active { border-color: #22d3ee !important; background: rgba(34,211,238,0.08) !important; }
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        .tab-btn { transition: all 0.15s; }
+        .tab-btn.active { border-bottom: 2px solid #22d3ee; color: #22d3ee; }
+        /* Timeline bars */
+        .tl-bar { transition: height 0.3s ease-out; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+<header class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        <a href="/" class="text-gray-500 hover:text-gray-300 text-sm">← Ana Panel</a>
+        <div class="w-px h-5 bg-gray-700"></div>
+        <h1 class="text-lg font-bold">🧪 Hırsızlık Tespit Testi</h1>
+    </div>
+    <div class="flex gap-2">
+        <a href="/night-watch" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">🌙 Gece İzleme</a>
+        <a href="/alpr-test" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">🔬 Plaka Testi</a>
+    </div>
+</header>
+
+<!-- Tabs -->
+<div class="bg-gray-900/50 border-b border-gray-800 flex">
+    <button class="tab-btn active px-6 py-3 text-sm font-semibold" onclick="selectTab('photo')">📷 Foto Testi</button>
+    <button class="tab-btn px-6 py-3 text-sm font-semibold text-gray-500" onclick="selectTab('video')">🎥 Video Testi</button>
+</div>
+
+<main class="max-w-6xl mx-auto p-6 space-y-6">
+
+    <!-- ═══════════════ PHOTO TAB ═══════════════ -->
+    <section id="tab-photo">
+        <p class="text-sm text-gray-400 mb-4">
+            Fotoğraf yükle → YOLO insan tespit modelini çalıştır → bbox + confidence gör.
+            Bu test <b>bölge/gece/loitering</b> kurallarını UYGULAMAZ, sadece ham model çıktısıdır.
+        </p>
+
+        <div id="photo-drop"
+             class="border-2 border-dashed border-gray-700 rounded-2xl p-10 text-center cursor-pointer hover:border-gray-500 transition-all"
+             onclick="document.getElementById('photo-input').click()">
+            <input type="file" id="photo-input" class="hidden" accept="image/*" multiple>
+            <div id="photo-idle">
+                <div class="text-5xl mb-3">👤</div>
+                <p class="text-lg font-semibold">Foto(lar) sürükle & bırak veya tıkla</p>
+                <p class="text-sm text-gray-500 mt-1">JPG, PNG — tek veya çoklu seçim</p>
+            </div>
+            <div id="photo-busy" class="hidden">
+                <div class="w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full spinner mx-auto mb-3"></div>
+                <p id="photo-progress" class="text-gray-400">İşleniyor...</p>
+            </div>
+        </div>
+
+        <div id="photo-summary" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-4 mt-4 flex gap-6 text-sm">
+            <div><span class="text-gray-500">Toplam:</span> <span id="ps-total" class="font-bold">0</span></div>
+            <div><span class="text-gray-500">Kişi Tespit:</span> <span id="ps-detected" class="font-bold text-green-400">0</span></div>
+            <div><span class="text-gray-500">Temiz:</span> <span id="ps-clean" class="font-bold text-gray-400">0</span></div>
+            <div class="flex-1"></div>
+            <button onclick="clearPhotos()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded">Temizle</button>
+        </div>
+
+        <div id="photo-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4"></div>
+    </section>
+
+    <!-- ═══════════════ VIDEO TAB ═══════════════ -->
+    <section id="tab-video" class="hidden">
+        <p class="text-sm text-gray-400 mb-4">
+            Video yükle → her N'inci frame YOLO'dan geçirilir → işaretli video + istatistik + zaman çizelgesi.
+            YouTube'dan "night CCTV surveillance" indirip deneyebilirsin.
+        </p>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-4">
+            <div class="flex items-center gap-4 flex-wrap">
+                <label class="text-sm text-gray-400">Örnekleme hızı:</label>
+                <select id="video-sample" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                    <option value="1">Her frame (yavaş, çok detay)</option>
+                    <option value="3">Her 3. frame</option>
+                    <option value="5" selected>Her 5. frame (önerilen)</option>
+                    <option value="10">Her 10. frame (hızlı)</option>
+                </select>
+                <span class="text-xs text-gray-500">Max 600 örnek işlenir (uzun videolar kesilir)</span>
+                <div class="flex items-center gap-2 ml-auto">
+                    <label class="text-sm text-gray-400">Güven eşiği:</label>
+                    <input id="video-conf" type="range" min="0.05" max="0.9" step="0.05" value="0.30"
+                           oninput="document.getElementById('video-conf-val').textContent='%'+Math.round(this.value*100)"
+                           class="w-32">
+                    <span id="video-conf-val" class="text-xs font-mono text-cyan-400 w-10">%30</span>
+                </div>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-2">💡 Tespit edilmiyorsa güven eşiğini düşür. Uzak/küçük kişiler için %20–30 önerilir.</p>
+        </div>
+
+        <div id="video-drop"
+             class="border-2 border-dashed border-gray-700 rounded-2xl p-10 text-center cursor-pointer hover:border-gray-500 transition-all"
+             onclick="document.getElementById('video-input').click()">
+            <input type="file" id="video-input" class="hidden" accept="video/*">
+            <div id="video-idle">
+                <div class="text-5xl mb-3">🎥</div>
+                <p class="text-lg font-semibold">Video sürükle & bırak veya tıkla</p>
+                <p class="text-sm text-gray-500 mt-1">MP4, AVI, MOV, MKV, WebM · tek dosya</p>
+            </div>
+            <div id="video-busy" class="hidden">
+                <div class="w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full spinner mx-auto mb-3"></div>
+                <p id="video-progress" class="text-gray-400">Video işleniyor, biraz zaman alabilir...</p>
+            </div>
+        </div>
+
+        <div id="video-result" class="hidden mt-6 space-y-4">
+            <!-- Filled by renderVideoResult() -->
+        </div>
+    </section>
+
+</main>
+
+<div id="toast" class="fixed bottom-4 right-4 space-y-2 z-40"></div>
+
+<script>
+// ── Tabs ─────────────────────────────────────────────────
+function selectTab(name) {
+    ['photo','video'].forEach(t => {
+        document.getElementById('tab-' + t).classList.toggle('hidden', t !== name);
+    });
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        const tabs = ['photo','video'];
+        btn.classList.toggle('active', tabs[i] === name);
+        btn.classList.toggle('text-gray-500', tabs[i] !== name);
+    });
+}
+
+// ══════════════════════════════════════════════════════
+//  PHOTO
+// ══════════════════════════════════════════════════════
+let photoResults = [];
+let cardCounter = 0;
+const photoDrop = document.getElementById('photo-drop');
+const photoInput = document.getElementById('photo-input');
+
+['dragenter', 'dragover'].forEach(ev => {
+    photoDrop.addEventListener(ev, e => { e.preventDefault(); photoDrop.classList.add('drop-active'); });
+});
+['dragleave', 'drop'].forEach(ev => {
+    photoDrop.addEventListener(ev, e => { e.preventDefault(); photoDrop.classList.remove('drop-active'); });
+});
+photoDrop.addEventListener('drop', e => {
+    const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+    if (files.length) handlePhotos(files);
+});
+photoInput.addEventListener('change', e => {
+    const files = [...e.target.files];
+    if (files.length) handlePhotos(files);
+    photoInput.value = '';
+});
+
+async function handlePhotos(files) {
+    photoProgress(0, files.length);
+    for (let i = 0; i < files.length; i++) {
+        photoProgress(i, files.length);
+        const cid = addPhotoPlaceholder(files[i].name);
+        try {
+            const data = await detectPhoto(files[i]);
+            photoResults.push(data);
+            updatePhotoCard(cid, data);
+        } catch (e) { errorPhotoCard(cid, files[i].name, e.message); }
+    }
+    photoHideProgress();
+    updatePhotoSummary();
+}
+
+async function detectPhoto(file) {
+    const form = new FormData(); form.append('file', file);
+    const r = await fetch('/api/intrusion/test-detect', { method: 'POST', body: form });
+    if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.detail || err.error || `HTTP ${r.status}`);
+    }
+    return await r.json();
+}
+
+function photoProgress(i, n) {
+    document.getElementById('photo-idle').classList.add('hidden');
+    document.getElementById('photo-busy').classList.remove('hidden');
+    document.getElementById('photo-progress').textContent = `İşleniyor... ${i+1} / ${n}`;
+}
+function photoHideProgress() {
+    document.getElementById('photo-idle').classList.remove('hidden');
+    document.getElementById('photo-busy').classList.add('hidden');
+}
+
+function addPhotoPlaceholder(filename) {
+    const id = 'pc-' + (++cardCounter);
+    const card = document.createElement('div');
+    card.id = id;
+    card.className = 'bg-gray-900 border border-gray-800 rounded-xl overflow-hidden';
+    card.innerHTML = `
+        <div class="aspect-video bg-gray-800 flex items-center justify-center">
+            <div class="text-center">
+                <div class="w-7 h-7 border-2 border-cyan-400 border-t-transparent rounded-full spinner mx-auto mb-2"></div>
+                <p class="text-xs text-gray-500">${escapeHtml(filename)}</p>
+            </div>
+        </div>`;
+    document.getElementById('photo-grid').prepend(card);
+    return id;
+}
+
+function updatePhotoCard(id, data) {
+    const card = document.getElementById(id);
+    if (!card) return;
+    const persons = data.persons || [];
+    const badge = persons.length > 0
+        ? `<span class="text-xs bg-green-800 text-green-200 px-1.5 py-0.5 rounded-full">${persons.length} kişi</span>`
+        : `<span class="text-xs bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded-full">temiz</span>`;
+    const detail = persons.length === 0
+        ? '<p class="text-gray-500 text-sm italic">Hiç kişi tespit edilmedi</p>'
+        : persons.map((p, i) => `
+            <div class="flex items-center justify-between p-2 rounded-lg border border-green-800 bg-green-950/30">
+                <span class="text-green-400">👤 Kişi #${i+1}</span>
+                <span class="text-xs text-gray-400">%${(p.confidence*100).toFixed(0)}</span>
+            </div>`).join('');
+    card.innerHTML = `
+        <div class="relative">
+            <img src="${data.annotated_image}" class="w-full aspect-video object-contain bg-black" alt="">
+            <div class="absolute top-2 right-2">${badge}</div>
+        </div>
+        <div class="p-3 space-y-2">
+            <div class="flex items-center justify-between">
+                <p class="text-xs text-gray-500 truncate flex-1">${escapeHtml(data.filename)}</p>
+                <p class="text-[10px] text-gray-600 ml-2">${data.image_size?.width}×${data.image_size?.height}</p>
+            </div>
+            ${detail}
+        </div>`;
+}
+
+function errorPhotoCard(id, filename, msg) {
+    const card = document.getElementById(id);
+    if (!card) return;
+    card.className = 'bg-gray-900 border border-red-900/50 rounded-xl overflow-hidden';
+    card.innerHTML = `
+        <div class="aspect-video bg-red-950/20 flex items-center justify-center">
+            <div class="text-center p-4">
+                <div class="text-3xl mb-2">❌</div>
+                <p class="text-red-400 text-sm font-semibold">Hata</p>
+                <p class="text-xs text-gray-500 mt-1">${escapeHtml(msg)}</p>
+            </div>
+        </div>
+        <div class="p-3"><p class="text-xs text-gray-500 truncate">${escapeHtml(filename)}</p></div>`;
+}
+
+function updatePhotoSummary() {
+    const s = document.getElementById('photo-summary');
+    if (!photoResults.length) { s.classList.add('hidden'); return; }
+    s.classList.remove('hidden');
+    document.getElementById('ps-total').textContent = photoResults.length;
+    document.getElementById('ps-detected').textContent = photoResults.filter(r => (r.persons||[]).length > 0).length;
+    document.getElementById('ps-clean').textContent = photoResults.filter(r => (r.persons||[]).length === 0).length;
+}
+
+function clearPhotos() {
+    photoResults = [];
+    document.getElementById('photo-grid').innerHTML = '';
+    document.getElementById('photo-summary').classList.add('hidden');
+}
+
+// ══════════════════════════════════════════════════════
+//  VIDEO
+// ══════════════════════════════════════════════════════
+const videoDrop = document.getElementById('video-drop');
+const videoInput = document.getElementById('video-input');
+
+['dragenter', 'dragover'].forEach(ev => {
+    videoDrop.addEventListener(ev, e => { e.preventDefault(); videoDrop.classList.add('drop-active'); });
+});
+['dragleave', 'drop'].forEach(ev => {
+    videoDrop.addEventListener(ev, e => { e.preventDefault(); videoDrop.classList.remove('drop-active'); });
+});
+videoDrop.addEventListener('drop', e => {
+    const file = [...e.dataTransfer.files].find(f => f.type.startsWith('video/'));
+    if (file) processVideo(file);
+});
+videoInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) processVideo(file);
+    videoInput.value = '';
+});
+
+async function processVideo(file) {
+    videoBusy(true);
+    document.getElementById('video-result').classList.add('hidden');
+    const startTime = performance.now();
+    try {
+        const sample = document.getElementById('video-sample').value;
+        const conf = document.getElementById('video-conf').value;
+        const form = new FormData();
+        form.append('file', file);
+        const r = await fetch(`/api/intrusion/test-video?sample_rate=${sample}&conf=${conf}`, {
+            method: 'POST', body: form,
+        });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err.detail || err.error || `HTTP ${r.status}`);
+        }
+        const data = await r.json();
+        const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+        renderVideoResult(data, elapsed);
+    } catch (e) {
+        toast('Video işleme hatası: ' + e.message, 'hata');
+    } finally {
+        videoBusy(false);
+    }
+}
+
+function videoBusy(busy) {
+    document.getElementById('video-idle').classList.toggle('hidden', busy);
+    document.getElementById('video-busy').classList.toggle('hidden', !busy);
+}
+
+function renderVideoResult(d, elapsed) {
+    const detectionRate = d.processed_frames > 0
+        ? (d.frames_with_person / d.processed_frames * 100).toFixed(0)
+        : '0';
+
+    // Timeline chart bars
+    const maxPersons = Math.max(1, d.max_persons_in_any_frame);
+    const timelineBars = (d.timeline || []).map(t => {
+        const h = Math.max(2, (t.persons / maxPersons) * 40);
+        const color = t.persons === 0
+            ? '#374151'
+            : (t.persons === 1 ? '#22c55e' : '#ef4444');
+        const title = `${t.time_sec}s · ${t.persons} kişi · güven %${(t.max_conf*100).toFixed(0)}`;
+        return `<div class="tl-bar flex-1 min-w-[3px]" style="height:${h}px;background:${color}"
+                     title="${title}"></div>`;
+    }).join('');
+
+    const host = document.getElementById('video-result');
+    host.innerHTML = `
+        <!-- Stats -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                <div>
+                    <div class="text-xs text-gray-500">Dosya</div>
+                    <div class="font-mono text-xs truncate" title="${escapeHtml(d.filename)}">${escapeHtml(d.filename)}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">İşlenen Frame</div>
+                    <div class="text-xl font-bold">${d.processed_frames}</div>
+                    <div class="text-[10px] text-gray-600">/${d.source_frames} kaynak</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">Kişi Görülen</div>
+                    <div class="text-xl font-bold text-green-400">${d.frames_with_person}</div>
+                    <div class="text-[10px] text-gray-600">%${detectionRate} oran</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">Max Eş Zamanlı</div>
+                    <div class="text-xl font-bold text-amber-400">${d.max_persons_in_any_frame}</div>
+                    <div class="text-[10px] text-gray-600">kişi</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">Ortalama Güven</div>
+                    <div class="text-xl font-bold text-cyan-400">%${(d.average_confidence*100).toFixed(0)}</div>
+                    <div class="text-[10px] text-gray-600">${elapsed}sn işlem</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video + timeline -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <div class="p-3 border-b border-gray-800 flex items-center justify-between">
+                <h3 class="font-semibold text-sm">🎬 İşaretli Video</h3>
+                <a href="${d.annotated_video_url}" download class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">⬇️ İndir</a>
+            </div>
+            ${d.browser_compatible === false ? `
+            <div class="px-3 py-2 bg-amber-950/40 border-b border-amber-900/50 text-[11px] text-amber-300 flex items-center gap-2">
+                <span>⚠️</span>
+                <span>Tarayıcıda oynatmak için H.264 transkodu yapılamadı (ffmpeg bulunamadı). Video açılmazsa <b>⬇️ İndir</b> ile kendi oynatıcınızda (VLC, Windows Media Player) açabilirsiniz.</span>
+            </div>` : ''}
+            <video id="vr-player" src="${d.annotated_video_url}" controls autoplay muted playsinline preload="metadata"
+                   class="w-full aspect-video bg-black"
+                   poster="${d.thumbnail || ''}"
+                   onerror="document.getElementById('vr-fallback').classList.remove('hidden'); this.classList.add('hidden')"></video>
+            <div id="vr-fallback" class="hidden p-6 text-center bg-black">
+                ${d.thumbnail ? `<img src="${d.thumbnail}" class="mx-auto max-h-64 rounded mb-3 opacity-70" alt="">` : ''}
+                <p class="text-amber-300 text-sm mb-3">Bu tarayıcı video codec'ini oynatamadı.</p>
+                <a href="${d.annotated_video_url}" download class="inline-block bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                    ⬇️ Videoyu indir ve kendi oynatıcında aç
+                </a>
+                <p class="text-[11px] text-gray-500 mt-3">Not: Sunucuda <code class="bg-gray-800 px-1 rounded">ffmpeg</code> kurulu değilse OpenCV mp4v codec'i bazı tarayıcılarda oynamaz. ffmpeg kurduktan sonra testi tekrarla.</p>
+            </div>
+
+            <div class="p-3 border-t border-gray-800">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-xs text-gray-500 uppercase tracking-wider">Zaman Çizelgesi</h4>
+                    <div class="flex gap-3 text-[10px] text-gray-500">
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 bg-gray-600 rounded"></span> temiz</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 bg-green-500 rounded"></span> 1 kişi</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 bg-red-500 rounded"></span> 2+ kişi</span>
+                    </div>
+                </div>
+                <div class="flex items-end gap-[1px] h-12 bg-gray-950/50 rounded p-1 overflow-x-auto">
+                    ${timelineBars || '<div class="text-gray-600 text-xs m-auto">Zaman çizelgesi yok</div>'}
+                </div>
+                <div class="text-[10px] text-gray-600 mt-1 flex justify-between">
+                    <span>0s</span>
+                    <span>Örnekleme: her ${d.sample_rate}. frame · Kaynak FPS: ${d.source_fps}</span>
+                    <span>${d.timeline?.length ? d.timeline[d.timeline.length-1].time_sec + 's' : '0s'}</span>
+                </div>
+            </div>
+        </div>
+    `;
+    host.classList.remove('hidden');
+}
+
+// ── Utils ────────────────────────────────────────────────
+function escapeHtml(s) {
+    const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML;
+}
+function toast(msg, tip='bilgi') {
+    const c = document.getElementById('toast');
+    const cls = { basari: 'bg-green-900/70 border-green-700 text-green-300',
+                  hata:   'bg-red-900/70 border-red-700 text-red-300',
+                  bilgi:  'bg-blue-900/70 border-blue-700 text-blue-300' };
+    const el = document.createElement('div');
+    el.className = `p-3 rounded-lg border text-sm ${cls[tip] || cls.bilgi}`;
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 4500);
+}
+</script>
+</body>
+</html>

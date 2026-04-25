@@ -95,9 +95,9 @@ class FastALPRDetector(BasePlateDetector):
             if isinstance(raw_text, (list, tuple)):
                 raw_text = "".join(str(t) for t in raw_text)
 
-            # Normalize and validate
+            # Normalize and validate — reject partial/malformed plates
             normalized = normalize_plate(raw_text)
-            if len(normalized) < 5:
+            if len(normalized) < 5 or not is_valid_turkish_plate(normalized):
                 continue
             if conf < self.confidence_threshold:
                 continue
@@ -319,26 +319,72 @@ class EasyOCRDetector(BasePlateDetector):
 # ================================================================
 
 class MockPlateDetector(BasePlateDetector):
-    """Generates fake plate detections for testing without real hardware."""
+    """Scripted plate detections for testing the multi-frame tracker.
+
+    Each "vehicle pass" is simulated as 4 consecutive frames with the same
+    plate text and a bbox that grows + shifts downward (simulating a car
+    approaching the camera). After the pass, 4 silent frames let the
+    tracker's idle_frames trigger finalization.
+
+    Occasionally the mock injects OCR variance on one frame (e.g., last
+    char misread) to exercise the consensus logic.
+    """
 
     def __init__(self):
-        self._detection_counter = 0
+        self._script: list[tuple[str, tuple[int, int, int, int], float]] = []
+        self._idx = 0
+        self._gap_counter = 0
+        self._scenario_idx = 0
+        # Mix of authorized + unauthorized plates to exercise alarm flow
+        self._scenarios = []
+        for p in AUTHORIZED_PLATES[:4]:
+            self._scenarios.append(p)
+        for p in UNAUTHORIZED_PLATES[:3]:
+            self._scenarios.append(p)
+
+    def _build_script(self, plate: str):
+        """Simulate 4 consecutive frames of a vehicle approaching the camera.
+
+        bbox grows (width + height) and moves down (y increases) — mimics
+        a car driving toward the gate.
+        """
+        norm = normalize_plate(plate)
+        # OCR variance on frame 3 (one char swap) to test consensus
+        variant_norm = norm[:-1] + ("9" if norm[-1] != "9" else "8")
+        variant_raw = plate[:-1] + ("9" if plate[-1] != "9" else "8")
+
+        script = [
+            (plate,        (260, 200, 100, 32), 0.82),  # far
+            (plate,        (250, 260, 120, 40), 0.88),  # closer
+            (variant_raw,  (240, 330, 150, 50), 0.55),  # OCR variance
+            (plate,        (230, 410, 180, 60), 0.92),  # close, sharp
+        ]
+        return script
 
     def detect(self, frame: np.ndarray) -> list[DetectionResult]:
-        if random.random() > 0.3:
+        # Silent gap lets the tracker finalize before next vehicle
+        if self._gap_counter > 0:
+            self._gap_counter -= 1
             return []
 
-        self._detection_counter += 1
+        # Start a new scenario if current script is done
+        if self._idx >= len(self._script):
+            plate = self._scenarios[self._scenario_idx % len(self._scenarios)]
+            self._scenario_idx += 1
+            self._script = self._build_script(plate)
+            self._idx = 0
 
-        if random.random() < 0.7:
-            plate = random.choice(AUTHORIZED_PLATES)
-        else:
-            plate = random.choice(UNAUTHORIZED_PLATES)
+        raw, bbox, conf = self._script[self._idx]
+        self._idx += 1
+        if self._idx >= len(self._script):
+            self._gap_counter = 4  # gap after last frame
 
-        normalized = normalize_plate(plate)
-        conf = random.uniform(0.65, 0.98)
-
+        normalized = normalize_plate(raw)
         return [DetectionResult(
-            plate_text=plate, normalized_plate=normalized, confidence=conf,
-            bbox=(260, 340, 120, 30), timestamp=datetime.now(), frame=frame,
+            plate_text=raw,
+            normalized_plate=normalized,
+            confidence=conf,
+            bbox=bbox,
+            timestamp=datetime.now(),
+            frame=frame,
         )]

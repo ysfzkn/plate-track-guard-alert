@@ -26,7 +26,29 @@
 
         .card-enter{animation:slideDown .3s ease-out}
         ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-track{background:#111827} ::-webkit-scrollbar-thumb{background:#374151;border-radius:3px}
-        .tab-btn{transition:all .15s} .tab-btn.active{border-bottom:2px solid #22d3ee;color:#22d3ee}
+        /* ── Professional navbar ── */
+        .gg-nav{background:linear-gradient(180deg,#0b1220 0%,#0a0f1c 100%);box-shadow:0 1px 0 rgba(255,255,255,.04),0 4px 18px -4px rgba(0,0,0,.6)}
+        .gg-brand-mark{background:linear-gradient(135deg,#22d3ee 0%,#3b82f6 60%,#8b5cf6 100%);box-shadow:0 0 0 1px rgba(34,211,238,.25),0 4px 14px -2px rgba(34,211,238,.35)}
+        .gg-tabs{background:rgba(15,23,42,.6);border:1px solid rgba(148,163,184,.08);border-radius:10px;padding:3px;backdrop-filter:blur(8px)}
+        .tab-btn{position:relative;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;font-size:13px;font-weight:600;color:#94a3b8;border-radius:7px;transition:color .15s,background .15s;cursor:pointer;border:none;background:transparent;white-space:nowrap}
+        .tab-btn:hover{color:#e2e8f0;background:rgba(148,163,184,.06)}
+        .tab-btn.active{color:#fff;background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(59,130,246,.18));box-shadow:inset 0 0 0 1px rgba(34,211,238,.35),0 1px 0 rgba(255,255,255,.04)}
+        .tab-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:2px;background:linear-gradient(90deg,transparent,#22d3ee,transparent);border-radius:2px}
+        .tab-btn .tab-ico{font-size:14px;line-height:1;filter:drop-shadow(0 0 4px rgba(34,211,238,.0));transition:filter .15s}
+        .tab-btn.active .tab-ico{filter:drop-shadow(0 0 6px rgba(34,211,238,.5))}
+        .nav-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(30,41,59,.5);border:1px solid rgba(148,163,184,.1);color:#cbd5e1;font-size:15px;transition:all .15s;cursor:pointer;text-decoration:none}
+        .nav-icon:hover{background:rgba(51,65,85,.7);color:#fff;border-color:rgba(148,163,184,.25);transform:translateY(-1px)}
+        .nav-icon.danger:hover{background:rgba(127,29,29,.5);border-color:rgba(239,68,68,.4);color:#fca5a5}
+        .nav-divider{width:1px;height:22px;background:rgba(148,163,184,.12)}
+        .ws-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;font-size:11px;font-weight:600;border-radius:999px;background:rgba(30,41,59,.6);border:1px solid rgba(148,163,184,.12);color:#cbd5e1}
+        .ws-pill .ws-dot{width:7px;height:7px;border-radius:999px;box-shadow:0 0 0 2px rgba(0,0,0,.3)}
+        .ws-pill .ws-dot.ok{background:#22c55e;animation:wsBreath 2s ease-in-out infinite}
+        .ws-pill .ws-dot.warn{background:#eab308}
+        .ws-pill .ws-dot.err{background:#ef4444}
+        @keyframes wsBreath{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.5)}50%{box-shadow:0 0 0 4px rgba(34,197,94,0)}}
+        .status-led{width:9px;height:9px;border-radius:999px;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.18),0 0 8px rgba(34,197,94,.6)}
+        .gg-version{font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748b;text-transform:uppercase;padding:2px 6px;border-radius:4px;background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.1)}
+
         .dir-entry{color:#4ade80} .dir-exit{color:#f97316} .dir-unknown{color:#6b7280}
     </style>
 </head>
@@ -66,26 +88,43 @@
 </div>
 
 <!-- ====== HEADER ====== -->
-<header class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-        <div id="status-dot" class="w-3 h-3 rounded-full bg-green-500"></div>
-        <h1 class="text-lg font-bold">🛡️ GateGuard</h1>
+<header class="gg-nav sticky top-0 z-30 px-5 h-14 flex items-center justify-between gap-4">
+    <!-- Brand -->
+    <div class="flex items-center gap-3 min-w-0">
+        <div class="gg-brand-mark w-9 h-9 rounded-xl flex items-center justify-center text-lg">🛡️</div>
+        <div class="leading-tight min-w-0">
+            <div class="flex items-center gap-2">
+                <h1 class="text-[15px] font-bold tracking-tight text-white">GateGuard</h1>
+                <span class="gg-version">v1.0</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[10px] text-gray-500">
+                <span id="status-dot" class="status-led"></span>
+                <span id="status-text">Sistem aktif</span>
+            </div>
+        </div>
     </div>
+
     <!-- Tabs -->
-    <div class="flex gap-1">
-        <button class="tab-btn active px-4 py-2 text-sm font-semibold" onclick="tabDegistir('canli')">📡 Canlı</button>
-        <button class="tab-btn px-4 py-2 text-sm font-semibold text-gray-500" onclick="tabDegistir('gecmis')">📋 Geçmiş</button>
-        <button class="tab-btn px-4 py-2 text-sm font-semibold text-gray-500" onclick="tabDegistir('galeri')">📸 Galeri</button>
-    </div>
+    <nav class="gg-tabs flex gap-0.5" aria-label="Ana menü">
+        <button class="tab-btn active" onclick="tabDegistir('ozet')"><span class="tab-ico">📊</span><span>Özet</span></button>
+        <button class="tab-btn" onclick="tabDegistir('canli')"><span class="tab-ico">📡</span><span>Canlı</span></button>
+        <button class="tab-btn" onclick="tabDegistir('gecmis')"><span class="tab-ico">📋</span><span>Geçmiş</span></button>
+        <button class="tab-btn" onclick="tabDegistir('galeri')"><span class="tab-ico">📸</span><span>Galeri</span></button>
+    </nav>
+
+    <!-- Actions -->
     <div class="flex items-center gap-2">
-        <a href="/camera-test" title="Kamera Testi" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">📹</a>
-        <a href="/alpr-test" title="ALPR Test" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🔬</a>
-        <div id="ws-badge" class="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">
-            <div id="ws-dot" class="w-2 h-2 rounded-full bg-yellow-500"></div>
+        <div id="ws-badge" class="ws-pill" title="WebSocket bağlantı durumu">
+            <span id="ws-dot" class="ws-dot warn"></span>
             <span id="ws-status">Bağlanıyor</span>
         </div>
-        <button onclick="senkronizeEt()" title="MDB Senkronize Et" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🔄</button>
-        <button onclick="kapatmaOnay()" title="Uygulamayı Kapat" class="text-xs bg-gray-800 hover:bg-red-900 px-3 py-1.5 rounded-lg border border-gray-700 hover:border-red-700 transition">⏻</button>
+        <div class="nav-divider"></div>
+        <a href="/camera-test" title="Kamera testi" class="nav-icon">📹</a>
+        <a href="/alpr-test" title="ALPR / plaka testi" class="nav-icon">🔬</a>
+        <a href="/night-watch" title="Gece izleme (Modül 2)" class="nav-icon">🌙</a>
+        <button onclick="senkronizeEt()" title="MDB senkronize et" class="nav-icon">🔄</button>
+        <div class="nav-divider"></div>
+        <button onclick="kapatmaOnay()" title="Uygulamayı kapat" class="nav-icon danger">⏻</button>
     </div>
 </header>
 
@@ -108,6 +147,220 @@
         <div class="w-12 h-12 border-4 border-red-500 border-t-transparent rounded-full mx-auto mb-4" style="animation: spin 0.8s linear infinite"></div>
         <p class="text-2xl font-bold text-red-400 mb-2">Uygulama Kapatılıyor</p>
         <p class="text-sm text-gray-500">Bu pencereyi kapatabilirsiniz.</p>
+    </div>
+</div>
+
+<!-- ====== TAB: ÖZET (default) ====== -->
+<div id="tab-ozet" class="h-[calc(100vh-48px)] overflow-y-auto bg-gray-950">
+    <div class="max-w-7xl mx-auto p-5 space-y-5">
+
+        <!-- ── Two big module cards ── -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            <!-- MODULE 1 -->
+            <div id="m1-card" class="bg-gradient-to-br from-gray-900 to-gray-900/40 border border-gray-800 rounded-2xl p-5 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl"></div>
+                <div class="flex items-start justify-between mb-3 relative">
+                    <div class="flex items-center gap-3">
+                        <div class="text-3xl">🚗</div>
+                        <div>
+                            <h2 class="font-bold text-base">Modül 1 — Kaçak Araç Tespiti</h2>
+                            <p class="text-xs text-gray-500">Plaka tanıma · Bariyer kamerası</p>
+                        </div>
+                    </div>
+                    <div id="m1-status" class="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">—</div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 mt-4">
+                    <div class="bg-gray-800/40 rounded-lg p-3 text-center">
+                        <div class="text-3xl font-black" id="m1-total">0</div>
+                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Bugün Toplam</div>
+                    </div>
+                    <div class="bg-green-950/40 border border-green-900/40 rounded-lg p-3 text-center">
+                        <div class="text-3xl font-black text-green-400" id="m1-auth">0</div>
+                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Yetkili</div>
+                    </div>
+                    <div class="bg-red-950/40 border border-red-900/40 rounded-lg p-3 text-center">
+                        <div class="text-3xl font-black text-red-400" id="m1-unauth">0</div>
+                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Kaçak</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <div class="bg-gray-800/40 rounded-lg p-2 text-center text-sm">
+                        <span class="dir-entry font-bold" id="m1-entries">0</span>
+                        <span class="text-[10px] text-gray-500 ml-1">Giriş</span>
+                    </div>
+                    <div class="bg-gray-800/40 rounded-lg p-2 text-center text-sm">
+                        <span class="dir-exit font-bold" id="m1-exits">0</span>
+                        <span class="text-[10px] text-gray-500 ml-1">Çıkış</span>
+                    </div>
+                </div>
+
+                <div id="m1-last" class="mt-3 text-xs text-gray-400 hidden">
+                    <span class="text-gray-500">Son geçiş:</span>
+                    <span class="font-mono font-bold" id="m1-last-plate">—</span>
+                    <span id="m1-last-time" class="text-gray-500">—</span>
+                </div>
+
+                <button onclick="tabDegistir('canli')" class="mt-4 w-full bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg transition flex items-center justify-center gap-2">
+                    📡 Canlı Geçişler →
+                </button>
+            </div>
+
+            <!-- MODULE 2 -->
+            <div id="m2-card" class="bg-gradient-to-br from-gray-900 to-gray-900/40 border border-gray-800 rounded-2xl p-5 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-3xl"></div>
+                <div class="flex items-start justify-between mb-3 relative">
+                    <div class="flex items-center gap-3">
+                        <div class="text-3xl">👤</div>
+                        <div>
+                            <h2 class="font-bold text-base">Modül 2 — Kaçak İnsan Tespiti</h2>
+                            <p class="text-xs text-gray-500">Yapay zeka · Çoklu kamera</p>
+                        </div>
+                    </div>
+                    <div id="m2-status" class="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">—</div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 mt-4">
+                    <div class="bg-gray-800/40 rounded-lg p-3 text-center">
+                        <div class="text-3xl font-black" id="m2-total">0</div>
+                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Bugün Olay</div>
+                    </div>
+                    <div class="bg-amber-950/40 border border-amber-900/40 rounded-lg p-3 text-center">
+                        <div class="text-3xl font-black text-amber-400" id="m2-unack">0</div>
+                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Bekleyen</div>
+                    </div>
+                    <div class="bg-cyan-950/40 border border-cyan-900/40 rounded-lg p-3 text-center">
+                        <div class="text-3xl font-black text-cyan-400" id="m2-cams">0</div>
+                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Kamera</div>
+                    </div>
+                </div>
+
+                <div class="mt-3 flex items-center gap-2 text-xs flex-wrap">
+                    <span id="m2-night" class="px-2 py-1 rounded bg-gray-800 border border-gray-700">—</span>
+                    <span id="m2-shadow" class="px-2 py-1 rounded bg-gray-800 border border-gray-700 hidden">SHADOW MOD</span>
+                    <span id="m2-window" class="text-gray-500 font-mono">—</span>
+                </div>
+
+                <!-- ── Alarm enable/disable toggle ── -->
+                <div id="m2-alarm-toggle-row" class="mt-4 p-3 rounded-xl border border-gray-800 bg-gray-800/30 flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold flex items-center gap-2">
+                            <span id="m2-alarm-icon">🔔</span>
+                            <span>Hırsızlık Alarmı</span>
+                        </div>
+                        <p id="m2-alarm-help" class="text-[11px] text-gray-500 mt-0.5">Tespit anında siren çalar. Olaylar her durumda kaydedilir.</p>
+                    </div>
+                    <label class="inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input id="m2-alarm-checkbox" type="checkbox" class="sr-only peer" onchange="alarmToggleSet(this.checked)">
+                        <div class="relative w-12 h-6 bg-gray-700 rounded-full peer-focus:outline-none peer-checked:bg-green-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-6"></div>
+                    </label>
+                </div>
+
+                <div id="m2-disabled" class="hidden mt-4 p-3 bg-gray-800/40 border border-gray-700 rounded-lg text-xs text-gray-400">
+                    Bu modül kapalı. Etkinleştirmek için <code class="text-cyan-400">.env</code>'de <code class="text-cyan-400">ENABLE_INTRUSION_MODULE=true</code> yapın.
+                </div>
+
+                <button onclick="window.location.href='/night-watch'" class="mt-4 w-full bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg transition flex items-center justify-center gap-2">
+                    🌙 Gece İzleme →
+                </button>
+            </div>
+        </div>
+
+        <!-- ── Charts row ── -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+            <!-- 7-day trend -->
+            <div class="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold">📈 Son 7 Gün Trendi</h3>
+                    <div class="flex gap-3 text-[10px] text-gray-500">
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-green-500 rounded-sm"></span> Yetkili</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-red-500 rounded-sm"></span> Kaçak</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-amber-500 rounded-sm"></span> İnsan Olayı</span>
+                    </div>
+                </div>
+                <canvas id="trend-canvas" width="600" height="200" class="w-full"></canvas>
+            </div>
+
+            <!-- Today's hourly distribution -->
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <h3 class="text-sm font-bold mb-3">🕐 Bugün Saat Saat</h3>
+                <canvas id="hourly-canvas" width="300" height="200" class="w-full"></canvas>
+                <div class="text-[10px] text-gray-500 mt-2 flex justify-between">
+                    <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Quick actions + system health ── -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+            <!-- Quick actions -->
+            <div class="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <h3 class="text-sm font-bold mb-3">⚡ Hızlı Eylemler</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button onclick="senkronizeEt()" class="bg-gray-800 hover:bg-cyan-900/40 hover:border-cyan-700 border border-gray-700 p-4 rounded-xl text-sm transition group">
+                        <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">🔄</div>
+                        <div class="font-semibold">MDB Sync</div>
+                        <div class="text-[10px] text-gray-500">Plaka güncelle</div>
+                    </button>
+                    <button onclick="tabDegistir('galeri')" class="bg-gray-800 hover:bg-red-900/40 hover:border-red-700 border border-gray-700 p-4 rounded-xl text-sm transition group">
+                        <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">📸</div>
+                        <div class="font-semibold">Kaçak Galerisi</div>
+                        <div class="text-[10px] text-gray-500">Foto kanıtlar</div>
+                    </button>
+                    <button onclick="tabDegistir('gecmis')" class="bg-gray-800 hover:bg-blue-900/40 hover:border-blue-700 border border-gray-700 p-4 rounded-xl text-sm transition group">
+                        <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">📋</div>
+                        <div class="font-semibold">Geçmiş</div>
+                        <div class="text-[10px] text-gray-500">Tüm geçişler</div>
+                    </button>
+                    <button onclick="window.location.href='/night-watch'" class="bg-gray-800 hover:bg-purple-900/40 hover:border-purple-700 border border-gray-700 p-4 rounded-xl text-sm transition group">
+                        <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">🌙</div>
+                        <div class="font-semibold">Gece İzleme</div>
+                        <div class="text-[10px] text-gray-500">Multi-kamera</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- System health -->
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <h3 class="text-sm font-bold mb-3">⚙️ Sistem Durumu</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">Kamera:</span>
+                        <span id="sys-cam" class="text-gray-300">—</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">MDB Sync:</span>
+                        <span id="sys-sync" class="text-gray-300 text-xs">—</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">Plaka Sayısı:</span>
+                        <span id="sys-vehicle" class="text-gray-300 font-mono">—</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">Çalışma Modu:</span>
+                        <span id="sys-mode" class="text-yellow-400 font-mono text-xs">—</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">WebSocket:</span>
+                        <span id="sys-ws" class="text-gray-300 text-xs">—</span>
+                    </div>
+                </div>
+                <div class="border-t border-gray-800 mt-3 pt-3">
+                    <div class="text-[10px] text-gray-500 uppercase tracking-wide mb-2">Test Araçları</div>
+                    <div class="grid grid-cols-2 gap-1 text-xs">
+                        <a href="/camera-test" class="bg-gray-800 hover:bg-gray-700 px-2 py-1.5 rounded text-center">📹 Kamera</a>
+                        <a href="/alpr-test" class="bg-gray-800 hover:bg-gray-700 px-2 py-1.5 rounded text-center">🔬 Plaka</a>
+                        <a href="/intrusion-test" class="bg-gray-800 hover:bg-gray-700 px-2 py-1.5 rounded text-center">🧪 İnsan</a>
+                        <a href="/admin" class="bg-gray-800 hover:bg-gray-700 px-2 py-1.5 rounded text-center">⚙️ Kameralar</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -276,14 +529,15 @@ const ALARM_AUTO_SILENCE_MS = 7000; // 7 seconds
 //  TABS
 // ============================================================
 function tabDegistir(tab) {
-    ['canli','gecmis','galeri'].forEach(t => {
-        document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
+    const tabs = ['ozet','canli','gecmis','galeri'];
+    tabs.forEach(t => {
+        const el = document.getElementById('tab-' + t);
+        if (el) el.classList.toggle('hidden', t !== tab);
     });
     document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-        const tabs = ['canli','gecmis','galeri'];
         btn.classList.toggle('active', tabs[i] === tab);
-        btn.classList.toggle('text-gray-500', tabs[i] !== tab);
     });
+    if (tab === 'ozet' && typeof ozetYukle === 'function') ozetYukle();
     if (tab === 'gecmis' && !document.getElementById('f-start').value) {
         document.getElementById('f-start').value = new Date().toISOString().slice(0,10);
         document.getElementById('f-end').value = new Date().toISOString().slice(0,10);
@@ -303,22 +557,82 @@ let reconn = 0;
 function baglan() {
     const p = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${p}//${location.host}/ws`);
-    ws.onopen = () => { reconn = 0; wsDurum('bagli'); durumAl(); istatistikAl(); };
+    ws.onopen = () => { reconn = 0; wsDurum('bagli'); durumAl(); istatistikAl(); alarmToggleLoad(); };
     ws.onmessage = e => { try { mesajIsle(JSON.parse(e.data)); } catch(err) {} };
     ws.onclose = () => { wsDurum('kopuk'); reconn++; setTimeout(baglan, Math.min(3000*reconn, 30000)); };
     ws.onerror = () => ws.close();
 }
 function wsDurum(d) {
     const dot = document.getElementById('ws-dot'), txt = document.getElementById('ws-status');
-    if (d === 'bagli') { dot.className = 'w-2 h-2 rounded-full bg-green-500'; txt.textContent = 'Bağlı'; }
-    else { dot.className = 'w-2 h-2 rounded-full bg-red-500'; txt.textContent = 'Kopuk'; }
+    if (d === 'bagli') { dot.className = 'ws-dot ok'; txt.textContent = 'Bağlı'; }
+    else { dot.className = 'ws-dot err'; txt.textContent = 'Kopuk'; }
 }
 
 function mesajIsle(m) {
     if (m.type === 'passage') { gecisEkle(m.data); istatistikAl(); }
     else if (m.type === 'alarm_on') { gecisEkle(m.data); alarmGoster(m.data); istatistikAl(); }
     else if (m.type === 'alarm_off') { alarmKapat(); }
+    else if (m.type === 'intrusion_on') {
+        // Module 2: show a compact banner on the main dashboard too
+        const d = m.data || {};
+        const sourceTag = d.source === 'motion' ? ' [HAREKET]' : '';
+        const muteTag = d.alarm_muted ? ' (alarm susturulmuş)' : (d.shadow_mode ? ' (shadow)' : '');
+        const label = `🚨 İZİNSİZ GİRİŞ${sourceTag} — ${d.camera_name || ('Kamera ' + d.camera_id)} · ${d.duration_sec}sn${muteTag}`;
+        bildirim(label, d.alarm_muted || d.shadow_mode ? 'bilgi' : 'hata');
+    }
+    else if (m.type === 'intrusion_alarm_toggle') {
+        // Sync the UI toggle when changed from another tab
+        alarmToggleApplyUI(m.data?.enabled);
+    }
     else if (m.type === 'sync_complete') { bildirim(`Sync: ${m.data.total} plaka`, 'basari'); durumAl(); }
+}
+
+// ============================================================
+//  ALARM ENABLE/DISABLE TOGGLE
+// ============================================================
+async function alarmToggleSet(enabled) {
+    try {
+        const r = await fetch('/api/intrusion/alarm-toggle', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({enabled}),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        alarmToggleApplyUI(data.enabled);
+        bildirim(enabled ? '🔔 Alarm açıldı' : '🔇 Alarm susturuldu', enabled ? 'basari' : 'bilgi');
+    } catch (e) {
+        bildirim('Toggle hatası: ' + e.message, 'hata');
+        // Revert checkbox state
+        await alarmToggleLoad();
+    }
+}
+
+async function alarmToggleLoad() {
+    try {
+        const r = await fetch('/api/intrusion/alarm-toggle');
+        const data = await r.json();
+        alarmToggleApplyUI(data.enabled);
+    } catch {}
+}
+
+function alarmToggleApplyUI(enabled) {
+    const cb = document.getElementById('m2-alarm-checkbox');
+    const icon = document.getElementById('m2-alarm-icon');
+    const help = document.getElementById('m2-alarm-help');
+    const row = document.getElementById('m2-alarm-toggle-row');
+    if (!cb) return;
+    cb.checked = !!enabled;
+    if (enabled) {
+        icon.textContent = '🔔';
+        help.textContent = 'Tespit anında siren çalar. Olaylar her durumda kaydedilir.';
+        row.classList.remove('border-amber-700/60','bg-amber-950/20');
+        row.classList.add('border-gray-800','bg-gray-800/30');
+    } else {
+        icon.textContent = '🔇';
+        help.innerHTML = '<b class="text-amber-400">SUSTURULDU</b> — olaylar kaydediliyor ama siren çalmayacak.';
+        row.classList.remove('border-gray-800','bg-gray-800/30');
+        row.classList.add('border-amber-700/60','bg-amber-950/20');
+    }
 }
 
 // ============================================================

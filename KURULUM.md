@@ -440,4 +440,137 @@ Sahada sorun çıkarsa:
 
 ---
 
+# Modül 2 — Hırsızlık / Kaçak İnsan Tespiti (Opsiyonel)
+
+Modül 2, sitenin arka ve yan cephelerinde yer alan IP kameraları **gece saatlerinde**
+canlı izleyip **yasak bölgelere** giren yetkisiz kişileri tespit eder. Aynı siren ile
+uyarır, video klip + fotoğraflar kanıt olarak saklanır.
+
+## 1. Aktifleştirme
+
+`.env` dosyasında:
+
+```ini
+ENABLE_INTRUSION_MODULE=true
+INTRUSION_SHADOW_MODE=true          # İLK HAFTA: true (alarm tetiklemez, sadece log)
+NIGHT_MODE_START=22:00
+NIGHT_MODE_END=07:00
+```
+
+İlk çalıştırmada ek kütüphaneler otomatik indirilir (`ultralytics`, `lap`).
+Build edilmiş exe'de de otomatik dahil olur.
+
+> **Shadow Mode Nedir?** İlk hafta alarm sireni çalmadan sadece olayları kaydeder.
+> Yanlış alarm olup olmadığını görüp bölgeleri/parametreleri ayarlarsınız. Sonra
+> `INTRUSION_SHADOW_MODE=false` ile canlıya geçersiniz.
+
+## 2. Kamera Ekleme
+
+Ana panelden veya doğrudan **http://localhost:8000/admin** adresine gidin:
+
+1. "Yeni Kamera Ekle" bölümünü doldurun:
+   - **İsim**: "Bahçe Arka", "D Blok Yangın Merdiveni" gibi tanımlayıcı
+   - **Konum**: "D Blok arka bahçe" (opsiyonel)
+   - **RTSP URL**: `rtsp://admin:SIFRE@192.168.1.x:554/cam/realmonitor?channel=1&subtype=0`
+     (aynı kameranın farklı kanalları için `channel=2`, `channel=3` şeklinde ayrı URL'ler)
+   - **Rol**: "Hırsızlık Tespiti" seçin
+   - **Etkin** kutusunu işaretleyin
+2. "Kamera Ekle" tuşuna basın.
+3. Listelenen kameranın satırındaki **📡 Test** butonu ile bağlantıyı doğrulayın.
+
+Aynı fiziksel kamerayı hem Modül 1 (plaka) hem Modül 2 (hırsızlık) için kullanacaksanız
+rolü **"Her İkisi"** seçin.
+
+## 3. Yasak Bölge Çizme
+
+http://localhost:8000/zone-editor
+
+1. Kamera dropdown'undan bir kamera seçin — canlı görüntü gelir.
+2. Canvas üzerinde **tıklayarak** poligonun köşelerini koyun (örneğin
+   duvar dibi, yangın merdiveni, servis girişi).
+3. En az **3 köşe** çizdikten sonra sağ taraftaki formu doldurun:
+   - **İsim**: "Duvar Dibi"
+   - **Sadece gece aktif**: site içinde sakinlerin gündüz geçtiği alanlar için ✓
+   - **Loitering (sn)**: kaç saniye içinde kaçak sayılacak (varsayılan 5)
+4. **Bölgeyi Kaydet** tuşuna basın.
+
+> **İpucu**: Her kamera için birden fazla bölge çizebilirsiniz. Önemli olan
+> **gündüz sakinlerin yürüdüğü alanları KAPSAMAYAN** poligonlar çizmektir.
+> Sadece "normal sakin geçişi olmayan" yerler (duvar dibi, kapı arkası,
+> çalılık vs.) yasak bölge olmalı.
+
+## 4. Gece İzleme Paneli
+
+http://localhost:8000/night-watch
+
+- Tüm aktif kameraları **grid görünümünde** canlı izler (1 FPS yenileme)
+- Üstte **gece modu** durumu ve aktif kamera sayısı
+- Olay olunca kamera çerçevesi kırmızı titrer, sağ alt köşede bildirim çıkar
+- **Son Olaylar** listesi — her kartla tıklanıp detay modalı açılır
+  - Ekran görüntüsü, video klip (10sn öncesi + 5sn sonrası), süre, güven oranı
+  - "İşaretle" tuşu ile olay onaylanır (incelendi)
+
+## 5. Hırsızlık Testi
+
+http://localhost:8000/intrusion-test
+
+Foto yükle → YOLO insan tespit modelini çalıştır → tespit edilen kişileri gör.
+Modelin doğru çalışıp çalışmadığını test etmek için kullanın.
+(Bu sayfa bölge/gece/loitering kurallarını UYGULAMAZ, ham tespit sonucu gösterir.)
+
+## 6. Parametre Ayarı (Shadow Mode Sonrası)
+
+İlk 1 hafta shadow mode log analizinden sonra `.env` ayarları:
+
+| Sorun | Çözüm |
+|---|---|
+| Çok fazla yanlış alarm | `INTRUSION_CONFIDENCE=0.6` (0.5'ten çıkar) |
+| Gezgin kişi alarm üretiyor | `INTRUSION_MIN_LOITER_SEC=10` (5'ten çıkar) |
+| Gerçek tespit kaçırılıyor | `INTRUSION_CONFIDENCE=0.4` (düşür) |
+| Aynı kişi tekrar tekrar tetikliyor | `INTRUSION_COOLDOWN_SEC=60` (30'dan çıkar) |
+| Site sakini gece geziyor | Gece modu saatini daralt: `NIGHT_MODE_START=23:30` |
+
+Ayarları değiştirdikten sonra uygulamayı yeniden başlatın.
+
+## 7. Canlı Moda Geçiş
+
+Shadow mode'da 1 hafta gözlem + parametre ayarı yaptıktan sonra:
+
+```ini
+INTRUSION_SHADOW_MODE=false
+```
+
+Artık olay olduğunda fiziksel siren tetiklenir.
+
+## 8. Saha Kontrol Listesi (Modül 2)
+
+- [ ] `ENABLE_INTRUSION_MODULE=true` ayarlı
+- [ ] Microsoft Access Database Engine kurulu (Modül 1 için zaten gerekli)
+- [ ] Kameraların RTSP URL'leri doğru, admin sayfasından **Test** butonu yeşil
+- [ ] Her kamera için en az 1 yasak bölge çizilmiş
+- [ ] Gece modu saat aralığı sitenin rutinine uygun
+- [ ] `INTRUSION_SHADOW_MODE=true` ile 1 hafta gözlem tamamlandı
+- [ ] Shadow log'dan confusion matrix çıkarıldı (TP/FP sayıları)
+- [ ] Parametreler ayarlandı, `INTRUSION_SHADOW_MODE=false` yapıldı
+- [ ] İlk 24 saat canlı izleme, güvenlik görevlisiyle geri bildirim alındı
+
+## 9. Sorun Giderme (Modül 2)
+
+**"Ultralytics not installed" hatası:** `uv sync --extra intrusion` çalıştırın.
+
+**Kamera grid'de "yok" görünüyor:** Admin sayfasında kameranın Test'i yeşil mi?
+RTSP URL ve şifre doğru mu? Aynı ağda mı?
+
+**Hiç olay üretilmiyor:** `logs/app.log` dosyasını kontrol edin — "Track dropped: 0 valid
+readings" satırları varsa person detection çalışıyor ama loitering eşiği ya da bölge
+eşleşmesi tutmuyor demektir.
+
+**Çok fazla yanlış alarm:** Büyük ihtimalle bölgeniz site sakinlerinin gezdiği alanları
+kapsıyor. Zone editor'dan poligonu daraltın. Alternatif: loitering süresini artırın.
+
+**Video klip oluşmuyor:** `INTRUSION_CLIP_ENABLED=true` olmalı. Disk alanı kontrolü
+yapın (`static/intrusion_clips/` klasörü).
+
+---
+
 **İyi kurulumlar! 🚀**

@@ -58,6 +58,12 @@ alarm: AlarmManager | None = None
 engine: DetectionEngine | None = None
 ws_manager = ConnectionManager()
 
+# Module 2 (Intrusion) — populated only when ENABLE_INTRUSION_MODULE=true
+intrusion_orchestrator = None  # type: ignore[assignment]
+zone_manager = None            # type: ignore[assignment]
+person_detector = None         # type: ignore[assignment]
+intrusion_classifier = None    # type: ignore[assignment]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -139,8 +145,11 @@ async def lifespan(app: FastAPI):
         mock_mode=settings.MOCK_MODE,
     )
 
-    # Initialize routes with shared instances
+    # Initialize routes with shared instances (Module 2 globals wired later)
     init_routes(db, alarm, ws_manager, settings.MDB_PATH, camera, detector)
+
+    # Route singletons for Module 2 are patched in after the orchestrator starts
+    # (see below, after intrusion module bootstrap).
 
     # Start detection engine
     engine = DetectionEngine(
@@ -152,7 +161,15 @@ async def lifespan(app: FastAPI):
         process_fps=settings.PROCESS_FPS,
         fuzzy_tolerance=settings.FUZZY_TOLERANCE,
         screenshot_dir=settings.SCREENSHOT_DIR,
-        entry_direction=settings.CAMERA_ENTRY_DIRECTION,
+        # Tracker config
+        min_frames_for_commit=settings.MIN_FRAMES_FOR_COMMIT,
+        track_idle_frames=settings.TRACK_IDLE_FRAMES,
+        track_max_duration_sec=settings.TRACK_MAX_DURATION_SEC,
+        track_iou_threshold=settings.TRACK_IOU_THRESHOLD,
+        track_fuzzy_tolerance=settings.TRACK_FUZZY_TOLERANCE,
+        direction_area_ratio=settings.DIRECTION_AREA_RATIO,
+        entry_size_change=settings.CAMERA_ENTRY_SIZE_CHANGE,
+        entry_y_direction=settings.CAMERA_ENTRY_Y_DIRECTION,
     )
     await engine.start()
 
@@ -162,6 +179,78 @@ async def lifespan(app: FastAPI):
         cleanup_old_screenshots(settings.SCREENSHOT_DIR, retention_days=90)
     except Exception:
         logger.exception("Screenshot cleanup failed")
+
+    # ── Module 2: Intrusion Detection (optional) ──────────────────
+    global intrusion_orchestrator, zone_manager, person_detector, intrusion_classifier
+    if settings.ENABLE_INTRUSION_MODULE:
+        try:
+            from app.intrusion.multi_camera import MultiCameraOrchestrator
+            from app.intrusion.zone_manager import ZoneManager
+            from app.intrusion.person_detector import PersonDetector
+            from app.intrusion.classifier import IntrusionClassifier
+            from app.intrusion.video_recorder import cleanup_old_clips
+
+            Path(settings.INTRUSION_CLIP_DIR).mkdir(parents=True, exist_ok=True)
+
+            zone_manager = ZoneManager(
+                db,
+                night_start=settings.NIGHT_MODE_START,
+                night_end=settings.NIGHT_MODE_END,
+            )
+            person_detector = PersonDetector(
+                model_path=settings.YOLO_PERSON_MODEL,
+                tracker_config=settings.YOLO_PERSON_TRACKER,
+                use_gpu=settings.USE_GPU_FOR_PERSON,
+                confidence=settings.INTRUSION_CONFIDENCE,
+            )
+            intrusion_classifier = IntrusionClassifier(
+                zone_manager=zone_manager,
+                min_confidence=settings.INTRUSION_CONFIDENCE,
+                cooldown_sec=settings.INTRUSION_COOLDOWN_SEC,
+                warmup_sec=settings.INTRUSION_WARMUP_SEC,
+                min_consecutive_frames=settings.INTRUSION_MIN_CONSECUTIVE_FRAMES,
+                frame_gap_reset_sec=settings.INTRUSION_FRAME_GAP_RESET_SEC,
+            )
+            intrusion_orchestrator = MultiCameraOrchestrator(
+                db=db,
+                alarm=alarm,
+                ws_manager=ws_manager,
+                detector=person_detector,
+                classifier=intrusion_classifier,
+                zone_manager=zone_manager,
+                process_fps=settings.INTRUSION_PROCESS_FPS,
+                shadow_mode=settings.INTRUSION_SHADOW_MODE,
+                screenshot_dir=settings.SCREENSHOT_DIR,
+                clip_enabled=settings.INTRUSION_CLIP_ENABLED,
+                clip_pre_sec=settings.INTRUSION_CLIP_PRE_SEC,
+                clip_post_sec=settings.INTRUSION_CLIP_POST_SEC,
+                clip_dir=settings.INTRUSION_CLIP_DIR,
+                burst_screenshots=settings.INTRUSION_BURST_SCREENSHOTS,
+            )
+            await intrusion_orchestrator.start()
+
+            # Patch route globals with Module 2 singletons
+            init_routes(
+                db, alarm, ws_manager, settings.MDB_PATH, camera, detector,
+                intrusion_orchestrator=intrusion_orchestrator,
+                zone_manager=zone_manager,
+                person_detector=person_detector,
+            )
+
+            cleanup_old_clips(settings.INTRUSION_CLIP_DIR,
+                              retention_days=settings.INTRUSION_RETENTION_DAYS)
+
+            logger.info(
+                "Module 2 ready: intrusion module enabled "
+                "(shadow=%s, cameras=%d)",
+                settings.INTRUSION_SHADOW_MODE,
+                len(intrusion_orchestrator.active_camera_ids()),
+            )
+        except Exception:
+            logger.exception("Module 2 (intrusion) failed to start")
+            intrusion_orchestrator = None
+    else:
+        logger.info("Module 2 (intrusion) disabled via ENABLE_INTRUSION_MODULE")
 
     logger.info("All systems online. Detection active.")
 
@@ -178,6 +267,11 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("GateGuard shutting down...")
+    if intrusion_orchestrator:
+        try:
+            await intrusion_orchestrator.stop_all()
+        except Exception:
+            logger.exception("Error stopping intrusion orchestrator")
     if engine:
         await engine.stop()
     if camera:
@@ -224,6 +318,27 @@ async def alpr_test():
 @app.get("/camera-test")
 async def camera_test_page():
     return FileResponse(str(BASE_DIR / "static" / "camera-test.html"))
+
+
+# ── Module 2 UI pages ──
+@app.get("/night-watch")
+async def night_watch_page():
+    return FileResponse(str(BASE_DIR / "static" / "night-watch.html"))
+
+
+@app.get("/zone-editor")
+async def zone_editor_page():
+    return FileResponse(str(BASE_DIR / "static" / "zone-editor.html"))
+
+
+@app.get("/admin")
+async def admin_page():
+    return FileResponse(str(BASE_DIR / "static" / "admin.html"))
+
+
+@app.get("/intrusion-test")
+async def intrusion_test_page():
+    return FileResponse(str(BASE_DIR / "static" / "intrusion-test.html"))
 
 
 if __name__ == "__main__":

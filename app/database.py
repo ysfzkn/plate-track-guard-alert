@@ -102,6 +102,56 @@ class Database:
                 status TEXT DEFAULT 'success',
                 error_message TEXT DEFAULT ''
             );
+
+            -- ── Module 2: Intrusion Detection ─────────────────
+            CREATE TABLE IF NOT EXISTS cameras (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                rtsp_url TEXT NOT NULL,
+                location TEXT DEFAULT '',
+                enabled INTEGER DEFAULT 1,
+                role TEXT DEFAULT 'intrusion',
+                resolution_w INTEGER DEFAULT 0,
+                resolution_h INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS zones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                camera_id INTEGER NOT NULL REFERENCES cameras(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                polygon_points TEXT NOT NULL,
+                is_night_only INTEGER DEFAULT 1,
+                min_loiter_sec INTEGER DEFAULT 5,
+                enabled INTEGER DEFAULT 1,
+                enable_motion_fallback INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_zones_camera ON zones(camera_id);
+
+            CREATE TABLE IF NOT EXISTS intrusion_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                camera_id INTEGER NOT NULL,
+                zone_id INTEGER NOT NULL,
+                track_id INTEGER NOT NULL,
+                detected_at TIMESTAMP NOT NULL,
+                duration_sec REAL NOT NULL,
+                person_count INTEGER DEFAULT 1,
+                confidence REAL,
+                screenshot_path TEXT DEFAULT '',
+                video_clip_path TEXT DEFAULT '',
+                acknowledged INTEGER DEFAULT 0,
+                shadow_mode INTEGER DEFAULT 0,
+                notes TEXT DEFAULT ''
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_intrusion_date
+                ON intrusion_events(detected_at);
+            CREATE INDEX IF NOT EXISTS idx_intrusion_camera
+                ON intrusion_events(camera_id, detected_at);
+            CREATE INDEX IF NOT EXISTS idx_intrusion_ack
+                ON intrusion_events(acknowledged, detected_at);
         """)
         self.conn.commit()
         self._migrate()
@@ -112,6 +162,13 @@ class Database:
             self.conn.execute("SELECT direction FROM passages LIMIT 1")
         except sqlite3.OperationalError:
             self.conn.execute("ALTER TABLE passages ADD COLUMN direction TEXT DEFAULT 'unknown'")
+            self.conn.commit()
+        try:
+            self.conn.execute("SELECT enable_motion_fallback FROM zones LIMIT 1")
+        except sqlite3.OperationalError:
+            self.conn.execute(
+                "ALTER TABLE zones ADD COLUMN enable_motion_fallback INTEGER DEFAULT 0"
+            )
             self.conn.commit()
 
     # --- Vehicle operations ---
@@ -332,6 +389,320 @@ class Database:
             user_type=row["user_type"],
             kart_id=row["kart_id"],
         )
+
+    # ══════════════════════════════════════════════════════════════
+    #  Module 2 — Intrusion detection tables (cameras, zones, events)
+    # ══════════════════════════════════════════════════════════════
+
+    # --- Camera CRUD ---
+
+    def add_camera(self, name: str, rtsp_url: str, location: str = "",
+                   role: str = "intrusion", enabled: bool = True) -> int:
+        with self._lock:
+            cur = self.conn.execute(
+                """INSERT INTO cameras (name, rtsp_url, location, role, enabled)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (name, rtsp_url, location, role, int(enabled)),
+            )
+            self.conn.commit()
+            return cur.lastrowid
+
+    def update_camera(self, camera_id: int, **fields) -> bool:
+        """Update camera fields (name, rtsp_url, location, enabled, role, resolution_*)."""
+        allowed = {"name", "rtsp_url", "location", "enabled", "role",
+                   "resolution_w", "resolution_h"}
+        filtered = {k: v for k, v in fields.items() if k in allowed}
+        if not filtered:
+            return False
+        cols = ", ".join(f"{k}=?" for k in filtered)
+        vals = list(filtered.values()) + [camera_id]
+        with self._lock:
+            cur = self.conn.execute(f"UPDATE cameras SET {cols} WHERE id=?", vals)
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def delete_camera(self, camera_id: int) -> bool:
+        with self._lock:
+            cur = self.conn.execute("DELETE FROM cameras WHERE id=?", (camera_id,))
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def list_cameras(self, enabled_only: bool = False) -> list[dict]:
+        sql = "SELECT * FROM cameras"
+        if enabled_only:
+            sql += " WHERE enabled=1"
+        sql += " ORDER BY id"
+        rows = self.conn.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_camera(self, camera_id: int) -> Optional[dict]:
+        row = self.conn.execute(
+            "SELECT * FROM cameras WHERE id=?", (camera_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    # --- Zone CRUD ---
+
+    def add_zone(self, camera_id: int, name: str, polygon_points: str,
+                 is_night_only: bool = True, min_loiter_sec: int = 5,
+                 enable_motion_fallback: bool = False) -> int:
+        """polygon_points: JSON string of normalized [[x,y],...] coordinates."""
+        with self._lock:
+            cur = self.conn.execute(
+                """INSERT INTO zones (camera_id, name, polygon_points,
+                                      is_night_only, min_loiter_sec,
+                                      enable_motion_fallback)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (camera_id, name, polygon_points,
+                 int(is_night_only), min_loiter_sec,
+                 int(enable_motion_fallback)),
+            )
+            self.conn.commit()
+            return cur.lastrowid
+
+    def update_zone(self, zone_id: int, **fields) -> bool:
+        allowed = {"name", "polygon_points", "is_night_only",
+                   "min_loiter_sec", "enabled", "enable_motion_fallback"}
+        filtered = {k: v for k, v in fields.items() if k in allowed}
+        if not filtered:
+            return False
+        cols = ", ".join(f"{k}=?" for k in filtered)
+        vals = list(filtered.values()) + [zone_id]
+        with self._lock:
+            cur = self.conn.execute(f"UPDATE zones SET {cols} WHERE id=?", vals)
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def delete_zone(self, zone_id: int) -> bool:
+        with self._lock:
+            cur = self.conn.execute("DELETE FROM zones WHERE id=?", (zone_id,))
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def list_zones_for_camera(self, camera_id: int,
+                              enabled_only: bool = False) -> list[dict]:
+        sql = "SELECT * FROM zones WHERE camera_id=?"
+        if enabled_only:
+            sql += " AND enabled=1"
+        sql += " ORDER BY id"
+        rows = self.conn.execute(sql, (camera_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_all_zones(self, enabled_only: bool = True) -> list[dict]:
+        sql = "SELECT * FROM zones"
+        if enabled_only:
+            sql += " WHERE enabled=1"
+        rows = self.conn.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Intrusion event CRUD ---
+
+    def add_intrusion_event(self, camera_id: int, zone_id: int, track_id: int,
+                            detected_at, duration_sec: float, confidence: float,
+                            person_count: int = 1, screenshot_path: str = "",
+                            video_clip_path: str = "", shadow_mode: bool = False,
+                            notes: str = "") -> int:
+        from datetime import datetime as _dt
+        ts = detected_at.isoformat() if isinstance(detected_at, _dt) else str(detected_at)
+        with self._lock:
+            cur = self.conn.execute(
+                """INSERT INTO intrusion_events
+                   (camera_id, zone_id, track_id, detected_at, duration_sec,
+                    person_count, confidence, screenshot_path, video_clip_path,
+                    shadow_mode, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (camera_id, zone_id, track_id, ts, duration_sec,
+                 person_count, confidence, screenshot_path, video_clip_path,
+                 int(shadow_mode), notes),
+            )
+            self.conn.commit()
+            return cur.lastrowid
+
+    def update_intrusion_event(self, event_id: int, **fields) -> bool:
+        """Used primarily to attach video_clip_path async after commit."""
+        allowed = {"screenshot_path", "video_clip_path", "acknowledged", "notes"}
+        filtered = {k: v for k, v in fields.items() if k in allowed}
+        if not filtered:
+            return False
+        cols = ", ".join(f"{k}=?" for k in filtered)
+        vals = list(filtered.values()) + [event_id]
+        with self._lock:
+            cur = self.conn.execute(
+                f"UPDATE intrusion_events SET {cols} WHERE id=?", vals,
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def get_intrusion_event(self, event_id: int) -> Optional[dict]:
+        row = self.conn.execute(
+            "SELECT * FROM intrusion_events WHERE id=?", (event_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_intrusion_events(
+        self,
+        camera_id: int | None = None,
+        zone_id: int | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        acknowledged: bool | None = None,
+        shadow_mode: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict], int]:
+        """Filtered event list with pagination. Returns (rows, total_count)."""
+        where, params = [], []
+        if camera_id is not None:
+            where.append("camera_id=?")
+            params.append(camera_id)
+        if zone_id is not None:
+            where.append("zone_id=?")
+            params.append(zone_id)
+        if start_date:
+            where.append("detected_at >= ?")
+            params.append(start_date)
+        if end_date:
+            where.append("detected_at < date(?, '+1 day')")
+            params.append(end_date)
+        if acknowledged is not None:
+            where.append("acknowledged=?")
+            params.append(int(acknowledged))
+        if shadow_mode is not None:
+            where.append("shadow_mode=?")
+            params.append(int(shadow_mode))
+
+        where_sql = " WHERE " + " AND ".join(where) if where else ""
+
+        count_row = self.conn.execute(
+            f"SELECT COUNT(*) as cnt FROM intrusion_events{where_sql}", params,
+        ).fetchone()
+        total = count_row["cnt"] if count_row else 0
+
+        rows = self.conn.execute(
+            f"""SELECT * FROM intrusion_events{where_sql}
+                ORDER BY detected_at DESC LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        ).fetchall()
+        return [dict(r) for r in rows], total
+
+    def acknowledge_intrusion_event(self, event_id: int) -> bool:
+        return self.update_intrusion_event(event_id, acknowledged=1)
+
+    def get_passages_by_day(self, days: int = 7) -> list[dict]:
+        """Daily aggregate of passages for the last N days (oldest first).
+        Returns: [{day:'YYYY-MM-DD', total, authorized, unauthorized, entries, exits}]"""
+        rows = self.conn.execute(
+            """SELECT
+                 DATE(detected_at) AS day,
+                 COUNT(*) AS total,
+                 SUM(CASE WHEN is_authorized=1 THEN 1 ELSE 0 END) AS authorized,
+                 SUM(CASE WHEN is_authorized=0 THEN 1 ELSE 0 END) AS unauthorized,
+                 SUM(CASE WHEN direction='entry' THEN 1 ELSE 0 END) AS entries,
+                 SUM(CASE WHEN direction='exit' THEN 1 ELSE 0 END) AS exits
+               FROM passages
+               WHERE detected_at >= date('now', ?)
+               GROUP BY DATE(detected_at)
+               ORDER BY day ASC""",
+            (f"-{days - 1} days",),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_passages_by_hour(self, date_iso: str | None = None) -> list[dict]:
+        """Hourly aggregate of passages for a single day.
+        Returns 24 entries (hour=0..23, may be 0 for hours with no activity)."""
+        from datetime import date as _date
+        if not date_iso:
+            date_iso = _date.today().isoformat()
+        rows = self.conn.execute(
+            """SELECT
+                 CAST(strftime('%H', detected_at) AS INTEGER) AS hour,
+                 COUNT(*) AS total,
+                 SUM(CASE WHEN is_authorized=1 THEN 1 ELSE 0 END) AS authorized,
+                 SUM(CASE WHEN is_authorized=0 THEN 1 ELSE 0 END) AS unauthorized
+               FROM passages
+               WHERE DATE(detected_at) = ?
+               GROUP BY hour
+               ORDER BY hour ASC""",
+            (date_iso,),
+        ).fetchall()
+        # Ensure all 24 hours present
+        by_hour = {int(r["hour"]): dict(r) for r in rows}
+        result = []
+        for h in range(24):
+            r = by_hour.get(h, {"hour": h, "total": 0, "authorized": 0, "unauthorized": 0})
+            result.append(r)
+        return result
+
+    def get_intrusions_by_day(self, days: int = 7) -> list[dict]:
+        """Daily intrusion event counts for the last N days."""
+        rows = self.conn.execute(
+            """SELECT
+                 DATE(detected_at) AS day,
+                 COUNT(*) AS total,
+                 SUM(CASE WHEN shadow_mode=1 THEN 1 ELSE 0 END) AS shadow,
+                 SUM(CASE WHEN acknowledged=0 THEN 1 ELSE 0 END) AS unacknowledged
+               FROM intrusion_events
+               WHERE detected_at >= date('now', ?)
+               GROUP BY DATE(detected_at)
+               ORDER BY day ASC""",
+            (f"-{days - 1} days",),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_intrusions_by_hour(self, date_iso: str | None = None) -> list[dict]:
+        from datetime import date as _date
+        if not date_iso:
+            date_iso = _date.today().isoformat()
+        rows = self.conn.execute(
+            """SELECT
+                 CAST(strftime('%H', detected_at) AS INTEGER) AS hour,
+                 COUNT(*) AS total
+               FROM intrusion_events
+               WHERE DATE(detected_at) = ?
+               GROUP BY hour
+               ORDER BY hour ASC""",
+            (date_iso,),
+        ).fetchall()
+        by_hour = {int(r["hour"]): dict(r) for r in rows}
+        return [by_hour.get(h, {"hour": h, "total": 0}) for h in range(24)]
+
+    def get_last_passage(self) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM passages ORDER BY detected_at DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_last_intrusion(self) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM intrusion_events ORDER BY detected_at DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_intrusion_stats(
+        self, start_date: str | None = None, end_date: str | None = None,
+    ) -> dict:
+        """Summary: total, per-camera count, per-zone count, night vs day."""
+        from datetime import date as _date
+        if not start_date:
+            start_date = _date.today().isoformat()
+        params = [start_date]
+        where = "WHERE detected_at >= ?"
+        if end_date:
+            where += " AND detected_at < date(?, '+1 day')"
+            params.append(end_date)
+
+        row = self.conn.execute(
+            f"""SELECT
+                 COUNT(*) as total,
+                 SUM(CASE WHEN acknowledged=0 THEN 1 ELSE 0 END) as unack,
+                 SUM(CASE WHEN shadow_mode=1 THEN 1 ELSE 0 END) as shadow
+               FROM intrusion_events {where}""", params,
+        ).fetchone()
+        return {
+            "total": row["total"] or 0,
+            "unacknowledged": row["unack"] or 0,
+            "shadow_mode": row["shadow"] or 0,
+        }
 
     def close(self):
         self.conn.close()

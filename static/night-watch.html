@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard — Gece İzleme</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/tailwind.js"></script>
+    <style>
+        @keyframes cam-pulse {
+            0%,100% { box-shadow: 0 0 0 2px rgba(220,38,38,0.7); }
+            50%     { box-shadow: 0 0 0 6px rgba(220,38,38,0.25); }
+        }
+        .cam-alarm { animation: cam-pulse 0.8s ease-in-out infinite; }
+        @keyframes slideDown { from {opacity:0;transform:translateY(-8px);} to {opacity:1;transform:translateY(0);} }
+        .card-enter { animation: slideDown 0.3s ease-out; }
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+<header class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        <a href="/" class="text-gray-500 hover:text-gray-300 text-sm">← Ana Panel</a>
+        <div class="w-px h-5 bg-gray-700"></div>
+        <h1 class="text-lg font-bold">🌙 Gece İzleme</h1>
+    </div>
+    <div class="flex items-center gap-2">
+        <div id="night-badge" class="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">— </div>
+        <div id="shadow-badge" class="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700 hidden">SHADOW MOD</div>
+        <a href="/zone-editor" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🎯 Bölge Düzenle</a>
+        <a href="/admin" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">⚙️ Kameralar</a>
+    </div>
+</header>
+
+<main class="p-4 space-y-4">
+
+    <!-- Status bar -->
+    <div id="status-bar" class="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-wrap gap-4 text-sm">
+        <div><span class="text-gray-500">Mod:</span> <span id="night-mode-text" class="font-semibold">—</span></div>
+        <div><span class="text-gray-500">Pencere:</span> <span id="night-window" class="font-mono">—</span></div>
+        <div><span class="text-gray-500">Aktif Kamera:</span> <span id="cam-count" class="font-bold text-cyan-400">0</span></div>
+        <div><span class="text-gray-500">Bugün:</span> <span id="stat-total" class="font-bold">0</span> olay</div>
+        <div><span class="text-gray-500">Bekleyen:</span> <span id="stat-unack" class="font-bold text-amber-400">0</span></div>
+    </div>
+
+    <!-- Camera grid -->
+    <div id="cam-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div class="col-span-full text-center py-16 text-gray-600 text-sm">Kameralar yükleniyor…</div>
+    </div>
+
+    <!-- Recent events -->
+    <section>
+        <h2 class="text-sm font-semibold text-gray-400 mb-2">Son Olaylar</h2>
+        <div id="events-list" class="space-y-2">
+            <div class="text-center py-6 text-gray-600 text-sm">Henüz olay yok</div>
+        </div>
+    </section>
+</main>
+
+<!-- Event detail modal -->
+<div id="event-modal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+     onclick="if(event.target===this) this.classList.add('hidden')">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+            <h3 id="modal-title" class="font-bold">Olay Detayı</h3>
+            <button onclick="document.getElementById('event-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-xl px-2">✕</button>
+        </div>
+        <div class="p-4 space-y-3">
+            <img id="modal-screenshot" class="w-full rounded-lg bg-black" alt="screenshot">
+            <video id="modal-video" class="w-full rounded-lg bg-black hidden" controls></video>
+            <div id="modal-info" class="text-sm space-y-1 text-gray-300"></div>
+            <div class="flex gap-2">
+                <button id="modal-ack-btn" class="flex-1 bg-cyan-700 hover:bg-cyan-600 text-white py-2 rounded-lg transition font-semibold">✓ İşaretle (Onaylandı)</button>
+                <button onclick="document.getElementById('event-modal').classList.add('hidden')" class="bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast" class="fixed bottom-4 right-4 space-y-2 z-40"></div>
+
+<script>
+let cameras = [];
+let events = [];
+let snapshotTimers = {};
+
+// --- WebSocket ---
+let ws = null;
+function wsConnect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws`);
+    ws.onmessage = (e) => {
+        try {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'intrusion_on') onIntrusion(msg.data);
+            else if (msg.type === 'intrusion_ack') { loadEvents(); }
+        } catch {}
+    };
+    ws.onclose = () => setTimeout(wsConnect, 3000);
+    ws.onerror = () => ws.close();
+}
+
+// --- Status ---
+async function loadStatus() {
+    try {
+        const r = await fetch('/api/intrusion/status');
+        const d = await r.json();
+        document.getElementById('night-mode-text').textContent =
+            d.night_mode_active ? '🌙 Gece (aktif)' : '☀️ Gündüz';
+        document.getElementById('night-mode-text').className =
+            'font-semibold ' + (d.night_mode_active ? 'text-cyan-400' : 'text-amber-400');
+        document.getElementById('night-window').textContent = d.night_window || '—';
+        document.getElementById('cam-count').textContent = (d.cameras_running || []).length;
+        document.getElementById('stat-total').textContent = d.stats?.total || 0;
+        document.getElementById('stat-unack').textContent = d.stats?.unacknowledged || 0;
+
+        const nightBadge = document.getElementById('night-badge');
+        nightBadge.textContent = d.night_mode_active ? '🌙 GECE MODU' : '☀️ GÜNDÜZ';
+        nightBadge.className = 'text-xs px-2 py-1 rounded-full border ' +
+            (d.night_mode_active
+                ? 'bg-cyan-900/40 border-cyan-700 text-cyan-300'
+                : 'bg-amber-900/40 border-amber-700 text-amber-300');
+
+        const shadowBadge = document.getElementById('shadow-badge');
+        shadowBadge.classList.toggle('hidden', !d.shadow_mode);
+    } catch {}
+}
+
+// --- Cameras ---
+async function loadCameras() {
+    try {
+        const r = await fetch('/api/cameras');
+        const list = await r.json();
+        cameras = (list || []).filter(c => c.enabled && c.role && c.role !== 'plate');
+        renderCams();
+    } catch { toast('Kameralar yüklenemedi', 'hata'); }
+}
+
+function renderCams() {
+    const grid = document.getElementById('cam-grid');
+    if (!cameras.length) {
+        grid.innerHTML = '<div class="col-span-full text-center py-16 text-gray-600 text-sm">İzlenecek kamera yok. <a class="text-cyan-400 underline" href="/admin">Kamera ekle →</a></div>';
+        return;
+    }
+    grid.innerHTML = cameras.map(c => `
+        <div id="cam-${c.id}" class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <div class="relative aspect-video bg-black">
+                <img id="snap-${c.id}" class="w-full h-full object-contain" alt="">
+                <div id="alarm-${c.id}" class="absolute top-2 left-2 hidden bg-red-600 text-white text-xs px-2 py-1 rounded font-bold">🚨 ALARM</div>
+                <div class="absolute top-2 right-2 text-[10px] bg-black/60 text-gray-300 px-2 py-1 rounded font-mono" id="conn-${c.id}">—</div>
+            </div>
+            <div class="p-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="font-semibold text-sm">${escapeHtml(c.name)}</div>
+                        <div class="text-[11px] text-gray-500">${escapeHtml(c.location || '-')}</div>
+                    </div>
+                    <div class="text-[10px] text-gray-500 font-mono">${c.resolution_w || '?'}×${c.resolution_h || '?'}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    // Start snapshot polls
+    cameras.forEach(c => startSnapshotPoll(c.id));
+}
+
+function startSnapshotPoll(camId) {
+    clearInterval(snapshotTimers[camId]);
+    snapshotTimers[camId] = setInterval(() => loadSnapshot(camId), 1000);
+    loadSnapshot(camId);
+}
+
+async function loadSnapshot(camId) {
+    const img = document.getElementById('snap-' + camId);
+    const conn = document.getElementById('conn-' + camId);
+    if (!img) return;
+    const url = `/api/cameras/${camId}/snapshot?t=${Date.now()}`;
+    try {
+        const probe = new Image();
+        probe.onload = () => {
+            img.src = url;
+            if (conn) conn.textContent = '🟢 Canlı';
+        };
+        probe.onerror = () => {
+            if (conn) conn.textContent = '🔴 Yok';
+        };
+        probe.src = url;
+    } catch {}
+}
+
+// --- Events ---
+async function loadEvents() {
+    try {
+        const r = await fetch('/api/intrusion/events?limit=10');
+        const d = await r.json();
+        events = d.events || [];
+        renderEvents();
+    } catch {}
+}
+
+function renderEvents() {
+    const host = document.getElementById('events-list');
+    if (!events.length) {
+        host.innerHTML = '<div class="text-center py-6 text-gray-600 text-sm">Henüz olay yok</div>';
+        return;
+    }
+    host.innerHTML = events.map(ev => {
+        const cam = cameras.find(c => c.id === ev.camera_id);
+        const camName = cam?.name || `Kamera ${ev.camera_id}`;
+        const time = new Date(ev.detected_at).toLocaleString('tr-TR');
+        const shadowBadge = ev.shadow_mode ? '<span class="text-[10px] bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded">SHADOW</span>' : '';
+        const ackBadge = ev.acknowledged
+            ? '<span class="text-[10px] bg-green-900/60 text-green-300 px-1.5 py-0.5 rounded">ONAYLI</span>'
+            : '<span class="text-[10px] bg-amber-900/60 text-amber-300 px-1.5 py-0.5 rounded">BEKLİYOR</span>';
+        return `<div class="bg-gray-900 border border-gray-800 rounded-lg p-3 flex items-center gap-3 cursor-pointer hover:bg-gray-800/60 card-enter"
+                      onclick='openEventModal(${JSON.stringify(ev)})'>
+            ${ev.screenshot_path ? `<img src="${ev.screenshot_path}" class="w-20 h-14 object-cover rounded flex-shrink-0 border border-gray-700" alt="">` : '<div class="w-20 h-14 bg-gray-800 rounded flex items-center justify-center text-gray-600">📷</div>'}
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-semibold text-sm">${escapeHtml(camName)}</span>
+                    ${shadowBadge} ${ackBadge}
+                </div>
+                <div class="text-[11px] text-gray-500">${time} · ${ev.duration_sec}sn · güven %${(ev.confidence*100).toFixed(0)}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function openEventModal(ev) {
+    const modal = document.getElementById('event-modal');
+    const cam = cameras.find(c => c.id === ev.camera_id);
+    const camName = cam?.name || `Kamera ${ev.camera_id}`;
+    document.getElementById('modal-title').textContent = `${camName} — ${new Date(ev.detected_at).toLocaleString('tr-TR')}`;
+    const ss = document.getElementById('modal-screenshot');
+    if (ev.screenshot_path) { ss.src = ev.screenshot_path; ss.classList.remove('hidden'); } else { ss.classList.add('hidden'); }
+    const vid = document.getElementById('modal-video');
+    if (ev.video_clip_path) {
+        vid.src = ev.video_clip_path; vid.classList.remove('hidden');
+    } else {
+        vid.classList.add('hidden'); vid.src = '';
+    }
+    document.getElementById('modal-info').innerHTML = `
+        <div><span class="text-gray-500">Bölge ID:</span> ${ev.zone_id}</div>
+        <div><span class="text-gray-500">Süre:</span> ${ev.duration_sec} saniye</div>
+        <div><span class="text-gray-500">Güven:</span> %${(ev.confidence*100).toFixed(0)}</div>
+        <div><span class="text-gray-500">Track ID:</span> ${ev.track_id}</div>
+        <div><span class="text-gray-500">Mod:</span> ${ev.shadow_mode ? 'Shadow (sadece log)' : 'Canlı alarm'}</div>
+    `;
+    const ackBtn = document.getElementById('modal-ack-btn');
+    if (ev.acknowledged) {
+        ackBtn.textContent = '✓ Zaten onaylı';
+        ackBtn.disabled = true;
+        ackBtn.className = 'flex-1 bg-gray-700 text-gray-400 py-2 rounded-lg cursor-not-allowed';
+    } else {
+        ackBtn.textContent = '✓ İşaretle (Onaylandı)';
+        ackBtn.disabled = false;
+        ackBtn.className = 'flex-1 bg-cyan-700 hover:bg-cyan-600 text-white py-2 rounded-lg transition font-semibold';
+        ackBtn.onclick = () => acknowledgeEvent(ev.id);
+    }
+    modal.classList.remove('hidden');
+}
+
+async function acknowledgeEvent(eventId) {
+    try {
+        await fetch(`/api/intrusion/events/${eventId}/ack`, { method: 'POST' });
+        document.getElementById('event-modal').classList.add('hidden');
+        loadEvents();
+        toast('Olay onaylandı', 'basari');
+    } catch {
+        toast('Onaylama başarısız', 'hata');
+    }
+}
+
+function onIntrusion(data) {
+    // Flash the camera card
+    const cam = document.getElementById('cam-' + data.camera_id);
+    const alarm = document.getElementById('alarm-' + data.camera_id);
+    if (cam) cam.classList.add('cam-alarm');
+    if (alarm) alarm.classList.remove('hidden');
+    setTimeout(() => {
+        if (cam) cam.classList.remove('cam-alarm');
+        if (alarm) alarm.classList.add('hidden');
+    }, 8000);
+
+    // Add to events list
+    events.unshift({
+        id: data.id,
+        camera_id: data.camera_id,
+        zone_id: data.zone_id,
+        track_id: data.track_id,
+        detected_at: data.detected_at,
+        duration_sec: data.duration_sec,
+        confidence: data.confidence / 100,
+        screenshot_path: data.screenshot_url,
+        video_clip_path: '',
+        shadow_mode: data.shadow_mode,
+        acknowledged: 0,
+    });
+    if (events.length > 10) events.pop();
+    renderEvents();
+
+    toast(`🚨 ${data.camera_name} · ${data.duration_sec}sn`, 'hata');
+    loadStatus();
+}
+
+// --- Utils ---
+function escapeHtml(s) {
+    const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML;
+}
+
+function toast(msg, tip='bilgi') {
+    const c = document.getElementById('toast');
+    const cls = { basari: 'bg-green-900/70 border-green-700 text-green-300',
+                  hata:   'bg-red-900/70 border-red-700 text-red-300',
+                  bilgi:  'bg-blue-900/70 border-blue-700 text-blue-300' };
+    const el = document.createElement('div');
+    el.className = `p-3 rounded-lg border text-sm ${cls[tip] || cls.bilgi} card-enter`;
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 4500);
+}
+
+// --- Init ---
+wsConnect();
+loadStatus();
+loadCameras();
+loadEvents();
+setInterval(loadStatus, 30000);
+</script>
+</body>
+</html>

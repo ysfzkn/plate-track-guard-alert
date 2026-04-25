@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard — Bölge Düzenleyici</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/tailwind.js"></script>
+    <style>
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        canvas { cursor: crosshair; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+<header class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        <a href="/night-watch" class="text-gray-500 hover:text-gray-300 text-sm">← Gece İzleme</a>
+        <div class="w-px h-5 bg-gray-700"></div>
+        <h1 class="text-lg font-bold">🎯 Bölge Düzenleyici</h1>
+    </div>
+    <a href="/admin" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">⚙️ Kameralar</a>
+</header>
+
+<main class="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4 max-w-7xl mx-auto">
+
+    <!-- Left: canvas -->
+    <section class="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div class="p-3 border-b border-gray-800 flex items-center gap-3">
+            <label class="text-sm text-gray-400">Kamera:</label>
+            <select id="cam-select" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm flex-1 max-w-xs">
+                <option value="">Seçin…</option>
+            </select>
+            <button onclick="refreshSnapshot()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">🔄 Yenile</button>
+        </div>
+        <div class="relative bg-black" id="canvas-wrap" style="min-height:320px">
+            <img id="bg-img" class="w-full h-auto block" alt="" style="display:none">
+            <canvas id="canvas" class="w-full h-auto absolute top-0 left-0"></canvas>
+            <div id="placeholder" class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">
+                Kamera seçin, canlı görüntü gelsin.
+            </div>
+        </div>
+        <div class="p-3 border-t border-gray-800 flex flex-wrap gap-2 items-center text-sm">
+            <span class="text-gray-400">Tıkla: köşe ekle · Çift tıkla: poligonu kapat · Z: son noktayı sil</span>
+            <div class="flex-1"></div>
+            <button onclick="undoPoint()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">↶ Son Noktayı Sil</button>
+            <button onclick="clearDrawing()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">🗑 Temizle</button>
+        </div>
+    </section>
+
+    <!-- Right: zone form + list -->
+    <aside class="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
+
+        <!-- Add zone form -->
+        <div>
+            <h3 class="font-bold mb-2 text-sm">Yeni Bölge Kaydet</h3>
+            <div class="space-y-2">
+                <input id="zone-name" placeholder="Bölge adı (örn. Duvar Dibi)"
+                       class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="zone-night" checked>
+                    <span>Sadece gece aktif</span>
+                </label>
+                <label class="text-xs text-gray-400 flex items-center gap-2">
+                    <span>Loitering (sn):</span>
+                    <input id="zone-loiter" type="number" min="1" max="60" value="5"
+                           class="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                </label>
+                <label class="flex items-start gap-2 text-sm pt-1 border-t border-gray-800">
+                    <input type="checkbox" id="zone-motion-fallback" class="mt-0.5">
+                    <div>
+                        <span class="font-semibold text-amber-300">🛡️ Hareket fallback (perimeter)</span>
+                        <p class="text-[11px] text-gray-500">YOLO insanı tanıyamasa bile kedi/köpek olmayan, uzun süreli ve insan-benzeri hareketleri yakalar. Duvar üstü / çit etrafı bölgeleri için önerilir.</p>
+                    </div>
+                </label>
+                <div id="point-count" class="text-xs text-gray-500">0 köşe çizildi</div>
+                <button onclick="saveZone()"
+                        class="w-full bg-cyan-700 hover:bg-cyan-600 text-white py-2 rounded-lg font-semibold transition">
+                    💾 Bölgeyi Kaydet
+                </button>
+            </div>
+        </div>
+
+        <div class="border-t border-gray-800"></div>
+
+        <!-- Existing zones -->
+        <div>
+            <h3 class="font-bold mb-2 text-sm">Mevcut Bölgeler</h3>
+            <div id="zone-list" class="space-y-2 max-h-80 overflow-y-auto">
+                <div class="text-xs text-gray-500">Kamera seçin.</div>
+            </div>
+        </div>
+
+    </aside>
+</main>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-4 right-4 space-y-2 z-40"></div>
+
+<script>
+let selectedCameraId = null;
+let existingZones = [];
+let drawingPoints = [];   // [[x_norm, y_norm], ...]
+let bgImg = null;
+let refreshInterval = null;
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+async function loadCameras() {
+    const r = await fetch('/api/cameras');
+    const list = await r.json();
+    const select = document.getElementById('cam-select');
+    const intrusion = (list || []).filter(c => c.enabled && c.role && c.role !== 'plate');
+    select.innerHTML = '<option value="">Seçin…</option>' +
+        intrusion.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    select.onchange = () => selectCamera(parseInt(select.value));
+    if (intrusion.length === 0) {
+        toast('İzinsiz erişim için etkin kamera yok. Önce admin sayfasında kamera ekleyin.', 'hata');
+    }
+}
+
+async function selectCamera(cid) {
+    selectedCameraId = cid || null;
+    drawingPoints = [];
+    clearInterval(refreshInterval);
+    if (!cid) {
+        document.getElementById('placeholder').classList.remove('hidden');
+        document.getElementById('bg-img').style.display = 'none';
+        document.getElementById('zone-list').innerHTML = '<div class="text-xs text-gray-500">Kamera seçin.</div>';
+        return;
+    }
+    await refreshSnapshot();
+    // Auto-refresh snapshot every 2s (frame changes but zones drawn on top)
+    refreshInterval = setInterval(() => refreshSnapshot(false), 2000);
+    await loadZones();
+}
+
+async function refreshSnapshot(showToast=true) {
+    if (!selectedCameraId) return;
+    const url = `/api/cameras/${selectedCameraId}/snapshot?t=${Date.now()}`;
+    const img = new Image();
+    img.onload = () => {
+        bgImg = img;
+        const el = document.getElementById('bg-img');
+        el.src = url;
+        el.style.display = 'block';
+        document.getElementById('placeholder').classList.add('hidden');
+        // Resize canvas to match displayed img
+        setTimeout(() => {
+            canvas.width = el.clientWidth;
+            canvas.height = el.clientHeight;
+            redraw();
+        }, 50);
+    };
+    img.onerror = () => {
+        if (showToast) toast('Görüntü alınamadı', 'hata');
+        document.getElementById('placeholder').textContent = 'Kameradan görüntü gelmiyor.';
+    };
+    img.src = url;
+}
+
+async function loadZones() {
+    if (!selectedCameraId) return;
+    const r = await fetch(`/api/cameras/${selectedCameraId}/zones`);
+    existingZones = await r.json();
+    renderZoneList();
+    redraw();
+}
+
+function renderZoneList() {
+    const host = document.getElementById('zone-list');
+    if (!existingZones.length) {
+        host.innerHTML = '<div class="text-xs text-gray-500">Henüz bölge yok.</div>';
+        return;
+    }
+    host.innerHTML = existingZones.map(z => {
+        const status = z.enabled
+            ? (z.is_night_only ? '🌙 Gece' : '🕐 7/24')
+            : '🚫 Pasif';
+        return `<div class="bg-gray-800/60 border border-gray-700 rounded-lg p-2 text-sm">
+            <div class="flex items-center justify-between">
+                <span class="font-semibold">${escapeHtml(z.name)}</span>
+                <span class="text-xs text-gray-400">${status}</span>
+            </div>
+            <div class="text-[10px] text-gray-500">${(z.polygon_points||[]).length} köşe · ${z.min_loiter_sec}sn eşik${z.enable_motion_fallback ? ' · 🛡️ <span class="text-amber-400">hareket fallback</span>' : ''}</div>
+            <div class="flex gap-1 mt-1">
+                <button onclick="toggleZone(${z.id}, ${!z.enabled})" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">
+                    ${z.enabled ? 'Pasifleştir' : 'Aktifleştir'}
+                </button>
+                <button onclick="deleteZone(${z.id})" class="text-[10px] bg-red-900/60 hover:bg-red-800 text-red-300 px-2 py-1 rounded">
+                    Sil
+                </button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function redraw() {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Draw existing zones (cyan translucent)
+    existingZones.forEach(z => {
+        if (!z.polygon_points || z.polygon_points.length < 3) return;
+        drawPolygon(z.polygon_points, z.enabled ? 'rgba(6,182,212,0.18)' : 'rgba(100,100,100,0.1)',
+                    z.enabled ? '#06b6d4' : '#6b7280', z.name);
+    });
+    // Draw current drawing (red)
+    if (drawingPoints.length > 0) {
+        drawPolygon(drawingPoints, drawingPoints.length >= 3 ? 'rgba(220,38,38,0.22)' : 'transparent',
+                    '#dc2626', null, true);
+        // Draw corner markers
+        drawingPoints.forEach(p => {
+            const px = p[0] * canvas.width, py = p[1] * canvas.height;
+            ctx.beginPath();
+            ctx.arc(px, py, 5, 0, Math.PI*2);
+            ctx.fillStyle = '#dc2626';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+    }
+}
+
+function drawPolygon(points, fill, stroke, label=null, open=false) {
+    if (!points.length) return;
+    ctx.beginPath();
+    points.forEach((p, i) => {
+        const x = p[0] * canvas.width, y = p[1] * canvas.height;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    if (!open) ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if (label && points.length >= 3) {
+        const x = points[0][0] * canvas.width, y = points[0][1] * canvas.height;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        const metrics = ctx.measureText(label);
+        ctx.fillRect(x, y - 16, metrics.width + 8, 14);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px sans-serif';
+        ctx.fillText(label, x + 4, y - 5);
+    }
+}
+
+canvas.addEventListener('click', (e) => {
+    if (!selectedCameraId) return;
+    const rect = canvas.getBoundingClientRect();
+    const x_norm = (e.clientX - rect.left) / rect.width;
+    const y_norm = (e.clientY - rect.top) / rect.height;
+    drawingPoints.push([x_norm, y_norm]);
+    updatePointCount();
+    redraw();
+});
+
+canvas.addEventListener('dblclick', () => {
+    if (drawingPoints.length >= 3) {
+        // Do nothing on dblclick beyond visual hint — user clicks Save
+        toast('Poligon kapalı. Ad girip "Kaydet"e basın.', 'basari');
+    }
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'z' || e.key === 'Z') undoPoint();
+});
+
+function undoPoint() {
+    drawingPoints.pop();
+    updatePointCount();
+    redraw();
+}
+
+function clearDrawing() {
+    drawingPoints = [];
+    updatePointCount();
+    redraw();
+}
+
+function updatePointCount() {
+    document.getElementById('point-count').textContent = `${drawingPoints.length} köşe çizildi`;
+}
+
+async function saveZone() {
+    if (!selectedCameraId) { toast('Kamera seçin', 'hata'); return; }
+    const name = document.getElementById('zone-name').value.trim();
+    if (!name) { toast('Bölgeye bir ad verin', 'hata'); return; }
+    if (drawingPoints.length < 3) { toast('En az 3 köşe çizin', 'hata'); return; }
+    const nightOnly = document.getElementById('zone-night').checked;
+    const loiter = parseInt(document.getElementById('zone-loiter').value) || 5;
+    const motionFallback = document.getElementById('zone-motion-fallback').checked;
+
+    try {
+        const r = await fetch(`/api/cameras/${selectedCameraId}/zones`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                name, polygon_points: drawingPoints,
+                is_night_only: nightOnly, min_loiter_sec: loiter,
+                enable_motion_fallback: motionFallback,
+            })
+        });
+        if (!r.ok) throw new Error(await r.text());
+        toast(`Bölge "${name}" kaydedildi`, 'basari');
+        drawingPoints = [];
+        document.getElementById('zone-name').value = '';
+        document.getElementById('zone-motion-fallback').checked = false;
+        updatePointCount();
+        await loadZones();
+    } catch (e) {
+        toast('Kayıt başarısız: ' + e.message, 'hata');
+    }
+}
+
+async function toggleZone(zid, enabled) {
+    try {
+        await fetch(`/api/zones/${zid}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ enabled })
+        });
+        await loadZones();
+    } catch { toast('Güncelleme başarısız', 'hata'); }
+}
+
+async function deleteZone(zid) {
+    if (!confirm('Bu bölgeyi silmek istediğinize emin misiniz?')) return;
+    try {
+        await fetch(`/api/zones/${zid}`, { method: 'DELETE' });
+        toast('Bölge silindi', 'basari');
+        await loadZones();
+    } catch { toast('Silme başarısız', 'hata'); }
+}
+
+function escapeHtml(s) {
+    const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML;
+}
+
+function toast(msg, tip='bilgi') {
+    const c = document.getElementById('toast');
+    const cls = { basari: 'bg-green-900/70 border-green-700 text-green-300',
+                  hata:   'bg-red-900/70 border-red-700 text-red-300',
+                  bilgi:  'bg-blue-900/70 border-blue-700 text-blue-300' };
+    const el = document.createElement('div');
+    el.className = `p-3 rounded-lg border text-sm ${cls[tip] || cls.bilgi}`;
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 3500);
+}
+
+loadCameras();
+
+// Resize canvas when window/image size changes
+window.addEventListener('resize', () => {
+    const el = document.getElementById('bg-img');
+    if (el && el.style.display !== 'none') {
+        canvas.width = el.clientWidth;
+        canvas.height = el.clientHeight;
+        redraw();
+    }
+});
+</script>
+</body>
+</html>

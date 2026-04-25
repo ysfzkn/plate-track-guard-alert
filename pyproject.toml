@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Camera-based unauthorized vehicle detection and physical alarm system"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "Yusuf Ozkan" },
 ]
@@ -34,6 +34,11 @@ yolo = [
     "ultralytics>=8.0.0",
     "pyyaml>=6.0",
     "tensorboard>=2.14.0",
+]
+# Module 2 — intrusion/person detection (multi-camera + ByteTrack)
+intrusion = [
+    "ultralytics>=8.0.0",
+    "lap>=0.4.0",
 ]
 easyocr = [
     "easyocr>=1.7.0",
