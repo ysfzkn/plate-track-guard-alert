@@ -108,6 +108,53 @@ class ZoneManager:
             if point_in_polygon_normalized(point_norm, z.polygon_points)
         ]
 
+    def matching_zones_bbox(
+        self,
+        camera_id: int,
+        bbox: tuple[int, int, int, int],
+        frame_w: int,
+        frame_h: int,
+        now: datetime | None = None,
+    ) -> list[Zone]:
+        """Active zones a person bbox occupies, per the configured anchor
+        (foot/center/foot_or_center — see anchor_points). A zone matches if ANY
+        anchor point falls inside it."""
+        candidates = self.active_zones_at(camera_id, now)
+        if not candidates:
+            return []
+        pts = anchor_points(bbox, frame_w, frame_h)
+        return [
+            z for z in candidates
+            if any(point_in_polygon_normalized(p, z.polygon_points) for p in pts)
+        ]
+
+
+class AdHocZoneManager(ZoneManager):
+    """A ZoneManager not backed by a DB — holds an in-memory zone list.
+
+    Used by the test playground so a user can draw zones on a frame from an
+    uploaded recording and evaluate them WITHOUT creating a camera or writing
+    to the DB. Reuses the parent's night-mode + point-in-polygon logic.
+    """
+
+    def __init__(
+        self,
+        zones_by_camera: dict[int, list[Zone]],
+        night_start: str = "22:00",
+        night_end: str = "07:00",
+    ):
+        self._db = None
+        self._night_start = night_start
+        self._night_end = night_end
+        self._cache = dict(zones_by_camera)
+        self._lock = threading.Lock()
+
+    def refresh(self) -> None:   # no DB to reload from
+        pass
+
+    def invalidate(self) -> None:
+        pass
+
 
 # ────────────────────────────────────────────────────────────────
 #  Point-in-polygon test (normalized coordinates, 0..1)
@@ -164,3 +211,54 @@ def bbox_center_normalized(
         return (0.0, 0.0)
     x, y, w, h = bbox
     return ((x + w / 2.0) / frame_w, (y + h / 2.0) / frame_h)
+
+
+def bbox_foot_normalized(
+    bbox: tuple[int, int, int, int],
+    frame_w: int,
+    frame_h: int,
+) -> tuple[float, float]:
+    """Return the bbox FOOT point (bottom-center) in normalized 0..1 coords.
+
+    For ground-level forbidden zones this is the correct anchor: a person is
+    located by where their feet contact the ground, not their torso center.
+    This keeps people beyond a perimeter fence (feet outside the zone) from
+    matching even when a tall subject's bbox center floats over the zone, and
+    catches intruders whose feet are clearly inside even if their head leans
+    out of the polygon.
+    """
+    if frame_w <= 0 or frame_h <= 0:
+        return (0.0, 0.0)
+    x, y, w, h = bbox
+    return ((x + w / 2.0) / frame_w, (y + h) / frame_h)
+
+
+def anchor_points(
+    bbox: tuple[int, int, int, int],
+    frame_w: int,
+    frame_h: int,
+) -> list[tuple[float, float]]:
+    """The normalized point(s) tested for zone membership, per config ZONE_ANCHOR.
+
+    Single source of truth so the live classifier and the E2E test harness
+    always agree. A person is "in" a zone if ANY of these points is inside it.
+
+      - "foot_or_center" (default): foot AND center. Catches both zones drawn on
+        the GROUND where a person stands (foot matches) and zones drawn over a
+        WALL/DOOR feature where the body overlaps (center matches). People beyond
+        a perimeter fence stay out because BOTH points are outside an internal
+        zone. Best recall for the "draw the forbidden feature" workflow.
+      - "foot": ground contact only (strict; misses wall/door-drawn zones).
+      - "center": bbox center only (legacy).
+    """
+    try:
+        from config import settings
+        anchor = getattr(settings, "ZONE_ANCHOR", "foot_or_center")
+    except Exception:
+        anchor = "foot_or_center"
+    if anchor == "center":
+        return [bbox_center_normalized(bbox, frame_w, frame_h)]
+    if anchor == "foot":
+        return [bbox_foot_normalized(bbox, frame_w, frame_h)]
+    return [bbox_foot_normalized(bbox, frame_w, frame_h),
+            bbox_center_normalized(bbox, frame_w, frame_h)]

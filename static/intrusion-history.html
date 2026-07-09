@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <script src="/static/auth-client.js?v=2"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard — Kaçak Kayıtları</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/tailwind.js"></script>
+    <style>
+        @keyframes slideDown { from {opacity:0;transform:translateY(-8px);} to {opacity:1;transform:translateY(0);} }
+        .card-enter { animation: slideDown 0.25s ease-out; }
+        ::-webkit-scrollbar { width:6px; height:6px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        .ev-card { transition: transform .12s ease, border-color .12s ease; }
+        .ev-card:hover { transform: translateY(-2px); }
+    </style>
+    <link rel="stylesheet" href="/static/gg-light.css">
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen light-theme">
+
+<header class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between sticky top-0 z-30">
+    <div class="flex items-center gap-3">
+        <a href="/" class="text-gray-500 hover:text-gray-300 text-sm">← Ana Panel</a>
+        <div class="w-px h-5 bg-gray-700"></div>
+        <h1 class="text-lg font-bold">🗂️ Kaçak Kayıtları</h1>
+    </div>
+    <div class="flex items-center gap-2">
+        <a href="/night-watch" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🌙 Canlı İzleme</a>
+        <a href="/zone-editor" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🎯 Bölgeler</a>
+    </div>
+</header>
+
+<main class="p-4 space-y-4 max-w-6xl mx-auto">
+
+    <!-- Filters -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-3">
+        <div class="flex flex-wrap items-end gap-3">
+            <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Başlangıç</label>
+                <input id="f-start" type="date" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Bitiş</label>
+                <input id="f-end" type="date" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Kamera</label>
+                <select id="f-cam" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm min-w-[140px]">
+                    <option value="">Tümü</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Durum</label>
+                <select id="f-ack" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                    <option value="">Tümü</option>
+                    <option value="false">Bekleyen</option>
+                    <option value="true">Onaylı</option>
+                </select>
+            </div>
+            <button onclick="ara(0)" class="bg-cyan-700 hover:bg-cyan-600 text-white text-sm font-semibold px-4 py-1.5 rounded-lg transition">🔍 Filtrele</button>
+            <div class="flex items-center gap-1.5">
+                <button onclick="hazir('bugun')" class="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 px-2.5 py-1.5 rounded-lg transition">Bugün</button>
+                <button onclick="hazir('7gun')" class="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 px-2.5 py-1.5 rounded-lg transition">Son 7 gün</button>
+                <button onclick="hazir('temizle')" class="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 px-2.5 py-1.5 rounded-lg transition">Temizle</button>
+            </div>
+        </div>
+        <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-800 text-xs">
+            <span id="count-label" class="text-gray-400">—</span>
+            <span class="text-gray-500">🗄️ Kanıtlar en fazla <b class="text-gray-300">7 gün</b> saklanır, sonra otomatik silinir.</span>
+        </div>
+    </div>
+
+    <!-- Results grid -->
+    <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div class="col-span-full text-center py-16 text-gray-600 text-sm">Yükleniyor…</div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="pager" class="flex items-center justify-center gap-3 py-2 hidden">
+        <button id="prev-btn" onclick="ara(page-1)" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-4 py-1.5 rounded-lg text-sm transition disabled:opacity-40 disabled:cursor-not-allowed">← Önceki</button>
+        <span id="page-info" class="text-sm text-gray-400"></span>
+        <button id="next-btn" onclick="ara(page+1)" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-4 py-1.5 rounded-lg text-sm transition disabled:opacity-40 disabled:cursor-not-allowed">Sonraki →</button>
+    </div>
+</main>
+
+<!-- Detail modal -->
+<div id="modal" class="hidden fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+     onclick="if(event.target===this) kapatModal()">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl max-w-3xl w-full max-h-[92vh] overflow-y-auto">
+        <div class="p-4 border-b border-gray-800 flex items-center justify-between sticky top-0 bg-gray-900 z-10">
+            <h3 id="m-title" class="font-bold">Olay Detayı</h3>
+            <button onclick="kapatModal()" class="text-gray-400 hover:text-white text-xl px-2">✕</button>
+        </div>
+        <div class="p-4 space-y-4">
+            <!-- Video takes priority if present, else main screenshot -->
+            <video id="m-video" class="w-full rounded-lg bg-black hidden" controls preload="metadata"></video>
+            <img id="m-screenshot" class="w-full rounded-lg bg-black" alt="kanıt görüntüsü">
+            <div id="m-clip-note" class="text-[11px] text-amber-300 hidden">🎬 Video klip bu olay için henüz hazır değil (veya süresi doldu).</div>
+
+            <!-- Burst gallery -->
+            <div id="m-burst-wrap" class="hidden">
+                <div class="text-[11px] text-gray-500 mb-1.5">📸 Yakalama kareleri</div>
+                <div id="m-burst" class="grid grid-cols-4 gap-1.5"></div>
+            </div>
+
+            <div id="m-info" class="text-sm space-y-1 text-gray-300"></div>
+
+            <div class="flex flex-wrap gap-2">
+                <button id="m-ack-btn" class="flex-1 min-w-[160px] bg-cyan-700 hover:bg-cyan-600 text-white py-2 rounded-lg transition font-semibold">✓ İşaretle (Onaylandı)</button>
+                <a id="m-live" href="#" class="bg-purple-800 hover:bg-purple-700 text-white py-2 px-4 rounded-lg transition text-center">🖥️ Kamerayı canlı gör</a>
+                <button onclick="kapatModal()" class="bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lightbox for full-size burst frame -->
+<div id="lightbox" class="hidden fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
+    <img id="lightbox-img" class="max-w-full max-h-full rounded-lg" alt="">
+</div>
+
+<!-- Styled note prompt (replaces window.prompt) -->
+<div id="note-modal" class="hidden fixed inset-0 z-[65] bg-black/70 flex items-center justify-center p-4"
+     onclick="if(event.target===this) noteCancel()">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-md w-full shadow-2xl">
+        <div class="px-5 py-4 border-b border-gray-800">
+            <h3 class="text-xl font-bold">📝 Olay Notu</h3>
+            <p class="text-sm text-gray-400 mt-1">Bu kayıt için kısa bir açıklama ekleyebilirsiniz. Boş bırakabilirsiniz.</p>
+        </div>
+        <div class="p-5 space-y-3">
+            <input id="note-input" type="text" placeholder="Örn: Kurye, komşu, yanlış alarm…"
+                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-lg"
+                   onkeydown="if(event.key==='Enter') noteOk();">
+            <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="noteChip('Kurye / teslimat')" class="text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-full transition">Kurye / teslimat</button>
+                <button type="button" onclick="noteChip('Yanlış alarm - hayvan')" class="text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-full transition">Yanlış alarm - hayvan</button>
+                <button type="button" onclick="noteChip('Bekçi denetimi')" class="text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-full transition">Bekçi denetimi</button>
+                <button type="button" onclick="noteChip('Tanınmayan kişi!')" class="text-sm bg-red-900/50 hover:bg-red-900/70 border border-red-700 text-red-200 px-3 py-1.5 rounded-full transition">Tanınmayan kişi!</button>
+            </div>
+        </div>
+        <div class="px-5 py-4 border-t border-gray-800 flex gap-2">
+            <button onclick="noteOk()" class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white text-lg font-semibold py-3 rounded-xl transition">✓ Onayla</button>
+            <button onclick="noteCancel()" class="bg-gray-700 hover:bg-gray-600 text-white text-lg py-3 px-6 rounded-xl transition">İptal</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-4 right-4 space-y-2 z-[70]"></div>
+
+<script>
+const PAGE_SIZE = 24;
+let cameras = [];
+let camById = {};
+let page = 0;
+let total = 0;
+
+// ── Init ──
+async function init() {
+    await loadCameras();
+    // Default: last 7 days
+    hazir('7gun');
+}
+
+async function loadCameras() {
+    try {
+        const r = await fetch('/api/cameras');
+        const list = await r.json();
+        cameras = (list || []).filter(c => c.role && c.role !== 'plate');
+        camById = {};
+        cameras.forEach(c => camById[c.id] = c);
+        const sel = document.getElementById('f-cam');
+        cameras.forEach(c => {
+            const o = document.createElement('option');
+            o.value = c.id; o.textContent = c.name;
+            sel.appendChild(o);
+        });
+    } catch { toast('Kameralar yüklenemedi', 'hata'); }
+}
+
+function camName(id) { return camById[id]?.name || ('Kamera ' + id); }
+
+function isoDay(d) {
+    // Local YYYY-MM-DD (avoids UTC off-by-one from toISOString)
+    const z = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
+}
+
+function hazir(kind) {
+    const s = document.getElementById('f-start'), e = document.getElementById('f-end');
+    const today = new Date();
+    if (kind === 'bugun') {
+        s.value = isoDay(today); e.value = isoDay(today);
+    } else if (kind === '7gun') {
+        const past = new Date(); past.setDate(past.getDate() - 6);
+        s.value = isoDay(past); e.value = isoDay(today);
+    } else if (kind === 'temizle') {
+        s.value = ''; e.value = '';
+        document.getElementById('f-cam').value = '';
+        document.getElementById('f-ack').value = '';
+    }
+    ara(0);
+}
+
+async function ara(p) {
+    page = Math.max(0, p);
+    const q = new URLSearchParams();
+    const s = document.getElementById('f-start').value;
+    const e = document.getElementById('f-end').value;
+    const cam = document.getElementById('f-cam').value;
+    const ack = document.getElementById('f-ack').value;
+    if (s) q.set('start', s);
+    if (e) q.set('end', e);
+    if (cam) q.set('camera_id', cam);
+    if (ack) q.set('acknowledged', ack);
+    q.set('limit', PAGE_SIZE);
+    q.set('offset', page * PAGE_SIZE);
+
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '<div class="col-span-full text-center py-16 text-gray-600 text-sm">Yükleniyor…</div>';
+    try {
+        const r = await fetch('/api/intrusion/events?' + q.toString());
+        const d = await r.json();
+        total = d.total || 0;
+        render(d.events || []);
+    } catch {
+        grid.innerHTML = '<div class="col-span-full text-center py-16 text-red-400 text-sm">Kayıtlar yüklenemedi.</div>';
+        document.getElementById('pager').classList.add('hidden');
+    }
+}
+
+function render(rows) {
+    const grid = document.getElementById('grid');
+    document.getElementById('count-label').textContent = `${total} kayıt bulundu`;
+
+    if (!rows.length) {
+        grid.innerHTML = '<div class="col-span-full text-center py-16 text-gray-600 text-sm">Bu filtreyle kayıt yok.</div>';
+        document.getElementById('pager').classList.add('hidden');
+        return;
+    }
+
+    grid.innerHTML = rows.map(ev => {
+        const time = new Date(ev.detected_at).toLocaleString('tr-TR');
+        const conf = Math.round((ev.confidence || 0) * 100);
+        const shadow = ev.shadow_mode
+            ? '<span class="text-[10px] bg-amber-600 text-white px-1.5 py-0.5 rounded font-semibold">TEST</span>' : '';
+        const ack = ev.acknowledged
+            ? '<span class="text-[10px] bg-green-600 text-white px-1.5 py-0.5 rounded font-semibold">ONAYLI</span>'
+            : '<span class="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-semibold">BEKLİYOR</span>';
+        const hasVid = ev.video_clip_path
+            ? '<span class="absolute top-1.5 left-1.5 text-[10px] bg-black/75 text-white px-1.5 py-0.5 rounded">🎬 Video</span>' : '';
+        const thumb = ev.screenshot_path
+            ? `<img src="${ev.screenshot_path}" class="w-full h-full object-cover" loading="lazy" alt="">`
+            : '<div class="w-full h-full flex items-center justify-center text-gray-600 text-2xl">📷</div>';
+        return `<div class="ev-card bg-gray-900 border border-gray-800 hover:border-cyan-600 rounded-xl overflow-hidden cursor-pointer card-enter"
+                     onclick='detay(${JSON.stringify(ev)})'>
+            <div class="relative aspect-video bg-black">
+                ${thumb}
+                ${hasVid}
+                <div class="absolute top-1.5 right-1.5 flex gap-1">${shadow} ${ack}</div>
+            </div>
+            <div class="p-2.5">
+                <div class="font-semibold text-sm truncate">${escapeHtml(camName(ev.camera_id))}</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">${time}</div>
+                <div class="text-[11px] text-gray-500">${ev.duration_sec}sn · güven %${conf}</div>
+            </div>
+        </div>`;
+    }).join('');
+
+    // Pager
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    const pager = document.getElementById('pager');
+    pager.classList.toggle('hidden', totalPages <= 1);
+    document.getElementById('page-info').textContent = `Sayfa ${page+1} / ${totalPages}`;
+    document.getElementById('prev-btn').disabled = page <= 0;
+    document.getElementById('next-btn').disabled = (page + 1) >= totalPages;
+}
+
+function detay(ev) {
+    const modal = document.getElementById('modal');
+    document.getElementById('m-title').textContent =
+        `${camName(ev.camera_id)} — ${new Date(ev.detected_at).toLocaleString('tr-TR')}`;
+
+    // Screenshot (proof frame)
+    const ss = document.getElementById('m-screenshot');
+    if (ev.screenshot_path) { ss.src = ev.screenshot_path; ss.classList.remove('hidden'); }
+    else ss.classList.add('hidden');
+
+    // Video clip
+    const vid = document.getElementById('m-video');
+    const clipNote = document.getElementById('m-clip-note');
+    if (ev.video_clip_path) {
+        vid.src = ev.video_clip_path; vid.classList.remove('hidden'); clipNote.classList.add('hidden');
+    } else {
+        vid.src = ''; vid.classList.add('hidden'); clipNote.classList.remove('hidden');
+    }
+
+    // Burst gallery
+    const burstWrap = document.getElementById('m-burst-wrap');
+    const burst = document.getElementById('m-burst');
+    let paths = [];
+    try { paths = ev.burst_paths ? JSON.parse(ev.burst_paths) : []; } catch { paths = []; }
+    paths = (paths || []).filter(Boolean);
+    if (paths.length) {
+        burst.innerHTML = paths.map(p =>
+            `<img src="${p}" class="w-full aspect-video object-cover rounded border border-gray-700 cursor-zoom-in"
+                  loading="lazy" onclick="event.stopPropagation(); buyut('${p}')" alt="">`).join('');
+        burstWrap.classList.remove('hidden');
+    } else {
+        burstWrap.classList.add('hidden');
+    }
+
+    const conf = Math.round((ev.confidence || 0) * 100);
+    const noteRow = (ev.notes && ev.notes !== 'motion_fallback')
+        ? `<div><span class="text-gray-500">Not:</span> ${escapeHtml(ev.notes)}</div>` : '';
+    document.getElementById('m-info').innerHTML = `
+        <div><span class="text-gray-500">Kamera:</span> ${escapeHtml(camName(ev.camera_id))}</div>
+        <div><span class="text-gray-500">Bölge ID:</span> ${ev.zone_id}</div>
+        <div><span class="text-gray-500">Süre:</span> ${ev.duration_sec} saniye</div>
+        <div><span class="text-gray-500">Güven:</span> %${conf}</div>
+        <div><span class="text-gray-500">Mod:</span> ${ev.shadow_mode ? 'Test modu (siren çalmadı, sadece kayıt)' : 'Canlı alarm'}</div>
+        ${noteRow}
+    `;
+
+    // Live view link → focus this camera large in night-watch
+    document.getElementById('m-live').href = `/night-watch?cam=${ev.camera_id}`;
+
+    // Ack button
+    const ackBtn = document.getElementById('m-ack-btn');
+    if (ev.acknowledged) {
+        ackBtn.textContent = '✓ Zaten onaylı';
+        ackBtn.disabled = true;
+        ackBtn.className = 'flex-1 min-w-[160px] bg-gray-700 text-gray-400 py-2 rounded-lg cursor-not-allowed';
+        ackBtn.onclick = null;
+    } else {
+        ackBtn.textContent = '✓ İşaretle (Onaylandı)';
+        ackBtn.disabled = false;
+        ackBtn.className = 'flex-1 min-w-[160px] bg-cyan-700 hover:bg-cyan-600 text-white py-2 rounded-lg transition font-semibold';
+        ackBtn.onclick = () => onayla(ev.id);
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function kapatModal() {
+    const vid = document.getElementById('m-video');
+    try { vid.pause(); } catch {}
+    vid.src = '';
+    document.getElementById('modal').classList.add('hidden');
+}
+
+function buyut(src) {
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox').classList.remove('hidden');
+}
+
+// --- Styled note prompt (Promise-based, replaces window.prompt) ---
+let _noteResolve = null;
+function askNote() {
+    return new Promise(resolve => {
+        _noteResolve = resolve;
+        const input = document.getElementById('note-input');
+        input.value = '';
+        document.getElementById('note-modal').classList.remove('hidden');
+        setTimeout(() => input.focus(), 50);
+    });
+}
+function noteChip(text) { document.getElementById('note-input').value = text; }
+function noteOk() {
+    const v = document.getElementById('note-input').value;
+    document.getElementById('note-modal').classList.add('hidden');
+    if (_noteResolve) { _noteResolve(v); _noteResolve = null; }
+}
+function noteCancel() {
+    document.getElementById('note-modal').classList.add('hidden');
+    if (_noteResolve) { _noteResolve(null); _noteResolve = null; }
+}
+
+async function onayla(eventId) {
+    const note = await askNote();
+    if (note === null) return;   // cancelled
+    try {
+        await fetch(`/api/intrusion/events/${eventId}/ack`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ note: note.trim() }),
+        });
+        kapatModal();
+        toast(note.trim() ? `Onaylandı: "${note.trim().slice(0,30)}"` : 'Onaylandı', 'basari');
+        ara(page);   // refresh current page
+    } catch {
+        toast('Onaylama başarısız', 'hata');
+    }
+}
+
+// ESC closes modals (note popup first, so it doesn't also close the detail modal)
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('note-modal').classList.contains('hidden')) { noteCancel(); return; }
+    if (!document.getElementById('lightbox').classList.contains('hidden')) { document.getElementById('lightbox').classList.add('hidden'); return; }
+    if (!document.getElementById('modal').classList.contains('hidden')) kapatModal();
+});
+
+function escapeHtml(s) {
+    const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML;
+}
+
+// Solid backgrounds + white text (inline !important) so toasts stay legible in
+// both light and dark themes — gg-light.css otherwise rewrites text-white to dark.
+function toast(msg, tip='bilgi') {
+    const c = document.getElementById('toast');
+    const bg = { basari: '#16a34a', hata: '#dc2626', bilgi: '#2563eb' };
+    const el = document.createElement('div');
+    el.className = 'p-3 rounded-lg text-sm font-medium shadow-lg card-enter';
+    el.style.setProperty('background', bg[tip] || bg.bilgi, 'important');
+    el.style.setProperty('color', '#ffffff', 'important');
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 4000);
+}
+
+init();
+</script>
+</body>
+</html>

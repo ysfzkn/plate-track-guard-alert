@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
+    <script src="/static/auth-client.js?v=2"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GateGuard — Gece İzleme</title>
@@ -19,8 +20,9 @@
         ::-webkit-scrollbar-track { background: #111827; }
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
     </style>
+    <link rel="stylesheet" href="/static/gg-light.css">
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
+<body class="bg-gray-950 text-gray-100 min-h-screen light-theme">
 
 <header class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between">
     <div class="flex items-center gap-3">
@@ -30,7 +32,8 @@
     </div>
     <div class="flex items-center gap-2">
         <div id="night-badge" class="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">— </div>
-        <div id="shadow-badge" class="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700 hidden">SHADOW MOD</div>
+        <div id="shadow-badge" class="text-xs px-2 py-1 rounded-full bg-amber-900/40 border border-amber-700/50 text-amber-300 hidden" title="Sistem izliyor ve olay kaydediyor ama fiziksel siren ÇALMAZ.">TEST MODU · siren çalmaz</div>
+        <a href="/intrusion-history" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🗂️ Kayıtlar</a>
         <a href="/zone-editor" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🎯 Bölge Düzenle</a>
         <a href="/admin" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">⚙️ Kameralar</a>
     </div>
@@ -45,6 +48,12 @@
         <div><span class="text-gray-500">Aktif Kamera:</span> <span id="cam-count" class="font-bold text-cyan-400">0</span></div>
         <div><span class="text-gray-500">Bugün:</span> <span id="stat-total" class="font-bold">0</span> olay</div>
         <div><span class="text-gray-500">Bekleyen:</span> <span id="stat-unack" class="font-bold text-amber-400">0</span></div>
+    </div>
+
+    <!-- Single-camera focus bar (shown when ?cam=<id>) -->
+    <div id="focus-bar" class="hidden bg-purple-900/40 border border-purple-700 rounded-xl p-3 flex items-center justify-between">
+        <div class="text-sm">🎯 Tek kamera odağı: <b id="focus-name" class="text-purple-200">—</b></div>
+        <a href="/night-watch" class="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition">← Tüm kameralar</a>
     </div>
 
     <!-- Camera grid -->
@@ -77,6 +86,50 @@
                 <button id="modal-ack-btn" class="flex-1 bg-cyan-700 hover:bg-cyan-600 text-white py-2 rounded-lg transition font-semibold">✓ İşaretle (Onaylandı)</button>
                 <button onclick="document.getElementById('event-modal').classList.add('hidden')" class="bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition">Kapat</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Fullscreen live camera viewer -->
+<div id="fs-viewer" class="hidden fixed inset-0 z-[60] bg-black flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 bg-gray-900/90 border-b border-gray-800">
+        <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xl">📹</span>
+            <span id="fs-name" class="font-bold text-xl truncate">—</span>
+            <span id="fs-conn" class="text-sm bg-black/50 text-gray-200 px-2 py-0.5 rounded font-mono flex-shrink-0">—</span>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <button onclick="fsNativeToggle()" class="text-base bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-lg transition">⛶ Tam Ekran</button>
+            <button onclick="closeFullscreen()" class="text-base bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg transition font-semibold">✕ Kapat</button>
+        </div>
+    </div>
+    <div class="flex-1 flex items-center justify-center overflow-hidden bg-black">
+        <img id="fs-img" class="max-w-full max-h-full object-contain" alt="canlı görüntü">
+    </div>
+</div>
+
+<!-- Styled note prompt (replaces window.prompt) -->
+<div id="note-modal" class="hidden fixed inset-0 z-[65] bg-black/70 flex items-center justify-center p-4"
+     onclick="if(event.target===this) noteCancel()">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-md w-full shadow-2xl">
+        <div class="px-5 py-4 border-b border-gray-800">
+            <h3 class="text-xl font-bold">📝 Olay Notu</h3>
+            <p class="text-sm text-gray-400 mt-1">Bu kayıt için kısa bir açıklama ekleyebilirsiniz. Boş bırakabilirsiniz.</p>
+        </div>
+        <div class="p-5 space-y-3">
+            <input id="note-input" type="text" placeholder="Örn: Kurye, komşu, yanlış alarm…"
+                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-lg"
+                   onkeydown="if(event.key==='Enter') noteOk();">
+            <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="noteChip('Kurye / teslimat')" class="text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-full transition">Kurye / teslimat</button>
+                <button type="button" onclick="noteChip('Yanlış alarm - hayvan')" class="text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-full transition">Yanlış alarm - hayvan</button>
+                <button type="button" onclick="noteChip('Bekçi denetimi')" class="text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-full transition">Bekçi denetimi</button>
+                <button type="button" onclick="noteChip('Tanınmayan kişi!')" class="text-sm bg-red-900/50 hover:bg-red-900/70 border border-red-700 text-red-200 px-3 py-1.5 rounded-full transition">Tanınmayan kişi!</button>
+            </div>
+        </div>
+        <div class="px-5 py-4 border-t border-gray-800 flex gap-2">
+            <button onclick="noteOk()" class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white text-lg font-semibold py-3 rounded-xl transition">✓ Onayla</button>
+            <button onclick="noteCancel()" class="bg-gray-700 hover:bg-gray-600 text-white text-lg py-3 px-6 rounded-xl transition">İptal</button>
         </div>
     </div>
 </div>
@@ -132,13 +185,36 @@ async function loadStatus() {
 }
 
 // --- Cameras ---
+// Optional ?cam=<id> focuses a single camera large (e.g. from an alarm "Büyük İzle").
+const focusCamId = (() => {
+    const v = new URLSearchParams(location.search).get('cam');
+    return v ? parseInt(v, 10) : null;
+})();
+
 async function loadCameras() {
     try {
         const r = await fetch('/api/cameras');
         const list = await r.json();
-        cameras = (list || []).filter(c => c.enabled && c.role && c.role !== 'plate');
+        let all = (list || []).filter(c => c.enabled && c.role && c.role !== 'plate');
+        if (focusCamId && all.some(c => c.id === focusCamId)) {
+            cameras = all.filter(c => c.id === focusCamId);
+            showFocusBar(cameras[0]);
+        } else {
+            cameras = all;
+        }
         renderCams();
     } catch { toast('Kameralar yüklenemedi', 'hata'); }
+}
+
+function showFocusBar(cam) {
+    const grid = document.getElementById('cam-grid');
+    // Single-camera view → one big column instead of the multi-cam grid.
+    grid.className = 'grid grid-cols-1 gap-3';
+    const bar = document.getElementById('focus-bar');
+    if (bar) {
+        bar.classList.remove('hidden');
+        document.getElementById('focus-name').textContent = cam ? cam.name : '';
+    }
 }
 
 function renderCams() {
@@ -148,19 +224,21 @@ function renderCams() {
         return;
     }
     grid.innerHTML = cameras.map(c => `
-        <div id="cam-${c.id}" class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div id="cam-${c.id}" class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden group cursor-pointer hover:border-cyan-600 transition"
+             onclick="openFullscreen(${c.id})" title="Tam ekran için tıklayın">
             <div class="relative aspect-video bg-black">
                 <img id="snap-${c.id}" class="w-full h-full object-contain" alt="">
-                <div id="alarm-${c.id}" class="absolute top-2 left-2 hidden bg-red-600 text-white text-xs px-2 py-1 rounded font-bold">🚨 ALARM</div>
-                <div class="absolute top-2 right-2 text-[10px] bg-black/60 text-gray-300 px-2 py-1 rounded font-mono" id="conn-${c.id}">—</div>
+                <div id="alarm-${c.id}" class="absolute top-2 left-2 hidden bg-red-600 text-white text-sm px-2 py-1 rounded font-bold">🚨 ALARM</div>
+                <div class="absolute top-2 right-2 text-[11px] bg-black/60 text-gray-200 px-2 py-1 rounded font-mono" id="conn-${c.id}">—</div>
+                <div class="absolute bottom-2 right-2 bg-black/70 text-white text-sm px-2.5 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition pointer-events-none">⛶ Tam ekran</div>
             </div>
             <div class="p-3">
                 <div class="flex items-center justify-between">
                     <div>
-                        <div class="font-semibold text-sm">${escapeHtml(c.name)}</div>
+                        <div class="font-bold text-base">${escapeHtml(c.name)}</div>
                         <div class="text-[11px] text-gray-500">${escapeHtml(c.location || '-')}</div>
                     </div>
-                    <div class="text-[10px] text-gray-500 font-mono">${c.resolution_w || '?'}×${c.resolution_h || '?'}</div>
+                    <div class="text-[11px] text-gray-500 font-mono">${c.resolution_w || '?'}×${c.resolution_h || '?'}</div>
                 </div>
             </div>
         </div>
@@ -179,7 +257,8 @@ async function loadSnapshot(camId) {
     const img = document.getElementById('snap-' + camId);
     const conn = document.getElementById('conn-' + camId);
     if (!img) return;
-    const url = `/api/cameras/${camId}/snapshot?t=${Date.now()}`;
+    const _u = `/api/cameras/${camId}/snapshot?t=${Date.now()}`;
+    const url = window.ggAuthedUrl ? window.ggAuthedUrl(_u) : _u;
     try {
         const probe = new Image();
         probe.onload = () => {
@@ -213,7 +292,7 @@ function renderEvents() {
         const cam = cameras.find(c => c.id === ev.camera_id);
         const camName = cam?.name || `Kamera ${ev.camera_id}`;
         const time = new Date(ev.detected_at).toLocaleString('tr-TR');
-        const shadowBadge = ev.shadow_mode ? '<span class="text-[10px] bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded">SHADOW</span>' : '';
+        const shadowBadge = ev.shadow_mode ? '<span class="text-[10px] bg-amber-900/50 text-amber-300 px-1.5 py-0.5 rounded" title="Siren çalmadı — test modu">TEST MODU</span>' : '';
         const ackBadge = ev.acknowledged
             ? '<span class="text-[10px] bg-green-900/60 text-green-300 px-1.5 py-0.5 rounded">ONAYLI</span>'
             : '<span class="text-[10px] bg-amber-900/60 text-amber-300 px-1.5 py-0.5 rounded">BEKLİYOR</span>';
@@ -249,7 +328,7 @@ function openEventModal(ev) {
         <div><span class="text-gray-500">Süre:</span> ${ev.duration_sec} saniye</div>
         <div><span class="text-gray-500">Güven:</span> %${(ev.confidence*100).toFixed(0)}</div>
         <div><span class="text-gray-500">Track ID:</span> ${ev.track_id}</div>
-        <div><span class="text-gray-500">Mod:</span> ${ev.shadow_mode ? 'Shadow (sadece log)' : 'Canlı alarm'}</div>
+        <div><span class="text-gray-500">Mod:</span> ${ev.shadow_mode ? 'Test modu (siren çalmaz, sadece kayıt)' : 'Canlı alarm'}</div>
     `;
     const ackBtn = document.getElementById('modal-ack-btn');
     if (ev.acknowledged) {
@@ -266,11 +345,19 @@ function openEventModal(ev) {
 }
 
 async function acknowledgeEvent(eventId) {
+    // Styled in-app note prompt (replaces the native window.prompt)
+    const note = await askNote();
+    // user clicked Cancel
+    if (note === null) return;
     try {
-        await fetch(`/api/intrusion/events/${eventId}/ack`, { method: 'POST' });
+        await fetch(`/api/intrusion/events/${eventId}/ack`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({note: note.trim()}),
+        });
         document.getElementById('event-modal').classList.add('hidden');
         loadEvents();
-        toast('Olay onaylandı', 'basari');
+        toast(note.trim() ? `Onaylandı: "${note.trim().slice(0, 30)}"` : 'Onaylandı', 'basari');
     } catch {
         toast('Onaylama başarısız', 'hata');
     }
@@ -305,7 +392,36 @@ function onIntrusion(data) {
     renderEvents();
 
     toast(`🚨 ${data.camera_name} · ${data.duration_sec}sn`, 'hata');
+    // Audible alarm for genuine (non-test, non-muted) detections.
+    if (!data.shadow_mode && !data.alarm_muted) intrusionAlarmTone(6);
     loadStatus();
+}
+
+// Distinct, thinner-than-vehicle two-tone pulse that repeats for the duration.
+let _intrCtx = null, _intrStop = null;
+function intrusionAlarmTone(durationSec = 6) {
+    try { if (_intrStop) clearTimeout(_intrStop); if (_intrCtx && _intrCtx.state !== 'closed') _intrCtx.close(); } catch(e) {}
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (ctx.state === 'suspended') ctx.resume();
+        _intrCtx = ctx;
+        const master = ctx.createGain(); master.gain.value = 0.16; master.connect(ctx.destination);
+        const t0 = ctx.currentTime, beep = 0.16, gap = 0.10, period = (beep + gap) * 2;
+        const cycles = Math.max(1, Math.ceil(durationSec / period));
+        for (let i = 0; i < cycles; i++) {
+            [1047, 1319].forEach((freq, j) => {
+                const start = t0 + i * period + j * (beep + gap);
+                const osc = ctx.createOscillator(), g = ctx.createGain();
+                osc.type = 'triangle'; osc.frequency.value = freq;
+                g.gain.setValueAtTime(0.0001, start);
+                g.gain.exponentialRampToValueAtTime(1.0, start + 0.008);
+                g.gain.exponentialRampToValueAtTime(0.0001, start + beep);
+                osc.connect(g).connect(master);
+                osc.start(start); osc.stop(start + beep + 0.03);
+            });
+        }
+        _intrStop = setTimeout(() => { try { if (ctx.state !== 'closed') ctx.close(); } catch(e){} }, durationSec * 1000 + 300);
+    } catch (e) { console.warn('intrusion tone failed', e); }
 }
 
 // --- Utils ---
@@ -315,15 +431,80 @@ function escapeHtml(s) {
 
 function toast(msg, tip='bilgi') {
     const c = document.getElementById('toast');
-    const cls = { basari: 'bg-green-900/70 border-green-700 text-green-300',
-                  hata:   'bg-red-900/70 border-red-700 text-red-300',
-                  bilgi:  'bg-blue-900/70 border-blue-700 text-blue-300' };
+    // Solid backgrounds + white text (inline !important) so toasts stay legible
+    // in both themes — gg-light.css otherwise rewrites text-white to dark.
+    const bg = { basari: '#16a34a', hata: '#dc2626', bilgi: '#2563eb' };
     const el = document.createElement('div');
-    el.className = `p-3 rounded-lg border text-sm ${cls[tip] || cls.bilgi} card-enter`;
+    el.className = 'p-3 rounded-lg text-sm font-medium shadow-lg card-enter';
+    el.style.setProperty('background', bg[tip] || bg.bilgi, 'important');
+    el.style.setProperty('color', '#ffffff', 'important');
     el.textContent = msg;
     c.appendChild(el);
     setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 4500);
 }
+
+// --- Styled note prompt (Promise-based, replaces window.prompt) ---
+let _noteResolve = null;
+function askNote() {
+    return new Promise(resolve => {
+        _noteResolve = resolve;
+        const input = document.getElementById('note-input');
+        input.value = '';
+        document.getElementById('note-modal').classList.remove('hidden');
+        setTimeout(() => input.focus(), 50);
+    });
+}
+function noteChip(text) { document.getElementById('note-input').value = text; }
+function noteOk() {
+    const v = document.getElementById('note-input').value;
+    document.getElementById('note-modal').classList.add('hidden');
+    if (_noteResolve) { _noteResolve(v); _noteResolve = null; }
+}
+function noteCancel() {
+    document.getElementById('note-modal').classList.add('hidden');
+    if (_noteResolve) { _noteResolve(null); _noteResolve = null; }
+}
+
+// --- Fullscreen live camera viewer ---
+let _fsCamId = null, _fsTimer = null;
+function openFullscreen(camId) {
+    _fsCamId = camId;
+    const cam = cameras.find(c => c.id === camId);
+    document.getElementById('fs-name').textContent = cam ? cam.name : ('Kamera ' + camId);
+    document.getElementById('fs-viewer').classList.remove('hidden');
+    const refresh = () => {
+        const img = document.getElementById('fs-img');
+        const conn = document.getElementById('fs-conn');
+        const _u = `/api/cameras/${camId}/snapshot?t=${Date.now()}`;
+        const url = window.ggAuthedUrl ? window.ggAuthedUrl(_u) : _u;
+        const probe = new Image();
+        probe.onload = () => { img.src = url; if (conn) conn.textContent = '🟢 Canlı'; };
+        probe.onerror = () => { if (conn) conn.textContent = '🔴 Yok'; };
+        probe.src = url;
+    };
+    refresh();
+    clearInterval(_fsTimer);
+    _fsTimer = setInterval(refresh, 1000);
+}
+function closeFullscreen() {
+    clearInterval(_fsTimer); _fsTimer = null; _fsCamId = null;
+    document.getElementById('fs-img').src = '';
+    document.getElementById('fs-viewer').classList.add('hidden');
+    // Exit native fullscreen too if we're in it
+    if (document.fullscreenElement) { try { document.exitFullscreen(); } catch(e){} }
+}
+function fsNativeToggle() {
+    const el = document.getElementById('fs-viewer');
+    if (!document.fullscreenElement) { try { el.requestFullscreen(); } catch(e){} }
+    else { try { document.exitFullscreen(); } catch(e){} }
+}
+// Esc closes whichever overlay is open
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('note-modal').classList.contains('hidden')) { noteCancel(); return; }
+    if (!document.getElementById('fs-viewer').classList.contains('hidden') && !document.fullscreenElement) closeFullscreen();
+    if (!document.getElementById('event-modal').classList.contains('hidden')) document.getElementById('event-modal').classList.add('hidden');
+});
 
 // --- Init ---
 wsConnect();

@@ -32,6 +32,10 @@ class DetectionResult:
     bbox: tuple[int, int, int, int] | None = None  # x, y, w, h
     timestamp: datetime = field(default_factory=datetime.now)
     frame: Optional[np.ndarray] = field(default=None, repr=False)
+    # Per-character OCR confidence, aligned 1:1 with normalized_plate (same
+    # length) when the engine exposes it (fast-alpr does); None otherwise.
+    # Drives the tracker's per-character multi-frame consensus vote.
+    char_confidences: Optional[list[float]] = None
 
 
 @dataclass

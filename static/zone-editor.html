@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
+    <script src="/static/auth-client.js?v=2"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GateGuard — Bölge Düzenleyici</title>
@@ -12,9 +13,17 @@
         ::-webkit-scrollbar-track { background: #111827; }
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
         canvas { cursor: crosshair; }
+        /* Seçili hazır ayar: net bir çerçeve + hafif büyütme, temadan bağımsız. */
+        .preset-btn { opacity: .6; }
+        .preset-btn.preset-active {
+            opacity: 1;
+            box-shadow: 0 0 0 2px #06b6d4;
+            transform: scale(1.02);
+        }
     </style>
+    <link rel="stylesheet" href="/static/gg-light.css">
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
+<body class="bg-gray-950 text-gray-100 min-h-screen light-theme">
 
 <header class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between">
     <div class="flex items-center gap-3">
@@ -46,6 +55,8 @@
         <div class="p-3 border-t border-gray-800 flex flex-wrap gap-2 items-center text-sm">
             <span class="text-gray-400">Tıkla: köşe ekle · Çift tıkla: poligonu kapat · Z: son noktayı sil</span>
             <div class="flex-1"></div>
+            <button onclick="tumGoruntu()" class="text-xs bg-cyan-800/60 border border-cyan-700/50 text-cyan-200 hover:bg-cyan-800 px-3 py-1.5 rounded font-semibold"
+                    title="Avlu/geçiş gibi tüm görüntüyü izlemek için tek tıkla bütün kareyi kaplar. Sonra ayarları seçip Kaydet'e bas.">⬜ Tüm görüntüyü kapla</button>
             <button onclick="undoPoint()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">↶ Son Noktayı Sil</button>
             <button onclick="clearDrawing()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">🗑 Temizle</button>
         </div>
@@ -57,23 +68,42 @@
         <!-- Add zone form -->
         <div>
             <h3 class="font-bold mb-2 text-sm">Yeni Bölge Kaydet</h3>
+
+            <!-- Hazır ayarlar: tek tıkla doğru ayarları doldurur -->
+            <div class="mb-2">
+                <div class="text-[11px] text-gray-500 mb-1">Hazır ayar (önce seç, sonra çiz):</div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button type="button" id="preset-duvar" onclick="zoneOnAyar('duvar')"
+                            class="preset-btn text-xs bg-amber-900/40 border border-amber-700/50 text-amber-300 hover:bg-amber-900/60 px-2 py-1.5 rounded font-semibold transition"
+                            title="Çevre/duvar: kimse olmamalı. İnsan görülür görülmez (anında), gece-gündüz alarm.">
+                        🧱 Duvar / Çit<br><span class="font-normal text-[10px]">anında · 7/24</span>
+                    </button>
+                    <button type="button" id="preset-oyalanma" onclick="zoneOnAyar('oyalanma')"
+                            class="preset-btn text-xs bg-gray-800 border border-gray-700 hover:bg-gray-700 px-2 py-1.5 rounded font-semibold transition"
+                            title="Birinin bir bölgede uzunca oyalanmasını yakalar. Gece aktif, birkaç saniye bekler.">
+                        🚶 Oyalanma<br><span class="font-normal text-[10px]">gece · 5 sn</span>
+                    </button>
+                </div>
+            </div>
+
             <div class="space-y-2">
                 <input id="zone-name" placeholder="Bölge adı (örn. Duvar Dibi)"
                        class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
                 <label class="flex items-center gap-2 text-sm">
                     <input type="checkbox" id="zone-night" checked>
-                    <span>Sadece gece aktif</span>
+                    <span>Sadece gece aktif <span class="text-[10px] text-gray-500">(kapalı = 7/24)</span></span>
                 </label>
                 <label class="text-xs text-gray-400 flex items-center gap-2">
-                    <span>Loitering (sn):</span>
-                    <input id="zone-loiter" type="number" min="1" max="60" value="5"
+                    <span>Bekleme (sn):</span>
+                    <input id="zone-loiter" type="number" min="0" max="60" value="5"
                            class="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                    <span class="text-[10px] text-gray-500">0 = anında (duvar/çit)</span>
                 </label>
                 <label class="flex items-start gap-2 text-sm pt-1 border-t border-gray-800">
                     <input type="checkbox" id="zone-motion-fallback" class="mt-0.5">
                     <div>
-                        <span class="font-semibold text-amber-300">🛡️ Hareket fallback (perimeter)</span>
-                        <p class="text-[11px] text-gray-500">YOLO insanı tanıyamasa bile kedi/köpek olmayan, uzun süreli ve insan-benzeri hareketleri yakalar. Duvar üstü / çit etrafı bölgeleri için önerilir.</p>
+                        <span class="font-semibold text-amber-300">🛡️ Hareket yakalama (çevre/duvar)</span>
+                        <p class="text-[11px] text-gray-500">Yapay zeka insanı net seçemese bile, hayvan olmayan uzun süreli insan-benzeri hareketi de yakalar. Duvar üstü / çit kenarı bölgeleri için önerilir.</p>
                     </div>
                 </label>
                 <div id="point-count" class="text-xs text-gray-500">0 köşe çizildi</div>
@@ -97,10 +127,48 @@
     </aside>
 </main>
 
+<!-- Styled confirm (replaces native confirm) -->
+<div id="confirm-modal" class="hidden fixed inset-0 z-[65] bg-black/70 flex items-center justify-center p-4"
+     onclick="if(event.target===this) confirmCancel()">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-sm w-full shadow-2xl">
+        <div class="p-5">
+            <h3 id="confirm-title" class="text-xl font-bold">Emin misiniz?</h3>
+            <p id="confirm-msg" class="text-base text-gray-300 mt-2"></p>
+        </div>
+        <div class="px-5 pb-5 flex gap-2">
+            <button id="confirm-ok" class="flex-1 bg-red-600 hover:bg-red-500 text-white text-lg font-semibold py-3 rounded-xl transition">Sil</button>
+            <button onclick="confirmCancel()" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-lg py-3 rounded-xl transition">Vazgeç</button>
+        </div>
+    </div>
+</div>
+
 <!-- Toast -->
 <div id="toast" class="fixed bottom-4 right-4 space-y-2 z-40"></div>
 
 <script>
+// Styled confirm popup (Promise<boolean>) — replaces the native confirm().
+let _confirmResolve = null;
+function ggConfirm(msg, { title = 'Emin misiniz?', okLabel = 'Sil' } = {}) {
+    return new Promise(resolve => {
+        _confirmResolve = resolve;
+        document.getElementById('confirm-title').textContent = title;
+        document.getElementById('confirm-msg').textContent = msg;
+        document.getElementById('confirm-ok').textContent = okLabel;
+        document.getElementById('confirm-ok').onclick = () => {
+            document.getElementById('confirm-modal').classList.add('hidden');
+            if (_confirmResolve) { _confirmResolve(true); _confirmResolve = null; }
+        };
+        document.getElementById('confirm-modal').classList.remove('hidden');
+    });
+}
+function confirmCancel() {
+    document.getElementById('confirm-modal').classList.add('hidden');
+    if (_confirmResolve) { _confirmResolve(false); _confirmResolve = null; }
+}
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !document.getElementById('confirm-modal').classList.contains('hidden')) confirmCancel();
+});
+
 let selectedCameraId = null;
 let existingZones = [];
 let drawingPoints = [];   // [[x_norm, y_norm], ...]
@@ -141,7 +209,8 @@ async function selectCamera(cid) {
 
 async function refreshSnapshot(showToast=true) {
     if (!selectedCameraId) return;
-    const url = `/api/cameras/${selectedCameraId}/snapshot?t=${Date.now()}`;
+    const _u = `/api/cameras/${selectedCameraId}/snapshot?t=${Date.now()}`;
+    const url = window.ggAuthedUrl ? window.ggAuthedUrl(_u) : _u;
     const img = new Image();
     img.onload = () => {
         bgImg = img;
@@ -186,7 +255,7 @@ function renderZoneList() {
                 <span class="font-semibold">${escapeHtml(z.name)}</span>
                 <span class="text-xs text-gray-400">${status}</span>
             </div>
-            <div class="text-[10px] text-gray-500">${(z.polygon_points||[]).length} köşe · ${z.min_loiter_sec}sn eşik${z.enable_motion_fallback ? ' · 🛡️ <span class="text-amber-400">hareket fallback</span>' : ''}</div>
+            <div class="text-[10px] text-gray-500">${(z.polygon_points||[]).length} köşe · ${z.min_loiter_sec === 0 ? 'anında' : z.min_loiter_sec + 'sn bekleme'}${z.enable_motion_fallback ? ' · 🛡️ <span class="text-amber-400">hareket yakalama</span>' : ''}</div>
             <div class="flex gap-1 mt-1">
                 <button onclick="toggleZone(${z.id}, ${!z.enabled})" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">
                     ${z.enabled ? 'Pasifleştir' : 'Aktifleştir'}
@@ -272,6 +341,13 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'z' || e.key === 'Z') undoPoint();
 });
 
+// Tek tıkla tüm kareyi kaplayan bir poligon doldurur (avlu/geçiş senaryosu).
+function tumGoruntu() {
+    drawingPoints = [[0.001,0.001],[0.999,0.001],[0.999,0.999],[0.001,0.999]];
+    updatePointCount();
+    redraw();
+    toast('Tüm görüntü işaretlendi — ayarları seçip Kaydet', 'basari');
+}
 function undoPoint() {
     drawingPoints.pop();
     updatePointCount();
@@ -288,13 +364,40 @@ function updatePointCount() {
     document.getElementById('point-count').textContent = `${drawingPoints.length} köşe çizildi`;
 }
 
+// Hazır ayar: form alanlarını senaryoya göre tek tıkla doldurur.
+function zoneOnAyar(tip) {
+    const night = document.getElementById('zone-night');
+    const loiter = document.getElementById('zone-loiter');
+    const motion = document.getElementById('zone-motion-fallback');
+    const nameEl = document.getElementById('zone-name');
+    if (tip === 'duvar') {            // çevre/duvar: anında, 7/24, hareket yakalama açık
+        night.checked = false;
+        loiter.value = 0;
+        motion.checked = true;
+        if (!nameEl.value.trim()) nameEl.value = 'Duvar / Çit';
+        toast('Hazır ayar: Duvar/Çit — anında, 7/24', 'basari');
+    } else {                          // oyalanma: gece, 5 sn bekleme
+        night.checked = true;
+        loiter.value = 5;
+        motion.checked = false;
+        if (!nameEl.value.trim()) nameEl.value = 'Oyalanma Bölgesi';
+        toast('Hazır ayar: Oyalanma — gece, 5 sn', 'basari');
+    }
+    // Seçili hazır ayarı görsel olarak işaretle (hangisi aktif belli olsun).
+    document.getElementById('preset-duvar').classList.toggle('preset-active', tip === 'duvar');
+    document.getElementById('preset-oyalanma').classList.toggle('preset-active', tip === 'oyalanma');
+}
+
 async function saveZone() {
     if (!selectedCameraId) { toast('Kamera seçin', 'hata'); return; }
     const name = document.getElementById('zone-name').value.trim();
     if (!name) { toast('Bölgeye bir ad verin', 'hata'); return; }
     if (drawingPoints.length < 3) { toast('En az 3 köşe çizin', 'hata'); return; }
     const nightOnly = document.getElementById('zone-night').checked;
-    const loiter = parseInt(document.getElementById('zone-loiter').value) || 5;
+    // Preserve a legitimate 0 (instant "wall/perimeter" zone). `|| 5` would
+    // turn 0 into 5 and silently defeat the instant preset.
+    const _lv = parseInt(document.getElementById('zone-loiter').value, 10);
+    const loiter = Number.isFinite(_lv) ? Math.max(0, _lv) : 5;
     const motionFallback = document.getElementById('zone-motion-fallback').checked;
 
     try {
@@ -331,7 +434,7 @@ async function toggleZone(zid, enabled) {
 }
 
 async function deleteZone(zid) {
-    if (!confirm('Bu bölgeyi silmek istediğinize emin misiniz?')) return;
+    if (!await ggConfirm('Bu bölgeyi silmek istediğinize emin misiniz?', { title: 'Bölgeyi sil', okLabel: 'Evet, sil' })) return;
     try {
         await fetch(`/api/zones/${zid}`, { method: 'DELETE' });
         toast('Bölge silindi', 'basari');
@@ -345,11 +448,14 @@ function escapeHtml(s) {
 
 function toast(msg, tip='bilgi') {
     const c = document.getElementById('toast');
-    const cls = { basari: 'bg-green-900/70 border-green-700 text-green-300',
-                  hata:   'bg-red-900/70 border-red-700 text-red-300',
-                  bilgi:  'bg-blue-900/70 border-blue-700 text-blue-300' };
+    // Solid backgrounds + white text so the toast stays legible in BOTH the
+    // dark and light themes. Set inline with !important because gg-light.css
+    // rewrites text-white → dark on non-button elements (washed the old toast out).
+    const bg = { basari: '#16a34a', hata: '#dc2626', bilgi: '#2563eb' };
     const el = document.createElement('div');
-    el.className = `p-3 rounded-lg border text-sm ${cls[tip] || cls.bilgi}`;
+    el.className = 'p-3 rounded-lg text-sm font-medium shadow-lg';
+    el.style.setProperty('background', bg[tip] || bg.bilgi, 'important');
+    el.style.setProperty('color', '#ffffff', 'important');
     el.textContent = msg;
     c.appendChild(el);
     setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 3500);

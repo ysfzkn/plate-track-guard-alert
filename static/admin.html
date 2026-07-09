@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
+    <script src="/static/auth-client.js?v=2"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GateGuard — Kamera Yönetimi</title>
@@ -12,8 +13,9 @@
         ::-webkit-scrollbar-track { background: #111827; }
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
     </style>
+    <link rel="stylesheet" href="/static/gg-light.css">
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
+<body class="bg-gray-950 text-gray-100 min-h-screen light-theme">
 
 <header class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between">
     <div class="flex items-center gap-3">
@@ -40,9 +42,9 @@
             <input id="new-rtsp" placeholder="rtsp://admin:SIFRE@192.168.1.x:554/..."
                    class="md:col-span-2 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm font-mono">
             <select id="new-role" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
-                <option value="intrusion">Hırsızlık Tespiti (Modül 2)</option>
-                <option value="plate">Plaka Tespiti (Modül 1)</option>
-                <option value="both">Her İkisi</option>
+                <option value="intrusion">Hırsızlık Tespiti</option>
+                <option value="plate">Plaka Tespiti</option>
+                <option value="both">Her İkisi (plaka + hırsızlık)</option>
             </select>
             <label class="flex items-center gap-2 text-sm bg-gray-800 border border-gray-700 rounded px-3 py-2">
                 <input type="checkbox" id="new-enabled" checked>
@@ -219,7 +221,7 @@ async function saveEdit() {
 }
 
 async function removeCamera(cid, name) {
-    if (!confirm(`"${name}" kamerasını silmek istediğinize emin misiniz? Bölgeleri de silinecek.`)) return;
+    if (!await ggConfirm(`"${name}" kamerasını silmek istediğinize emin misiniz? Bölgeleri de silinecek.`, { title: 'Kamerayı sil', okLabel: 'Evet, sil' })) return;
     try {
         await fetch(`/api/cameras/${cid}`, { method: 'DELETE' });
         toast('Kamera silindi', 'basari');
@@ -251,7 +253,8 @@ async function testConnection(cid) {
         // Show snapshot if orchestrator has a stream
         if (d.connected && d.frame_size) {
             const img = document.getElementById('test-img');
-            img.src = `/api/cameras/${cid}/snapshot?t=${Date.now()}`;
+            const _u = `/api/cameras/${cid}/snapshot?t=${Date.now()}`;
+            img.src = window.ggAuthedUrl ? window.ggAuthedUrl(_u) : _u;
             img.onload = () => img.classList.remove('hidden');
         }
     } catch (e) {
@@ -277,6 +280,55 @@ function toast(msg, tip='bilgi') {
 }
 
 loadCameras();
+</script>
+<!-- Shared styled dialog: window.ggConfirm / ggPrompt / ggAlert (replaces native confirm/prompt/alert) -->
+<div id="gg-modal" class="hidden fixed inset-0 z-[9998] bg-black/70 flex items-center justify-center p-4">
+  <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-md w-full shadow-2xl">
+    <div class="px-5 py-4 border-b border-gray-800">
+      <h3 id="gg-modal-title" class="text-xl font-bold">Onay</h3>
+      <p id="gg-modal-msg" class="text-base text-gray-300 mt-1" style="white-space:pre-line"></p>
+    </div>
+    <div id="gg-modal-inputwrap" class="px-5 pt-4 hidden">
+      <input id="gg-modal-input" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-lg">
+    </div>
+    <div class="px-5 py-4 flex gap-2 justify-end">
+      <button id="gg-modal-cancel" class="bg-gray-700 hover:bg-gray-600 text-white text-lg py-2.5 px-5 rounded-xl transition">İptal</button>
+      <button id="gg-modal-ok" class="text-lg font-semibold py-2.5 px-5 rounded-xl transition text-white bg-cyan-600 hover:bg-cyan-500">Tamam</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let resolver = null, mode = 'confirm';
+  function done(val){ $('gg-modal').classList.add('hidden'); const r = resolver; resolver = null; if (r) r(val); }
+  function open(o){
+    return new Promise(res => {
+      resolver = res; mode = o.mode || 'confirm';
+      $('gg-modal-title').textContent = o.title || '';
+      $('gg-modal-msg').textContent = o.msg || '';
+      const iw = $('gg-modal-inputwrap');
+      if (mode === 'prompt') { iw.classList.remove('hidden'); const i = $('gg-modal-input'); i.value = o.value || ''; i.placeholder = o.placeholder || ''; }
+      else iw.classList.add('hidden');
+      const cancel = $('gg-modal-cancel');
+      cancel.style.display = (mode === 'alert') ? 'none' : '';
+      cancel.textContent = o.cancelLabel || 'İptal';
+      const ok = $('gg-modal-ok');
+      ok.textContent = o.okLabel || (mode === 'confirm' ? 'Evet' : 'Tamam');
+      ok.className = 'text-lg font-semibold py-2.5 px-5 rounded-xl transition text-white ' + (o.danger ? 'bg-red-600 hover:bg-red-500' : 'bg-cyan-600 hover:bg-cyan-500');
+      $('gg-modal').classList.remove('hidden');
+      setTimeout(() => (mode === 'prompt' ? $('gg-modal-input') : ok).focus(), 50);
+    });
+  }
+  $('gg-modal-ok').onclick = () => done(mode === 'prompt' ? $('gg-modal-input').value : true);
+  $('gg-modal-cancel').onclick = () => done(mode === 'prompt' ? null : false);
+  $('gg-modal').addEventListener('click', e => { if (e.target === $('gg-modal')) done(mode === 'prompt' ? null : false); });
+  $('gg-modal-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('gg-modal-ok').click(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('gg-modal').classList.contains('hidden')) $('gg-modal-cancel').click(); });
+  window.ggConfirm = (msg, opts = {}) => open({ title: opts.title || 'Onay', msg, mode: 'confirm', okLabel: opts.okLabel || 'Evet', cancelLabel: opts.cancelLabel, danger: opts.danger !== false });
+  window.ggPrompt  = (msg, opts = {}) => open({ title: opts.title || 'Bilgi girin', msg, mode: 'prompt', okLabel: opts.okLabel || 'Tamam', placeholder: opts.placeholder, value: opts.value });
+  window.ggAlert   = (msg, opts = {}) => open({ title: opts.title || 'Uyarı', msg, mode: 'alert', okLabel: opts.okLabel || 'Tamam' });
+})();
 </script>
 </body>
 </html>

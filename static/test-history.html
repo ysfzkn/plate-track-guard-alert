@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <script src="/static/auth-client.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard — Test Arşivi</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+    <script src="/static/tailwind.js"></script>
+    <style>
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        .module-pill { font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+        .pill-m1 { background: rgba(34,197,94,0.18); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+        .pill-m2 { background: rgba(168,85,247,0.18); color: #d8b4fe; border: 1px solid rgba(168,85,247,0.3); }
+    </style>
+    <link rel="stylesheet" href="/static/gg-light.css">
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen light-theme">
+
+<header class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        <a href="/" class="text-gray-500 hover:text-gray-300 text-sm">← Ana Panel</a>
+        <div class="w-px h-5 bg-gray-700"></div>
+        <h1 class="text-lg font-bold">🧪 Test Arşivi</h1>
+    </div>
+    <div class="flex items-center gap-2">
+        <a href="/intrusion-test" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">👤 Modül 2 Test</a>
+        <a href="/alpr-test" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded border border-gray-700">🚗 Modül 1 Test</a>
+        <button onclick="excelExport()" class="text-xs bg-cyan-700 hover:bg-cyan-600 px-3 py-1.5 rounded">⬇ Excel</button>
+    </div>
+</header>
+
+<main class="max-w-7xl mx-auto p-5 space-y-4">
+
+    <!-- Filtre -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 flex items-center gap-3">
+        <span class="text-sm text-gray-400">Modül:</span>
+        <select id="filter-module" onchange="loadRuns()" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+            <option value="">Tümü</option>
+            <option value="m1">Modül 1 (Plaka)</option>
+            <option value="m2">Modül 2 (Kişi)</option>
+        </select>
+        <span id="run-count" class="text-xs text-gray-500 ml-auto"></span>
+    </div>
+
+    <!-- Liste -->
+    <div id="runs-list" class="space-y-2"></div>
+
+    <div id="empty" class="hidden text-center py-16">
+        <div class="text-6xl mb-3 opacity-30">📋</div>
+        <p class="text-gray-300 font-semibold">Henüz test çalışması yok</p>
+        <p class="text-xs text-gray-500 mt-2 max-w-md mx-auto">
+            Modül 1 veya Modül 2 test ekranlarından "Tam pipeline ile test" seçeneği ile bir video çalıştırın.
+            Sonuçlar burada arşivlenecek.
+        </p>
+        <div class="mt-4 flex justify-center gap-2">
+            <a href="/intrusion-test" class="bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded text-sm font-semibold">👤 Modül 2 Test</a>
+            <a href="/alpr-test" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded text-sm font-semibold">🚗 Modül 1 Test</a>
+        </div>
+    </div>
+</main>
+
+<!-- Detay modal -->
+<div id="detail-modal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+     onclick="if(event.target===this) this.classList.add('hidden')">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl max-w-4xl w-full max-h-[92vh] overflow-y-auto">
+        <div class="p-4 border-b border-gray-800 flex items-center justify-between sticky top-0 bg-gray-900 z-10">
+            <h3 id="detail-title" class="font-bold">Test Detayı</h3>
+            <button onclick="document.getElementById('detail-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-xl px-2">✕</button>
+        </div>
+        <div id="detail-body" class="p-4 space-y-4"></div>
+    </div>
+</div>
+
+<div id="toast" class="fixed bottom-4 right-4 space-y-2 z-40"></div>
+
+<script>
+async function loadRuns() {
+    const mod = document.getElementById('filter-module').value;
+    try {
+        const r = await fetch('/api/test-runs?limit=200' + (mod ? '&module=' + mod : ''));
+        const data = await r.json();
+        const runs = data.runs || [];
+        document.getElementById('run-count').textContent = `${runs.length} kayıt`;
+        const list = document.getElementById('runs-list');
+        const empty = document.getElementById('empty');
+        if (!runs.length) {
+            list.innerHTML = '';
+            empty.classList.remove('hidden');
+            return;
+        }
+        empty.classList.add('hidden');
+        list.innerHTML = runs.map(r => {
+            const t = new Date(r.ran_at).toLocaleString('tr-TR');
+            const modPill = r.module === 'm1'
+                ? '<span class="module-pill pill-m1">🚗 Modül 1</span>'
+                : '<span class="module-pill pill-m2">👤 Modül 2</span>';
+            return `<div class="bg-gray-900 border border-gray-800 rounded-xl p-3 hover:border-gray-700 transition cursor-pointer" onclick="showDetail(${r.id})">
+                <div class="flex items-center gap-3">
+                    ${modPill}
+                    <span class="font-semibold text-sm truncate flex-1">${escapeHtml(r.source_filename || '-')}</span>
+                    <span class="text-xs text-gray-500">${t}</span>
+                </div>
+                <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                    <span><b class="text-white">${r.event_count}</b> olay</span>
+                    <span>${r.duration_sec}sn işlem</span>
+                    <span>${r.test_type}</span>
+                    ${r.output_video_url ? '<span class="text-cyan-400">🎬 video</span>' : ''}
+                    <span class="flex-1"></span>
+                    <button onclick="event.stopPropagation(); deleteRun(${r.id})" class="text-red-400 hover:text-red-300">🗑 Sil</button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        toast('Test arşivi yüklenemedi', 'hata');
+    }
+}
+
+async function showDetail(id) {
+    try {
+        const r = await fetch('/api/test-runs/' + id);
+        if (!r.ok) throw new Error('Bulunamadı');
+        const d = await r.json();
+        const summary = d.summary || {};
+        const params = d.params || {};
+        const isM1 = d.module === 'm1';
+
+        let body = `<div class="bg-gray-800/40 rounded-lg p-3 text-xs space-y-1">
+            <div><b>Dosya:</b> ${escapeHtml(d.source_filename || '-')}</div>
+            <div><b>Tarih:</b> ${new Date(d.ran_at).toLocaleString('tr-TR')}</div>
+            <div><b>Modül:</b> ${d.module === 'm1' ? 'Modül 1 (Plaka)' : 'Modül 2 (Kişi)'}</div>
+            <div><b>Parametreler:</b> <code class="text-cyan-300">${escapeHtml(JSON.stringify(params))}</code></div>
+            <div><b>İşlem süresi:</b> ${d.duration_sec} saniye</div>
+        </div>`;
+
+        if (d.output_video_url) {
+            body += `<video controls class="w-full rounded-lg bg-black aspect-video" src="${d.output_video_url}"></video>`;
+        }
+
+        if (isM1 && summary.tracks) {
+            const stats = summary.stats || {};
+            body += `<div class="bg-gray-800/40 rounded-lg p-3 text-sm grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div><div class="text-xs text-gray-500">Toplam tespit</div><div class="text-xl font-bold">${stats.detections || 0}</div></div>
+                <div><div class="text-xs text-gray-500">Geçerli TR plaka</div><div class="text-xl font-bold text-green-400">${stats.valid_detections || 0}</div></div>
+                <div><div class="text-xs text-gray-500">Commit edilen track</div><div class="text-xl font-bold text-cyan-400">${stats.committed_tracks || 0}</div></div>
+                <div><div class="text-xs text-gray-500">Düşürülen track</div><div class="text-xl font-bold text-amber-400">${stats.dropped_tracks || 0}</div></div>
+            </div>`;
+            body += '<div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">';
+            body += '<div class="px-3 py-2 bg-gray-800/50 text-xs font-semibold text-gray-400">Track Sonuçları</div>';
+            body += '<table class="w-full text-xs">';
+            body += '<thead class="bg-gray-800/30"><tr class="text-left text-gray-500"><th class="p-2">#</th><th class="p-2">Plaka</th><th class="p-2">Güven</th><th class="p-2">Yön</th><th class="p-2">Yetki</th><th class="p-2">Sonuç</th><th class="p-2">Alarm?</th></tr></thead><tbody>';
+            for (const t of (summary.tracks || [])) {
+                const auth = t.authorized
+                    ? `<span class="text-green-400">✓ ${escapeHtml(t.owner_name || '')}${t.apartment ? ' · D:'+escapeHtml(t.apartment) : ''}</span>`
+                    : (t.outcome === 'DROP' ? '<span class="text-gray-500">—</span>' : '<span class="text-red-400 font-bold">✗ KAÇAK</span>');
+                const alarm = t.would_alarm ? '<span class="text-red-400 font-bold">🚨 EVET</span>' : '<span class="text-gray-500">hayır</span>';
+                const outcome = t.outcome === 'DROP'
+                    ? `<span class="text-amber-400">DROP</span><br><span class="text-[10px] text-gray-500">${escapeHtml(t.reason || '')}</span>`
+                    : `<span class="text-green-400">COMMIT</span>`;
+                body += `<tr class="border-t border-gray-800/50">
+                    <td class="p-2 text-gray-500">${t.track_id}</td>
+                    <td class="p-2 font-mono font-bold">${escapeHtml(t.plate || t.readings?.[0] || '-')}</td>
+                    <td class="p-2">${t.confidence !== undefined ? '%'+Math.round(t.confidence*100) : '-'}</td>
+                    <td class="p-2">${t.direction || '-'}</td>
+                    <td class="p-2">${auth}</td>
+                    <td class="p-2">${outcome}</td>
+                    <td class="p-2">${alarm}</td>
+                </tr>`;
+            }
+            body += '</tbody></table></div>';
+        } else if (!isM1 && summary.events !== undefined) {
+            const rules = summary.rule_stats || {};
+            body += `<div class="bg-gray-800/40 rounded-lg p-3 text-sm grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div><div class="text-xs text-gray-500">Toplam tespit</div><div class="text-xl font-bold">${rules.detections || 0}</div></div>
+                <div><div class="text-xs text-gray-500">Bölge içinde</div><div class="text-xl font-bold text-cyan-400">${rules.in_zone || 0}</div></div>
+                <div><div class="text-xs text-gray-500">Kuralları geçen</div><div class="text-xl font-bold text-green-400">${rules.passed_classifier || 0}</div></div>
+                <div><div class="text-xs text-gray-500">Olay sayısı</div><div class="text-xl font-bold text-red-400">${summary.events.length}</div></div>
+            </div>`;
+            body += '<div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">';
+            body += '<div class="px-3 py-2 bg-gray-800/50 text-xs font-semibold text-gray-400">Tetiklenen Olaylar</div>';
+            if (!summary.events.length) {
+                body += '<div class="p-4 text-sm text-gray-500 text-center">Bu video hiç alarm tetiklemedi.</div>';
+            } else {
+                body += '<table class="w-full text-xs"><thead class="bg-gray-800/30"><tr class="text-left text-gray-500"><th class="p-2">Frame</th><th class="p-2">Zaman</th><th class="p-2">Zone</th><th class="p-2">Track</th><th class="p-2">Süre</th><th class="p-2">Güven</th></tr></thead><tbody>';
+                for (const e of summary.events) {
+                    body += `<tr class="border-t border-gray-800/50">
+                        <td class="p-2">${e.frame}</td>
+                        <td class="p-2">${e.time_sec}sn</td>
+                        <td class="p-2">${e.zone_id}</td>
+                        <td class="p-2">${e.track_id}</td>
+                        <td class="p-2">${e.duration_sec}sn</td>
+                        <td class="p-2">%${Math.round(e.confidence*100)}</td>
+                    </tr>`;
+                }
+                body += '</tbody></table>';
+            }
+            body += '</div>';
+        }
+        document.getElementById('detail-title').textContent = `Test #${d.id} — ${d.source_filename || ''}`;
+        document.getElementById('detail-body').innerHTML = body;
+        document.getElementById('detail-modal').classList.remove('hidden');
+    } catch (e) {
+        toast('Detay yüklenemedi: ' + e.message, 'hata');
+    }
+}
+
+async function deleteRun(id) {
+    if (!await ggConfirm('Bu test kaydını silmek istediğinden emin misin?', { title: 'Kaydı sil', okLabel: 'Evet, sil' })) return;
+    try {
+        await fetch('/api/test-runs/' + id, { method: 'DELETE' });
+        loadRuns();
+        toast('Silindi', 'basari');
+    } catch { toast('Silme başarısız', 'hata'); }
+}
+
+function excelExport() {
+    const mod = document.getElementById('filter-module').value;
+    window.location.href = '/api/test-runs/export.xlsx' + (mod ? '?module='+mod : '');
+}
+
+function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function toast(msg, tip='bilgi') {
+    const c = document.getElementById('toast');
+    const cls = { basari: 'bg-green-900/70 border-green-700 text-green-300',
+                  hata:   'bg-red-900/70 border-red-700 text-red-300',
+                  bilgi:  'bg-blue-900/70 border-blue-700 text-blue-300' };
+    const el = document.createElement('div');
+    el.className = `p-3 rounded-lg border text-sm ${cls[tip] || cls.bilgi}`;
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 4500);
+}
+
+loadRuns();
+</script>
+<!-- Shared styled dialog: window.ggConfirm / ggPrompt / ggAlert (replaces native confirm/prompt/alert) -->
+<div id="gg-modal" class="hidden fixed inset-0 z-[9998] bg-black/70 flex items-center justify-center p-4">
+  <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-md w-full shadow-2xl">
+    <div class="px-5 py-4 border-b border-gray-800">
+      <h3 id="gg-modal-title" class="text-xl font-bold">Onay</h3>
+      <p id="gg-modal-msg" class="text-base text-gray-300 mt-1" style="white-space:pre-line"></p>
+    </div>
+    <div id="gg-modal-inputwrap" class="px-5 pt-4 hidden">
+      <input id="gg-modal-input" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-lg">
+    </div>
+    <div class="px-5 py-4 flex gap-2 justify-end">
+      <button id="gg-modal-cancel" class="bg-gray-700 hover:bg-gray-600 text-white text-lg py-2.5 px-5 rounded-xl transition">İptal</button>
+      <button id="gg-modal-ok" class="text-lg font-semibold py-2.5 px-5 rounded-xl transition text-white bg-cyan-600 hover:bg-cyan-500">Tamam</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let resolver = null, mode = 'confirm';
+  function done(val){ $('gg-modal').classList.add('hidden'); const r = resolver; resolver = null; if (r) r(val); }
+  function open(o){
+    return new Promise(res => {
+      resolver = res; mode = o.mode || 'confirm';
+      $('gg-modal-title').textContent = o.title || '';
+      $('gg-modal-msg').textContent = o.msg || '';
+      const iw = $('gg-modal-inputwrap');
+      if (mode === 'prompt') { iw.classList.remove('hidden'); const i = $('gg-modal-input'); i.value = o.value || ''; i.placeholder = o.placeholder || ''; }
+      else iw.classList.add('hidden');
+      const cancel = $('gg-modal-cancel');
+      cancel.style.display = (mode === 'alert') ? 'none' : '';
+      cancel.textContent = o.cancelLabel || 'İptal';
+      const ok = $('gg-modal-ok');
+      ok.textContent = o.okLabel || (mode === 'confirm' ? 'Evet' : 'Tamam');
+      ok.className = 'text-lg font-semibold py-2.5 px-5 rounded-xl transition text-white ' + (o.danger ? 'bg-red-600 hover:bg-red-500' : 'bg-cyan-600 hover:bg-cyan-500');
+      $('gg-modal').classList.remove('hidden');
+      setTimeout(() => (mode === 'prompt' ? $('gg-modal-input') : ok).focus(), 50);
+    });
+  }
+  $('gg-modal-ok').onclick = () => done(mode === 'prompt' ? $('gg-modal-input').value : true);
+  $('gg-modal-cancel').onclick = () => done(mode === 'prompt' ? null : false);
+  $('gg-modal').addEventListener('click', e => { if (e.target === $('gg-modal')) done(mode === 'prompt' ? null : false); });
+  $('gg-modal-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('gg-modal-ok').click(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('gg-modal').classList.contains('hidden')) $('gg-modal-cancel').click(); });
+  window.ggConfirm = (msg, opts = {}) => open({ title: opts.title || 'Onay', msg, mode: 'confirm', okLabel: opts.okLabel || 'Evet', cancelLabel: opts.cancelLabel, danger: opts.danger !== false });
+  window.ggPrompt  = (msg, opts = {}) => open({ title: opts.title || 'Bilgi girin', msg, mode: 'prompt', okLabel: opts.okLabel || 'Tamam', placeholder: opts.placeholder, value: opts.value });
+  window.ggAlert   = (msg, opts = {}) => open({ title: opts.title || 'Uyarı', msg, mode: 'alert', okLabel: opts.okLabel || 'Tamam' });
+})();
+</script>
+</body>
+</html>

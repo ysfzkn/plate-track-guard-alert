@@ -83,7 +83,10 @@ class Zone:
             name=row["name"],
             polygon_points=pts,
             is_night_only=bool(row.get("is_night_only", 1)),
-            min_loiter_sec=int(row.get("min_loiter_sec", 5) or 5),
+            # NOTE: `or 5` would coerce a legitimate 0 (instant "wall/perimeter"
+            # zone — fire on confirmed presence, no loitering) back to 5. Only
+            # substitute the default when the value is actually missing/None.
+            min_loiter_sec=int(_v) if (_v := row.get("min_loiter_sec")) is not None else 5,
             enabled=bool(row.get("enabled", 1)),
             enable_motion_fallback=bool(row.get("enable_motion_fallback", 0)),
         )

@@ -19,10 +19,41 @@ import cv2
 import numpy as np
 
 from app.camera import AUTHORIZED_PLATES, UNAUTHORIZED_PLATES
-from app.database import normalize_plate, is_valid_turkish_plate
+from app.database import TURKISH_CHAR_MAP, normalize_plate, is_valid_turkish_plate
 from app.models import DetectionResult
 
 logger = logging.getLogger("gateguard.app")
+
+
+def _align_char_confidences(
+    raw_text: str, conf_list, normalized: str
+) -> Optional[list[float]]:
+    """Map an OCR per-character confidence vector onto the normalized plate.
+
+    fast-alpr returns a fixed-length confidence vector; its first len(raw_text)
+    entries align with the raw text characters and any trailing entries are
+    blank/padding. normalize_plate() then upper-cases and drops non-alphanumerics,
+    so we walk raw_text in lockstep, keeping the confidence only for characters
+    that survive normalization. Returns a list the SAME length as `normalized`,
+    or None if alignment can't be trusted (so the caller falls back to the
+    scalar plate confidence).
+    """
+    if not isinstance(conf_list, (list, tuple)) or not conf_list:
+        return None
+    # A vector shorter than the text can't be aligned position-for-position;
+    # bail out rather than pad with fake zeros that would lose every vote.
+    if len(conf_list) < len(raw_text):
+        return None
+    aligned: list[float] = []
+    for i, ch in enumerate(raw_text):
+        nch = ch.translate(TURKISH_CHAR_MAP).upper()
+        # Match normalize_plate() EXACTLY: it keeps only [A-Z0-9]. `isalnum()`
+        # would also accept accented/Unicode letters that normalize strips,
+        # making len(aligned) != len(normalized) and needlessly disabling the
+        # per-char vote. Restrict to ASCII alphanumerics so the two agree.
+        if nch.isascii() and nch.isalnum():
+            aligned.append(float(conf_list[i]))
+    return aligned if len(aligned) == len(normalized) else None
 
 
 class BasePlateDetector(ABC):
@@ -67,6 +98,10 @@ class FastALPRDetector(BasePlateDetector):
                 "fast-alpr not installed. Run: pip install fast-alpr[onnx]"
             )
 
+    def preload(self) -> None:
+        """Eagerly load the models at startup (fail fast on a low-RAM box)."""
+        self._ensure_loaded()
+
     def detect(self, frame: np.ndarray) -> list[DetectionResult]:
         self._ensure_loaded()
         results: list[DetectionResult] = []
@@ -86,7 +121,10 @@ class FastALPRDetector(BasePlateDetector):
                 raw_text = str(pred)
                 conf = 0.0
 
-            # Handle list-type confidence (take mean)
+            # Preserve the per-character confidence vector (fast-alpr returns a
+            # list) before collapsing to a scalar — it drives the tracker's
+            # per-character consensus vote.
+            conf_list = conf if isinstance(conf, (list, tuple)) else None
             if isinstance(conf, (list, tuple)):
                 conf = sum(conf) / len(conf) if conf else 0.0
             conf = float(conf)
@@ -101,6 +139,8 @@ class FastALPRDetector(BasePlateDetector):
                 continue
             if conf < self.confidence_threshold:
                 continue
+
+            char_confs = _align_char_confidences(raw_text, conf_list, normalized)
 
             # Extract bounding box from detector result
             bbox = None
@@ -124,6 +164,7 @@ class FastALPRDetector(BasePlateDetector):
                 bbox=bbox,
                 timestamp=datetime.now(),
                 frame=frame,
+                char_confidences=char_confs,
             ))
 
         return results

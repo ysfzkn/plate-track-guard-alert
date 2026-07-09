@@ -47,6 +47,35 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     return prev[-1]
 
 
+def levenshtein_bounded(s1: str, s2: str, max_dist: int) -> int:
+    """Edit distance, but returns ``max_dist + 1`` as soon as the distance is
+    provably greater than ``max_dist``. Much cheaper than the full distance for
+    the common case (most plates are nowhere near a match): a length-difference
+    check rejects instantly, and the per-row minimum aborts long mismatches
+    after a couple of rows. Used by the hot fuzzy-lookup path.
+    """
+    if abs(len(s1) - len(s2)) > max_dist:
+        return max_dist + 1
+    if len(s1) < len(s2):
+        s1, s2 = s2, s1
+    if len(s2) == 0:
+        return len(s1)
+    prev = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr = [i + 1]
+        row_min = curr[0]
+        for j, c2 in enumerate(s2):
+            cost = 0 if c1 == c2 else 1
+            val = min(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost)
+            curr.append(val)
+            if val < row_min:
+                row_min = val
+        if row_min > max_dist:
+            return max_dist + 1   # cannot recover below threshold
+        prev = curr
+    return prev[-1]
+
+
 # --- Database ---
 
 class Database:
@@ -56,8 +85,26 @@ class Database:
         self._lock = threading.Lock()
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        # ── Performance + concurrency PRAGMAs (P1.4) ──
+        # journal_mode=WAL: reader/writer concurrency (already had it)
+        # synchronous=NORMAL: 5-10x faster writes, durable enough for our use case
+        #                    (a crash may lose the very last transaction)
+        # busy_timeout=5000: if a writer waits on a lock, retry up to 5s before
+        #                    raising — eliminates "database is locked" errors
+        #                    under detection-loop + UI-query contention
+        # cache_size=-64000: 64 MB page cache (sign-negative means KB)
+        # temp_store=MEMORY: temp tables in RAM, not on disk
         self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
+        self.conn.execute("PRAGMA busy_timeout=5000")
+        self.conn.execute("PRAGMA cache_size=-64000")
+        self.conn.execute("PRAGMA temp_store=MEMORY")
         self.conn.execute("PRAGMA foreign_keys=ON")
+        # mmap_size: 256 MB memory-mapped I/O for read-heavy queries
+        try:
+            self.conn.execute("PRAGMA mmap_size=268435456")
+        except sqlite3.OperationalError:
+            pass   # not all SQLite builds support this
         self._init_schema()
 
     def _init_schema(self):
@@ -92,6 +139,17 @@ class Database:
 
             CREATE INDEX IF NOT EXISTS idx_passages_date
                 ON passages(detected_at);
+
+            -- Hot query: filter by plate within a date window (history search,
+            -- duplicate detection). Composite index dramatically speeds the
+            -- WHERE plate_normalized LIKE ? AND detected_at BETWEEN ? AND ?
+            -- pattern used on the history tab.
+            CREATE INDEX IF NOT EXISTS idx_passages_plate_date
+                ON passages(plate_normalized, detected_at);
+
+            -- Hot query: filter by authorized flag for daily stats
+            CREATE INDEX IF NOT EXISTS idx_passages_auth_date
+                ON passages(is_authorized, detected_at);
 
             CREATE TABLE IF NOT EXISTS sync_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,6 +199,7 @@ class Database:
                 confidence REAL,
                 screenshot_path TEXT DEFAULT '',
                 video_clip_path TEXT DEFAULT '',
+                burst_paths TEXT DEFAULT '',
                 acknowledged INTEGER DEFAULT 0,
                 shadow_mode INTEGER DEFAULT 0,
                 notes TEXT DEFAULT ''
@@ -152,6 +211,59 @@ class Database:
                 ON intrusion_events(camera_id, detected_at);
             CREATE INDEX IF NOT EXISTS idx_intrusion_ack
                 ON intrusion_events(acknowledged, detected_at);
+            CREATE INDEX IF NOT EXISTS idx_intrusion_camera_ack
+                ON intrusion_events(camera_id, acknowledged, detected_at);
+
+            -- Vehicles: speed up plate_normalized lookups during sync + alert
+            CREATE INDEX IF NOT EXISTS idx_vehicles_plate_norm
+                ON vehicles(plate_normalized);
+            CREATE INDEX IF NOT EXISTS idx_vehicles_user_type
+                ON vehicles(user_type);
+
+            -- ── Authentication: users + sessions (user/password model) ──
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'operator',   -- 'admin' | 'operator'
+                full_name TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 1,
+                must_change_password INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login_at TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL,
+                user_agent TEXT DEFAULT '',
+                ip TEXT DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+            CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+            -- Saha testi sonuçları arşivi (P2.3)
+            CREATE TABLE IF NOT EXISTS test_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ran_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                module TEXT NOT NULL,        -- 'm1' | 'm2'
+                test_type TEXT NOT NULL,     -- 'photo' | 'video' | 'video_e2e'
+                source_filename TEXT,
+                camera_id INTEGER,
+                params_json TEXT,
+                summary_json TEXT,
+                event_count INTEGER DEFAULT 0,
+                duration_sec REAL DEFAULT 0,
+                output_video_url TEXT DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_test_runs_ran
+                ON test_runs(ran_at);
+            CREATE INDEX IF NOT EXISTS idx_test_runs_module
+                ON test_runs(module, ran_at);
         """)
         self.conn.commit()
         self._migrate()
@@ -170,6 +282,27 @@ class Database:
                 "ALTER TABLE zones ADD COLUMN enable_motion_fallback INTEGER DEFAULT 0"
             )
             self.conn.commit()
+        try:
+            self.conn.execute("SELECT burst_paths FROM intrusion_events LIMIT 1")
+        except sqlite3.OperationalError:
+            self.conn.execute(
+                "ALTER TABLE intrusion_events ADD COLUMN burst_paths TEXT DEFAULT ''"
+            )
+            self.conn.commit()
+
+        # Idempotent index creation for older DBs
+        for stmt in [
+            "CREATE INDEX IF NOT EXISTS idx_passages_plate_date ON passages(plate_normalized, detected_at)",
+            "CREATE INDEX IF NOT EXISTS idx_passages_auth_date  ON passages(is_authorized, detected_at)",
+            "CREATE INDEX IF NOT EXISTS idx_intrusion_camera_ack ON intrusion_events(camera_id, acknowledged, detected_at)",
+            "CREATE INDEX IF NOT EXISTS idx_vehicles_plate_norm ON vehicles(plate_normalized)",
+            "CREATE INDEX IF NOT EXISTS idx_vehicles_user_type  ON vehicles(user_type)",
+        ]:
+            try:
+                self.conn.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
+        self.conn.commit()
 
     # --- Vehicle operations ---
 
@@ -218,15 +351,32 @@ class Database:
         return None
 
     def lookup_plate_fuzzy(self, normalized: str, tolerance: int = 1) -> Optional[Vehicle]:
-        """Fuzzy plate lookup with Levenshtein distance tolerance."""
-        rows = self.conn.execute("SELECT * FROM vehicles").fetchall()
+        """Fuzzy plate lookup with Levenshtein distance tolerance.
+
+        Optimized for the detection hot path: a candidate must be within
+        ``tolerance`` edits, which means its length is within ``tolerance`` of
+        the query (|len(a)-len(b)| <= edit distance). We push that length window
+        into SQL so the expensive Python Levenshtein only runs on the handful of
+        plausible rows, then use the early-exit bounded variant on each. This is
+        an exact optimization — no real match is ever excluded.
+        """
+        if not normalized:
+            return None
+        n = len(normalized)
+        rows = self.conn.execute(
+            "SELECT * FROM vehicles "
+            "WHERE length(plate_normalized) BETWEEN ? AND ?",
+            (n - tolerance, n + tolerance),
+        ).fetchall()
         best_match = None
         best_dist = tolerance + 1
         for row in rows:
-            dist = levenshtein_distance(normalized, row["plate_normalized"])
-            if dist <= tolerance and dist < best_dist:
+            dist = levenshtein_bounded(normalized, row["plate_normalized"], tolerance)
+            if dist < best_dist:
                 best_dist = dist
                 best_match = row
+                if dist == 0:
+                    break   # can't do better than an exact match
         if best_match:
             return self._row_to_vehicle(best_match)
         return None
@@ -264,6 +414,22 @@ class Database:
             self.conn.commit()
             return cursor.lastrowid
 
+    def update_passage(self, passage_id: int, **fields) -> bool:
+        """Update an existing passage (e.g. correct its direction once more
+        fragments of the same vehicle vote a different way). Thread-safe."""
+        allowed = {"direction", "confidence", "screenshot_path", "owner_name", "is_authorized"}
+        filtered = {k: v for k, v in fields.items() if k in allowed}
+        if not filtered:
+            return False
+        cols = ", ".join(f"{k}=?" for k in filtered)
+        vals = list(filtered.values()) + [passage_id]
+        with self._lock:
+            cur = self.conn.execute(
+                f"UPDATE passages SET {cols} WHERE id=?", vals,
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
     def get_recent_passages(self, limit: int = 50) -> list[dict]:
         rows = self.conn.execute(
             """SELECT id, plate, plate_normalized, detected_at, is_authorized,
@@ -283,40 +449,46 @@ class Database:
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[dict], int]:
-        """Filtered passage query with pagination. Returns (rows, total_count)."""
+        """Filtered passage query with pagination. Returns (rows, total_count).
+        Joined with vehicles for apartment/block_no when authorised.
+        """
         where_clauses = []
         params = []
 
         if start_date:
-            where_clauses.append("detected_at >= ?")
+            where_clauses.append("p.detected_at >= ?")
             params.append(start_date)
         if end_date:
-            where_clauses.append("detected_at < date(?, '+1 day')")
+            where_clauses.append("p.detected_at < date(?, '+1 day')")
             params.append(end_date)
         if direction and direction != "all":
-            where_clauses.append("direction = ?")
+            where_clauses.append("p.direction = ?")
             params.append(direction)
         if authorized is not None:
-            where_clauses.append("is_authorized = ?")
+            where_clauses.append("p.is_authorized = ?")
             params.append(int(authorized))
         if plate_search:
-            where_clauses.append("plate_normalized LIKE ?")
+            where_clauses.append("p.plate_normalized LIKE ?")
             params.append(f"%{plate_search.upper()}%")
 
         where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
-        # Total count
+        # Total count (no JOIN needed)
+        count_sql = where_sql.replace("p.", "")
         count_row = self.conn.execute(
-            f"SELECT COUNT(*) as cnt FROM passages{where_sql}", params
+            f"SELECT COUNT(*) as cnt FROM passages{count_sql}", params
         ).fetchone()
         total = count_row["cnt"] if count_row else 0
 
-        # Paginated data
+        # Paginated data — JOIN vehicles for owner/apartment info
         rows = self.conn.execute(
-            f"""SELECT id, plate, plate_normalized, detected_at, is_authorized,
-                       owner_name, confidence, screenshot_path, direction
-                FROM passages{where_sql}
-                ORDER BY detected_at DESC LIMIT ? OFFSET ?""",
+            f"""SELECT p.id, p.plate, p.plate_normalized, p.detected_at, p.is_authorized,
+                       p.owner_name, p.confidence, p.screenshot_path, p.direction,
+                       v.apartment, v.block_no
+                FROM passages p
+                LEFT JOIN vehicles v ON v.plate_normalized = p.plate_normalized
+                {where_sql}
+                ORDER BY p.detected_at DESC LIMIT ? OFFSET ?""",
             params + [limit, offset],
         ).fetchall()
 
@@ -374,6 +546,32 @@ class Database:
             "SELECT synced_at FROM sync_log ORDER BY id DESC LIMIT 1"
         ).fetchone()
         return row["synced_at"] if row else None
+
+    def get_last_sync_status(self) -> dict:
+        """Detailed last-sync info — used by /api/health to surface stale syncs."""
+        row = self.conn.execute(
+            "SELECT synced_at, total, new_count, updated_count, status, error_message "
+            "FROM sync_log ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if not row:
+            return {"synced_at": None, "status": None, "stale": True,
+                    "hours_since": None, "error": None}
+        try:
+            from datetime import datetime as _dt
+            synced_at = _dt.fromisoformat(row["synced_at"])
+            hours_since = (_dt.now() - synced_at).total_seconds() / 3600.0
+        except Exception:
+            hours_since = None
+        return {
+            "synced_at": row["synced_at"],
+            "status": row["status"],
+            "total": row["total"],
+            "new_count": row["new_count"],
+            "updated_count": row["updated_count"],
+            "error": row["error_message"],
+            "hours_since": round(hours_since, 1) if hours_since is not None else None,
+            "stale": (hours_since is None) or (hours_since > 12) or (row["status"] != "success"),
+        }
 
     # --- Helpers ---
 
@@ -520,7 +718,7 @@ class Database:
 
     def update_intrusion_event(self, event_id: int, **fields) -> bool:
         """Used primarily to attach video_clip_path async after commit."""
-        allowed = {"screenshot_path", "video_clip_path", "acknowledged", "notes"}
+        allowed = {"screenshot_path", "video_clip_path", "burst_paths", "acknowledged", "notes"}
         filtered = {k: v for k, v in fields.items() if k in allowed}
         if not filtered:
             return False
@@ -585,8 +783,11 @@ class Database:
         ).fetchall()
         return [dict(r) for r in rows], total
 
-    def acknowledge_intrusion_event(self, event_id: int) -> bool:
-        return self.update_intrusion_event(event_id, acknowledged=1)
+    def acknowledge_intrusion_event(self, event_id: int, note: str = "") -> bool:
+        fields = {"acknowledged": 1}
+        if note:
+            fields["notes"] = note
+        return self.update_intrusion_event(event_id, **fields)
 
     def get_passages_by_day(self, days: int = 7) -> list[dict]:
         """Daily aggregate of passages for the last N days (oldest first).
@@ -677,6 +878,212 @@ class Database:
             "SELECT * FROM intrusion_events ORDER BY detected_at DESC LIMIT 1"
         ).fetchone()
         return dict(row) if row else None
+
+    def delete_intrusion_events_before(self, cutoff: datetime) -> int:
+        """Hard-delete intrusion events older than cutoff. Returns rows removed."""
+        with self._lock:
+            cur = self.conn.execute(
+                "DELETE FROM intrusion_events WHERE detected_at < ?",
+                (cutoff.isoformat(),),
+            )
+            self.conn.commit()
+            return cur.rowcount
+
+    # ── Users + sessions (auth) ─────────────────────────────────────
+
+    def get_user_count(self) -> int:
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS cnt FROM users WHERE is_active=1"
+        ).fetchone()
+        return row["cnt"] if row else 0
+
+    def get_user_by_username(self, username: str) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM users WHERE LOWER(username)=LOWER(?) AND is_active=1",
+            (username.strip(),),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_user_by_id(self, user_id: int) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM users WHERE id=? AND is_active=1", (user_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_users(self) -> list[dict]:
+        rows = self.conn.execute(
+            """SELECT id, username, role, full_name, is_active,
+                      must_change_password, created_at, last_login_at
+               FROM users ORDER BY id ASC"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def add_user(
+        self, username: str, password_hash: str, salt: str,
+        role: str = "operator", full_name: str = "",
+        must_change_password: int = 0,
+    ) -> int:
+        with self._lock:
+            cur = self.conn.execute(
+                """INSERT INTO users (username, password_hash, salt, role,
+                                      full_name, must_change_password)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (username.strip(), password_hash, salt, role,
+                 full_name, must_change_password),
+            )
+            self.conn.commit()
+            return cur.lastrowid
+
+    def update_user_password(self, user_id: int, password_hash: str, salt: str) -> bool:
+        with self._lock:
+            cur = self.conn.execute(
+                """UPDATE users SET password_hash=?, salt=?, must_change_password=0
+                   WHERE id=?""",
+                (password_hash, salt, user_id),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def update_user(self, user_id: int, **fields) -> bool:
+        allowed = {"role", "full_name", "is_active"}
+        filtered = {k: v for k, v in fields.items() if k in allowed}
+        if not filtered:
+            return False
+        cols = ", ".join(f"{k}=?" for k in filtered)
+        vals = list(filtered.values()) + [user_id]
+        with self._lock:
+            cur = self.conn.execute(f"UPDATE users SET {cols} WHERE id=?", vals)
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def delete_user(self, user_id: int) -> bool:
+        with self._lock:
+            # Sessions cascade-delete via FK
+            cur = self.conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def touch_user_login(self, user_id: int) -> None:
+        with self._lock:
+            self.conn.execute(
+                "UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?",
+                (user_id,),
+            )
+            self.conn.commit()
+
+    # Sessions
+
+    def create_session(
+        self, token: str, user_id: int, expires_at: str,
+        user_agent: str = "", ip: str = "",
+    ) -> None:
+        with self._lock:
+            self.conn.execute(
+                """INSERT INTO sessions (token, user_id, expires_at, user_agent, ip)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (token, user_id, expires_at, user_agent[:200], ip[:64]),
+            )
+            self.conn.commit()
+
+    def get_session_user(self, token: str) -> dict | None:
+        """Return joined user+session info if token valid + not expired."""
+        row = self.conn.execute(
+            """SELECT u.id AS user_id, u.username, u.role, u.full_name,
+                      u.is_active, u.must_change_password,
+                      s.token, s.expires_at, s.created_at AS session_created_at
+               FROM sessions s
+               JOIN users u ON u.id = s.user_id
+               WHERE s.token=? AND s.expires_at > CURRENT_TIMESTAMP
+                     AND u.is_active=1""",
+            (token,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def delete_session(self, token: str) -> bool:
+        with self._lock:
+            cur = self.conn.execute("DELETE FROM sessions WHERE token=?", (token,))
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def delete_user_sessions(self, user_id: int) -> int:
+        with self._lock:
+            cur = self.conn.execute(
+                "DELETE FROM sessions WHERE user_id=?", (user_id,),
+            )
+            self.conn.commit()
+            return cur.rowcount
+
+    def gc_expired_sessions(self) -> int:
+        with self._lock:
+            cur = self.conn.execute(
+                "DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP"
+            )
+            self.conn.commit()
+            return cur.rowcount
+
+    # ── Test runs archive (P2.3) ────────────────────────────────────
+
+    def add_test_run(
+        self, module: str, test_type: str, source_filename: str,
+        params_json: str, summary_json: str, event_count: int,
+        duration_sec: float, output_video_url: str = "", camera_id: int | None = None,
+    ) -> int:
+        with self._lock:
+            cur = self.conn.execute(
+                """INSERT INTO test_runs
+                   (module, test_type, source_filename, camera_id,
+                    params_json, summary_json, event_count, duration_sec, output_video_url)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (module, test_type, source_filename, camera_id,
+                 params_json, summary_json, event_count, duration_sec, output_video_url),
+            )
+            self.conn.commit()
+            return cur.lastrowid
+
+    def list_test_runs(self, limit: int = 100, module: str | None = None) -> list[dict]:
+        sql = "SELECT * FROM test_runs"
+        params: list = []
+        if module:
+            sql += " WHERE module = ?"
+            params.append(module)
+        sql += " ORDER BY ran_at DESC LIMIT ?"
+        params.append(limit)
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    def get_test_run(self, run_id: int) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM test_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def delete_test_run(self, run_id: int) -> bool:
+        with self._lock:
+            cur = self.conn.execute("DELETE FROM test_runs WHERE id = ?", (run_id,))
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def bulk_delete_passages(self, ids: list[int]) -> int:
+        """Delete multiple passages by ID. Returns rows removed."""
+        if not ids:
+            return 0
+        placeholders = ",".join("?" * len(ids))
+        with self._lock:
+            cur = self.conn.execute(
+                f"DELETE FROM passages WHERE id IN ({placeholders})",
+                ids,
+            )
+            self.conn.commit()
+            return cur.rowcount
+
+    def delete_passages_before(self, cutoff: datetime) -> int:
+        """Hard-delete passage records older than cutoff."""
+        with self._lock:
+            cur = self.conn.execute(
+                "DELETE FROM passages WHERE detected_at < ?",
+                (cutoff.isoformat(),),
+            )
+            self.conn.commit()
+            return cur.rowcount
 
     def get_intrusion_stats(
         self, start_date: str | None = None, end_date: str | None = None,

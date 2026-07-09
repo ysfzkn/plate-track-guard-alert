@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from app.intrusion.models import IntrusionEvent, PersonObservation, Zone
-from app.intrusion.zone_manager import ZoneManager, bbox_center_normalized
+from app.intrusion.zone_manager import ZoneManager
 
 logger = logging.getLogger("gateguard.app")
 
@@ -88,19 +88,25 @@ class IntrusionClassifier:
         if now is None:
             now = observation.timestamp or datetime.now()
 
-        # Rule 0: warmup period
+        # Rule 0: warmup period.
+        # Guard against a non-positive elapsed: if `now` predates the start
+        # stamp (clock stepped backwards via NTP, or a simulated/replayed clock
+        # in the E2E tester), DON'T treat it as "still warming up" — that would
+        # silently suppress every detection. Only a real 0..warmup_sec window
+        # counts as warmup.
         started = self._camera_started.get(observation.camera_id)
-        if started and (now - started).total_seconds() < self.warmup_sec:
-            return None
+        if started is not None:
+            elapsed = (now - started).total_seconds()
+            if 0 <= elapsed < self.warmup_sec:
+                return None
 
         # Rule 1: confidence
         if observation.confidence < self.min_confidence:
             return None
 
-        # Rule 2: bbox center in any active zone
-        point = bbox_center_normalized(observation.bbox, frame_w, frame_h)
-        matching = self.zone_manager.matching_zones(
-            observation.camera_id, point, now
+        # Rule 2: person occupies an active zone (foot/center anchor)
+        matching = self.zone_manager.matching_zones_bbox(
+            observation.camera_id, observation.bbox, frame_w, frame_h, now
         )
         if not matching:
             self._maybe_gc(now)

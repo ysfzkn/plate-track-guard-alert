@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
+    <script src="/static/auth-client.js?v=2"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GateGuard — Kamera Testi</title>
@@ -14,8 +15,9 @@
         .pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
         ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-track{background:#111827} ::-webkit-scrollbar-thumb{background:#374151;border-radius:3px}
     </style>
+    <link rel="stylesheet" href="/static/gg-light.css">
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
+<body class="bg-gray-950 text-gray-100 min-h-screen light-theme">
 
 <header class="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
     <div class="flex items-center gap-3">
@@ -175,8 +177,10 @@ function snapshotYukle() {
     const placeholder = document.getElementById('feed-placeholder');
     const errBox = document.getElementById('feed-error');
 
-    // Cache-bust
-    const url = '/api/camera/snapshot?t=' + Date.now();
+    // Cache-bust + auth token (an <img> can't send an Authorization header,
+    // so the snapshot endpoint needs ?token=... or it 401s).
+    const base = '/api/camera/snapshot?t=' + Date.now();
+    const url = window.ggAuthedUrl ? window.ggAuthedUrl(base) : base;
 
     // Preload into a hidden Image so we only swap when ready
     const tmp = new Image();

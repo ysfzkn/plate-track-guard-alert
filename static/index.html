@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
+    <script src="/static/auth-client.js?v=2"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GateGuard — Kaçak Araç Tespit Sistemi</title>
@@ -8,6 +9,12 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <script src="/static/tailwind.js"></script>
     <style>
+        /* Accessibility: bigger base type for non-technical operators. Tailwind
+           text-*/spacing are rem-based, so raising the root scales the whole UI
+           proportionally; arbitrary px sizes are floored to a legible minimum. */
+        html { font-size: 17px; }
+        [class*="text-[10px]"] { font-size: 12px !important; }
+        [class*="text-[11px]"] { font-size: 13px !important; }
         @keyframes alarm-banner-flash {
             0%,100%{background:linear-gradient(to right,rgba(127,29,29,.95),rgba(15,23,42,.95),rgba(127,29,29,.95))}
             50%{background:linear-gradient(to right,rgba(220,38,38,.95),rgba(69,10,10,.95),rgba(220,38,38,.95))}
@@ -50,28 +57,81 @@
         .gg-version{font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748b;text-transform:uppercase;padding:2px 6px;border-radius:4px;background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.1)}
 
         .dir-entry{color:#4ade80} .dir-exit{color:#f97316} .dir-unknown{color:#6b7280}
+
+        /* ── Light theme overrides — applied when body has class "light-theme" ── */
+        body.light-theme{background:#f3f4f6 !important;color:#0f172a !important}
+        body.light-theme .gg-nav{background:linear-gradient(180deg,#ffffff,#f8fafc) !important;box-shadow:0 1px 0 rgba(0,0,0,.04),0 4px 18px -8px rgba(0,0,0,.15) !important}
+        body.light-theme .gg-nav h1{color:#0f172a !important}
+        body.light-theme .gg-tabs{background:rgba(241,245,249,.8) !important;border-color:rgba(0,0,0,.08) !important}
+        body.light-theme .tab-btn{color:#475569 !important}
+        body.light-theme .tab-btn:hover{background:rgba(0,0,0,.04) !important;color:#0f172a !important}
+        body.light-theme .tab-btn.active{background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(59,130,246,.18)) !important;color:#0f172a !important}
+        body.light-theme .nav-icon{background:#f1f5f9 !important;border-color:rgba(0,0,0,.08) !important;color:#334155 !important}
+        body.light-theme .nav-icon:hover{background:#e2e8f0 !important;color:#0f172a !important}
+        body.light-theme .ws-pill{background:#f1f5f9 !important;border-color:rgba(0,0,0,.08) !important;color:#334155 !important}
+        body.light-theme .gg-version{background:rgba(0,0,0,.04) !important;color:#64748b !important;border-color:rgba(0,0,0,.08) !important}
+        body.light-theme [class*="bg-gray-950"]{background:#f3f4f6 !important;color:#0f172a !important}
+        body.light-theme [class*="bg-gray-900"]:not(.gg-nav){background:#ffffff !important;color:#0f172a !important}
+        body.light-theme [class*="bg-gray-800"]{background:#f1f5f9 !important;color:#0f172a !important}
+        body.light-theme [class*="border-gray-800"]{border-color:#e2e8f0 !important}
+        body.light-theme [class*="border-gray-700"]{border-color:#cbd5e1 !important}
+        body.light-theme [class*="text-gray-300"]{color:#1f2937 !important}
+        body.light-theme [class*="text-gray-400"]{color:#475569 !important}
+        body.light-theme [class*="text-gray-500"]{color:#64748b !important}
+        body.light-theme [class*="text-gray-600"]{color:#94a3b8 !important}
+        body.light-theme input,body.light-theme select,body.light-theme textarea{background:#ffffff !important;color:#0f172a !important;border-color:#cbd5e1 !important}
+        body.light-theme thead.bg-gray-900{background:#f8fafc !important}
+        /* ── Visibility: white headings/values would vanish on a light bg ── */
+        body.light-theme [class*="text-white"],body.light-theme [class*="text-gray-100"],body.light-theme [class*="text-gray-200"]{color:#0f172a !important}
+        /* …but keep text white ONLY on solid-colored buttons that explicitly use
+           text-white (NOT on gray tiles whose hover:bg-*-900 would falsely match) */
+        body.light-theme a[class*="text-white"][class*="bg-"]:not([class*="bg-gray"]),body.light-theme button[class*="text-white"][class*="bg-"]:not([class*="bg-gray"]){color:#ffffff !important}
+        body.light-theme #alarm-overlay,body.light-theme #alarm-overlay *{color:#ffffff !important}
+        /* Darken pale accent text so status colors stay readable on white */
+        body.light-theme [class*="text-cyan-400"],body.light-theme [class*="text-cyan-300"]{color:#0e7490 !important}
+        body.light-theme [class*="text-green-400"],body.light-theme [class*="text-green-300"],body.light-theme [class*="text-emerald-400"]{color:#15803d !important}
+        body.light-theme [class*="text-red-400"],body.light-theme [class*="text-red-300"]{color:#dc2626 !important}
+        body.light-theme [class*="text-amber-400"],body.light-theme [class*="text-amber-300"],body.light-theme [class*="text-yellow-400"]{color:#b45309 !important}
+        body.light-theme [class*="text-blue-400"],body.light-theme [class*="text-blue-300"]{color:#2563eb !important}
+        /* ── Cards & tiles: dark gradients / deep tints → clean light surfaces ── */
+        body.light-theme [class*="from-gray-900"]{background-image:none !important;background-color:#ffffff !important;border-color:#e2e8f0 !important}
+        body.light-theme [class*="bg-green-950"],body.light-theme [class*="bg-emerald-950"]{background:#dcfce7 !important}
+        body.light-theme [class*="bg-red-950"]{background:#fee2e2 !important}
+        body.light-theme [class*="bg-amber-950"],body.light-theme [class*="bg-yellow-950"]{background:#fef3c7 !important}
+        body.light-theme [class*="bg-cyan-950"],body.light-theme [class*="bg-blue-950"]{background:#cffafe !important}
+        body.light-theme [class*="border-green-900"],body.light-theme [class*="border-emerald-900"]{border-color:#86efac !important}
+        body.light-theme [class*="border-red-900"]{border-color:#fca5a5 !important}
+        body.light-theme [class*="border-amber-900"],body.light-theme [class*="border-yellow-900"]{border-color:#fcd34d !important}
+        body.light-theme [class*="border-cyan-900"],body.light-theme [class*="border-blue-900"]{border-color:#67e8f9 !important}
+        /* Status pills / small chips on cards */
+        body.light-theme [class*="bg-gray-800/30"]{background:#f1f5f9 !important}
+        /* Decorative blur orbs add noise on a light bg — hide them */
+        body.light-theme [class*="blur-3xl"]{display:none !important}
+        /* Camera grid tiles stay readable */
+        body.light-theme [class*="bg-black"]{background:#0f172a !important}
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen select-none">
 
-<!-- ====== ALARM BANNER (top sticky, compact) ====== -->
-<div id="alarm-overlay" class="hidden fixed top-0 left-0 right-0 z-50 alarm-banner-bg border-b-4 border-red-500 shadow-2xl">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
+<!-- ====== ALARM BANNER (top, large + glanceable for a guardhouse) ====== -->
+<div id="alarm-overlay" role="alert" aria-live="assertive"
+     class="hidden fixed top-0 left-0 right-0 z-50 alarm-banner-bg border-b-[6px] border-red-500 shadow-2xl">
+    <div class="max-w-7xl mx-auto px-5 py-5 flex items-center gap-5">
         <!-- Left: icon + labels -->
-        <div class="flex items-center gap-3 flex-shrink-0">
-            <div class="text-3xl alarm-pulse">🚨</div>
+        <div class="flex items-center gap-4 flex-shrink-0">
+            <div class="text-5xl md:text-6xl alarm-pulse">🚨</div>
             <div>
-                <div class="text-red-400 text-xs font-bold uppercase tracking-wider">KAÇAK GEÇİŞ</div>
-                <div class="text-gray-400 text-[10px]">Yetkisiz araç tespit edildi</div>
+                <div class="text-red-300 text-base md:text-xl font-black uppercase tracking-widest">KAÇAK GEÇİŞ</div>
+                <div class="text-gray-300 text-xs md:text-sm">Yetkisiz araç tespit edildi</div>
             </div>
         </div>
 
         <!-- Middle: plate info -->
-        <div class="flex items-center gap-3 flex-1 min-w-0">
-            <img id="alarm-screenshot" class="w-20 h-14 object-cover rounded border-2 border-red-500 flex-shrink-0 hidden cursor-pointer" alt="" onclick="fotoAc(this.src, document.getElementById('alarm-plate').textContent, document.getElementById('alarm-time').textContent, currentAlarmDir)">
+        <div class="flex items-center gap-4 flex-1 min-w-0">
+            <img id="alarm-screenshot" class="w-32 h-24 md:w-48 md:h-32 object-cover rounded-lg border-2 border-red-400 flex-shrink-0 hidden cursor-pointer" alt="" onclick="fotoAc(this.src, document.getElementById('alarm-plate').textContent, document.getElementById('alarm-time').textContent, currentAlarmDir)">
             <div class="min-w-0">
-                <p id="alarm-plate" class="text-3xl font-mono font-black text-white leading-tight truncate"></p>
-                <p class="text-xs text-gray-400 flex items-center gap-2">
+                <p id="alarm-plate" class="text-5xl md:text-7xl font-mono font-black text-white leading-none truncate tracking-wider"></p>
+                <p class="text-sm md:text-lg text-gray-200 flex items-center gap-3 mt-1">
                     <span id="alarm-dir"></span>
                     <span>·</span>
                     <span id="alarm-time"></span>
@@ -79,12 +139,34 @@
             </div>
         </div>
 
-        <!-- Right: silence button -->
-        <button onclick="susturAlarm()" class="bg-red-600 hover:bg-red-700 text-white font-black py-3 px-6 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg uppercase tracking-wider text-sm flex-shrink-0 flex items-center gap-2 alarm-btn-pulse">
-            <span class="text-xl">🔇</span>
-            <span>SUSTUR</span>
-        </button>
+        <!-- Right: silence button (large touch target) + klavye ipucu -->
+        <div class="flex flex-col items-center gap-2 flex-shrink-0">
+            <button onclick="susturAlarm()" aria-label="Alarmı sustur"
+                    class="bg-red-600 hover:bg-red-700 text-white font-black py-5 px-8 md:px-12 rounded-2xl transition-all transform hover:scale-105 active:scale-95 shadow-lg uppercase tracking-widest text-xl md:text-2xl flex items-center gap-3 alarm-btn-pulse"
+                    style="min-height:64px">
+                <span class="text-3xl">🔇</span>
+                <span>SUSTUR</span>
+            </button>
+            <div class="flex items-center gap-1.5 text-[11px] md:text-xs text-red-200/90 font-semibold whitespace-nowrap">
+                <kbd class="px-2 py-0.5 rounded-md bg-white/15 border border-white/30 font-mono shadow-sm">Boşluk</kbd>
+                <span class="text-red-300/70">veya</span>
+                <kbd class="px-2 py-0.5 rounded-md bg-white/15 border border-white/30 font-mono shadow-sm">Enter</kbd>
+                <span>ile sustur</span>
+            </div>
+        </div>
     </div>
+</div>
+
+<!-- ====== SES ETKİNLEŞTİR (browser autoplay gesture) ====== -->
+<!-- Browsers block alarm audio until the user interacts with the page once.
+     On an unattended kiosk the first siren would be silent — so we ask the
+     guard to click once at the start of the shift to unlock sound. -->
+<div id="audio-enable-bar" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[55]">
+    <button onclick="sesEtkinlestir()"
+            class="bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 px-6 rounded-full shadow-2xl flex items-center gap-2 animate-pulse text-base">
+        <span class="text-xl">🔔</span>
+        <span>Alarm sesini etkinleştirmek için tıklayın</span>
+    </button>
 </div>
 
 <!-- ====== HEADER ====== -->
@@ -97,7 +179,7 @@
                 <h1 class="text-[15px] font-bold tracking-tight text-white">GateGuard</h1>
                 <span class="gg-version">v1.0</span>
             </div>
-            <div class="flex items-center gap-1.5 text-[10px] text-gray-500">
+            <div class="flex items-center gap-1.5 text-xs font-semibold text-gray-300">
                 <span id="status-dot" class="status-led"></span>
                 <span id="status-text">Sistem aktif</span>
             </div>
@@ -110,23 +192,130 @@
         <button class="tab-btn" onclick="tabDegistir('canli')"><span class="tab-ico">📡</span><span>Canlı</span></button>
         <button class="tab-btn" onclick="tabDegistir('gecmis')"><span class="tab-ico">📋</span><span>Geçmiş</span></button>
         <button class="tab-btn" onclick="tabDegistir('galeri')"><span class="tab-ico">📸</span><span>Galeri</span></button>
+        <button class="tab-btn" onclick="tabDegistir('yonetim')"><span class="tab-ico">⚙️</span><span>Yönetim</span></button>
     </nav>
 
     <!-- Actions -->
     <div class="flex items-center gap-2">
-        <div id="ws-badge" class="ws-pill" title="WebSocket bağlantı durumu">
+        <div id="ws-badge" class="ws-pill" title="Sunucu bağlantı durumu">
             <span id="ws-dot" class="ws-dot warn"></span>
             <span id="ws-status">Bağlanıyor</span>
         </div>
         <div class="nav-divider"></div>
         <a href="/camera-test" title="Kamera testi" class="nav-icon">📹</a>
-        <a href="/alpr-test" title="ALPR / plaka testi" class="nav-icon">🔬</a>
-        <a href="/night-watch" title="Gece izleme (Modül 2)" class="nav-icon">🌙</a>
-        <button onclick="senkronizeEt()" title="MDB senkronize et" class="nav-icon">🔄</button>
+        <a href="/alpr-test" title="Plaka okuma testi" class="nav-icon">🔬</a>
+        <a href="/zone-playground" title="Bölge test alanı (kayıttan bölge çiz & test et)" class="nav-icon">🗺️</a>
+        <a href="/night-watch" title="Gece izleme" class="nav-icon">🌙</a>
+        <a href="/intrusion-history" title="Kaçak kayıtları (kanıt foto + video, tarih filtreli)" class="nav-icon">🗂️</a>
+        <button onclick="temaDegistir()" title="Tema değiştir" class="nav-icon" id="tema-btn">🌙</button>
+        <button onclick="kisayolGoster()" title="Klavye kısayolları (?)" class="nav-icon">⌨</button>
+        <button onclick="senkronizeEt()" title="MDB senkronize et (R)" class="nav-icon">🔄</button>
         <div class="nav-divider"></div>
+        <div class="nav-divider"></div>
+        <!-- User menu -->
+        <div class="relative">
+            <button onclick="kullaniciMenuToggle()" id="user-btn" title="Kullanıcı menüsü"
+                    class="nav-icon flex items-center gap-1.5" style="width:auto;padding:0 10px">
+                <span id="user-avatar" class="w-5 h-5 rounded-full bg-cyan-700 text-[10px] font-bold flex items-center justify-center">?</span>
+                <span id="user-name" class="text-xs font-semibold hidden sm:inline">—</span>
+                <span class="text-[10px] opacity-60">▾</span>
+            </button>
+            <div id="user-menu" class="hidden absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl min-w-[200px] py-1 z-50">
+                <div class="px-3 py-2 border-b border-gray-800">
+                    <div id="menu-name" class="text-sm font-semibold">—</div>
+                    <div id="menu-role" class="text-[10px] text-gray-500">—</div>
+                </div>
+                <button onclick="parolaDegistirAc()" class="w-full text-left px-3 py-2 text-sm hover:bg-gray-800 flex items-center gap-2">🔑 Parolayı Değiştir</button>
+                <button id="menu-users-btn" onclick="kullaniciYonetimAc()" class="w-full text-left px-3 py-2 text-sm hover:bg-gray-800 flex items-center gap-2 hidden">👥 Kullanıcı Yönetimi</button>
+                <div class="border-t border-gray-800"></div>
+                <button onclick="ggLogout()" class="w-full text-left px-3 py-2 text-sm hover:bg-red-900/40 text-red-300 flex items-center gap-2">🚪 Çıkış Yap</button>
+            </div>
+        </div>
         <button onclick="kapatmaOnay()" title="Uygulamayı kapat" class="nav-icon danger">⏻</button>
     </div>
 </header>
+
+<!-- ====== ŞİFRE DEĞİŞTİR MODAL ====== -->
+<div id="pw-modal" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-sm w-full mx-4">
+        <h3 class="text-lg font-bold mb-3">🔑 Parolayı Değiştir</h3>
+        <form onsubmit="return parolaDegistir(event)" class="space-y-3">
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Mevcut Parola</label>
+                <input id="pw-current" type="password" autocomplete="current-password" required
+                       class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Yeni Parola</label>
+                <input id="pw-new" type="password" autocomplete="new-password" minlength="6" required
+                       class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Yeni Parola (Tekrar)</label>
+                <input id="pw-new2" type="password" autocomplete="new-password" minlength="6" required
+                       class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+            </div>
+            <div id="pw-err" class="hidden bg-red-950/40 border border-red-900/50 text-red-300 text-xs rounded px-2 py-1.5"></div>
+            <div class="flex gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('pw-modal').classList.add('hidden')"
+                        class="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded">İptal</button>
+                <button type="submit" class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded font-semibold">Değiştir</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ====== KULLANICI YÖNETİMİ MODAL (admin only) ====== -->
+<div id="users-modal" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-2xl w-full mx-4 max-h-[88vh] overflow-y-auto">
+        <div class="p-4 border-b border-gray-800 flex items-center justify-between sticky top-0 bg-gray-900">
+            <h3 class="text-lg font-bold">👥 Kullanıcı Yönetimi</h3>
+            <button onclick="document.getElementById('users-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-xl">×</button>
+        </div>
+        <div class="p-4 space-y-3">
+            <button onclick="yeniKullaniciAc()" class="bg-cyan-600 hover:bg-cyan-500 text-white text-sm px-3 py-1.5 rounded">＋ Yeni Kullanıcı</button>
+            <div id="users-list" class="space-y-2"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== YENİ KULLANICI MODAL ====== -->
+<div id="new-user-modal" class="hidden fixed inset-0 z-[70] bg-black/80 flex items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-sm w-full mx-4">
+        <h3 class="text-lg font-bold mb-3">Yeni Kullanıcı</h3>
+        <form onsubmit="return yeniKullaniciKaydet(event)" class="space-y-3">
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Kullanıcı Adı</label>
+                <input id="nu-username" required minlength="3"
+                       class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Ad Soyad (opsiyonel)</label>
+                <input id="nu-fullname"
+                       class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Başlangıç Parolası</label>
+                <input id="nu-password" type="text" minlength="6" required
+                       class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm font-mono">
+                <p class="text-[10px] text-gray-500 mt-1">Kullanıcı ilk girişinde değiştirmek zorunda kalacak.</p>
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Rol</label>
+                <select id="nu-role" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+                    <option value="operator">Operatör (panel kullanıcısı)</option>
+                    <option value="admin">Yönetici (tam yetki)</option>
+                </select>
+            </div>
+            <div id="nu-err" class="hidden bg-red-950/40 border border-red-900/50 text-red-300 text-xs rounded px-2 py-1.5"></div>
+            <div class="flex gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('new-user-modal').classList.add('hidden')"
+                        class="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded">İptal</button>
+                <button type="submit" class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded font-semibold">Oluştur</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- ====== SHUTDOWN CONFIRMATION MODAL ====== -->
 <div id="shutdown-modal" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
@@ -154,6 +343,24 @@
 <div id="tab-ozet" class="h-[calc(100vh-48px)] overflow-y-auto bg-gray-950">
     <div class="max-w-7xl mx-auto p-5 space-y-5">
 
+        <!-- ── Live camera wall (en üstte, belirgin) ── -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-bold flex items-center gap-2">📺 Canlı Kameralar
+                    <span class="text-[11px] font-normal text-gray-500">· düzenlemek için bir kameraya tıklayın</span>
+                </h3>
+                <div class="flex items-center gap-3">
+                    <span id="grid-status" class="text-[11px] text-gray-500">—</span>
+                    <button onclick="canliGridYenile(true)" class="text-xs text-cyan-400 hover:text-cyan-300">↻ Yenile</button>
+                </div>
+            </div>
+            <div id="canli-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="col-span-full text-center py-8 text-gray-600 text-sm">
+                    Kamera bulunamadı. <a href="/cameras" class="text-cyan-400 hover:underline">Kamera ekle →</a>
+                </div>
+            </div>
+        </div>
+
         <!-- ── Two big module cards ── -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
@@ -164,7 +371,7 @@
                     <div class="flex items-center gap-3">
                         <div class="text-3xl">🚗</div>
                         <div>
-                            <h2 class="font-bold text-base">Modül 1 — Kaçak Araç Tespiti</h2>
+                            <h2 class="font-bold text-base">Kaçak Araç Tespiti <span class="text-[10px] font-mono text-gray-500 font-normal align-middle">Modül 1</span></h2>
                             <p class="text-xs text-gray-500">Plaka tanıma · Bariyer kamerası</p>
                         </div>
                     </div>
@@ -215,7 +422,7 @@
                     <div class="flex items-center gap-3">
                         <div class="text-3xl">👤</div>
                         <div>
-                            <h2 class="font-bold text-base">Modül 2 — Kaçak İnsan Tespiti</h2>
+                            <h2 class="font-bold text-base">Kaçak İnsan Tespiti <span class="text-[10px] font-mono text-gray-500 font-normal align-middle">Modül 2</span></h2>
                             <p class="text-xs text-gray-500">Yapay zeka · Çoklu kamera</p>
                         </div>
                     </div>
@@ -239,7 +446,7 @@
 
                 <div class="mt-3 flex items-center gap-2 text-xs flex-wrap">
                     <span id="m2-night" class="px-2 py-1 rounded bg-gray-800 border border-gray-700">—</span>
-                    <span id="m2-shadow" class="px-2 py-1 rounded bg-gray-800 border border-gray-700 hidden">SHADOW MOD</span>
+                    <span id="m2-shadow" class="px-2 py-1 rounded bg-amber-900/40 border border-amber-700/50 text-amber-300 hidden" title="Sistem izliyor ve olay kaydediyor ama fiziksel siren ÇALMAZ.">TEST MODU · siren çalmaz</span>
                     <span id="m2-window" class="text-gray-500 font-mono">—</span>
                 </div>
 
@@ -258,15 +465,42 @@
                     </label>
                 </div>
 
+                <!-- ── Alarm ötme süresi ── -->
+                <div class="mt-3 p-3 rounded-xl border border-gray-800 bg-gray-800/30 flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold flex items-center gap-2">
+                            <span>⏱️</span>
+                            <span>Alarm Ötme Süresi</span>
+                        </div>
+                        <p class="text-[11px] text-gray-500 mt-0.5">Alarm bu süre kadar çalar, sonra otomatik susar. SUSTUR her zaman anında durdurur.</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <input id="alarm-sure-input" type="number" min="3" max="120" step="1"
+                               onchange="alarmSuresiKaydet(this.value)"
+                               class="w-20 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-right text-sm font-mono text-white focus:outline-none focus:border-cyan-500">
+                        <span class="text-sm text-gray-400">sn</span>
+                    </div>
+                </div>
+
+                <!-- Kamera bazlı geçici sustur (Yönetim sekmesinde de var) -->
+                <div id="m2-cam-toggles" class="mt-3 space-y-2"></div>
+
                 <div id="m2-disabled" class="hidden mt-4 p-3 bg-gray-800/40 border border-gray-700 rounded-lg text-xs text-gray-400">
                     Bu modül kapalı. Etkinleştirmek için <code class="text-cyan-400">.env</code>'de <code class="text-cyan-400">ENABLE_INTRUSION_MODULE=true</code> yapın.
                 </div>
 
-                <button onclick="window.location.href='/night-watch'" class="mt-4 w-full bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg transition flex items-center justify-center gap-2">
-                    🌙 Gece İzleme →
-                </button>
+                <div class="mt-4 grid grid-cols-2 gap-2">
+                    <button onclick="window.location.href='/night-watch'" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg transition flex items-center justify-center gap-2">
+                        🌙 Gece İzleme
+                    </button>
+                    <button onclick="window.location.href='/intrusion-history'" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg transition flex items-center justify-center gap-2">
+                        🗂️ Kaçak Kayıtları
+                    </button>
+                </div>
             </div>
         </div>
+
+        <!-- (Canlı Kameralar en üste taşındı) -->
 
         <!-- ── Charts row ── -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -373,7 +607,18 @@
             <span id="passage-count" class="text-xs text-gray-500 font-mono">0</span>
         </div>
         <div id="passages-list" class="flex-1 overflow-y-auto p-2 space-y-1">
-            <div class="text-center py-20 text-gray-600 text-sm">🚗 Araç geçişleri burada görünecek</div>
+            <div id="passages-empty" class="text-center py-16 px-4">
+                <div class="text-6xl mb-3 opacity-30">🚗</div>
+                <p class="text-gray-400 font-semibold">Henüz geçiş yok</p>
+                <p class="text-xs text-gray-600 mt-2 max-w-xs mx-auto">
+                    Sistem aktif. Bir araç bariyere yaklaştığında plaka burada görünecek
+                    ve yetkili olup olmadığı kontrol edilecek.
+                </p>
+                <div class="mt-4 inline-flex items-center gap-1.5 text-[11px] text-green-400">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                    Bekleniyor…
+                </div>
+            </div>
         </div>
     </div>
     <!-- Sağ — Alarm + İstatistik -->
@@ -438,18 +683,31 @@
                 <option value="false">Kaçak</option>
             </select>
         </div>
-        <div>
+        <div class="relative">
             <label class="text-xs text-gray-500 block mb-1">Plaka Ara</label>
-            <input type="text" id="f-plate" placeholder="34ABC..." class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm w-28">
+            <input type="text" id="f-plate" placeholder="34ABC..." autocomplete="off"
+                   oninput="plakaOnerileri(this.value)" onfocus="plakaOnerileri(this.value)" onblur="setTimeout(()=>document.getElementById('plate-suggest').classList.add('hidden'),200)"
+                   class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm w-32">
+            <div id="plate-suggest" class="hidden absolute top-full left-0 mt-1 z-30 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl min-w-[260px] max-h-72 overflow-y-auto"></div>
         </div>
         <button onclick="gecmisAra()" class="bg-cyan-700 hover:bg-cyan-600 text-white text-sm px-4 py-1.5 rounded-lg transition">Filtrele</button>
+        <button onclick="gecmisCSV()" class="bg-gray-800 hover:bg-gray-700 text-white text-sm px-3 py-1.5 rounded-lg transition border border-gray-700" title="Görünen sonuçları CSV olarak indir">⬇ CSV</button>
         <span id="gecmis-count" class="text-xs text-gray-500 ml-auto"></span>
     </div>
+
+    <!-- Bulk action bar (görünür sadece seçim varken) -->
+    <div id="bulk-bar" class="hidden px-4 py-2 bg-cyan-950/40 border-b border-cyan-800 flex items-center gap-3 text-sm">
+        <span id="bulk-count" class="font-semibold text-cyan-300">0 seçildi</span>
+        <button onclick="bulkSil()" class="bg-red-700 hover:bg-red-600 text-white px-3 py-1 rounded text-xs">🗑 Sil</button>
+        <button onclick="bulkSecimTemizle()" class="text-gray-400 hover:text-gray-200 text-xs ml-auto">Seçimi temizle</button>
+    </div>
+
     <!-- Tablo -->
     <div class="flex-1 overflow-y-auto">
         <table class="w-full text-sm">
             <thead class="bg-gray-900 sticky top-0">
                 <tr class="text-left text-xs text-gray-500 uppercase">
+                    <th class="px-3 py-2 w-8"><input type="checkbox" id="bulk-all" onchange="bulkTumunuSec(this.checked)"></th>
                     <th class="px-4 py-2">Tarih/Saat</th>
                     <th class="px-4 py-2">Plaka</th>
                     <th class="px-4 py-2">Yön</th>
@@ -489,6 +747,84 @@
     </div>
 </div>
 
+<!-- ====== TAB: YÖNETİM (modül kontrol merkezi) ====== -->
+<div id="tab-yonetim" class="hidden h-[calc(100vh-48px)] overflow-y-auto bg-gray-950">
+    <div class="max-w-5xl mx-auto p-4 space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold flex items-center gap-2">⚙️ Modül Yönetimi</h2>
+            <button onclick="yonetimYukle()" class="text-xs text-cyan-400 hover:text-cyan-300">↻ Yenile</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- ── Modül 1: Plaka Tanıma ── -->
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-base font-bold flex items-center gap-2">🚗 Plaka Tanıma <span class="text-[10px] font-mono text-gray-500">Modül 1</span></h3>
+                    <span id="yon-m1-status" class="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">—</span>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between items-center"><span class="text-gray-500">Kamera:</span><span id="yon-m1-cam" class="text-gray-300">—</span></div>
+                    <div class="flex justify-between items-center"><span class="text-gray-500">Plaka veritabanı:</span><span id="yon-m1-vehicle" class="text-gray-300 font-mono">—</span></div>
+                    <div class="flex justify-between items-center"><span class="text-gray-500">Son senkron:</span><span id="yon-m1-sync" class="text-gray-300 text-xs">—</span></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                    <button onclick="senkronizeEt()" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg transition">🔄 MDB Sync</button>
+                    <button onclick="tabDegistir('gecmis')" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg transition">📋 Geçişler</button>
+                    <a href="/alpr-test" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg text-center transition">🔬 Plaka Testi</a>
+                    <a href="/camera-test" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg text-center transition">📹 Kamera Testi</a>
+                </div>
+            </div>
+
+            <!-- ── Modül 2: Hırsızlık Tespiti ── -->
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-base font-bold flex items-center gap-2">🛡️ Hırsızlık Tespiti <span class="text-[10px] font-mono text-gray-500">Modül 2</span></h3>
+                    <span id="yon-m2-status" class="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">—</span>
+                </div>
+
+                <!-- Ana şalter (global) -->
+                <div id="yon-m2-master" class="p-3 rounded-xl border border-gray-800 bg-gray-800/30 flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold flex items-center gap-2"><span id="yon-master-icon">🔔</span><span>Tüm Alarmlar (Ana Şalter)</span></div>
+                        <p class="text-[11px] text-gray-500 mt-0.5">Kapatılırsa hiçbir kamera siren çalmaz. Olaylar yine kaydedilir.</p>
+                    </div>
+                    <label class="inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input id="yon-master-checkbox" type="checkbox" class="sr-only peer" onchange="alarmToggleSet(this.checked)">
+                        <div class="relative w-12 h-6 bg-gray-700 rounded-full peer-checked:bg-green-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-6"></div>
+                    </label>
+                </div>
+
+                <!-- Kamera bazlı geçici sustur -->
+                <div class="mt-4">
+                    <div class="text-[10px] text-gray-500 uppercase tracking-wide mb-2">Kamera Bazlı Alarm — geçici aç/kapa</div>
+                    <div id="yon-cam-toggles" class="space-y-2">
+                        <div class="text-xs text-gray-500 py-1">Yükleniyor…</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                    <a href="/night-watch" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg text-center transition">🌙 Gece İzleme</a>
+                    <a href="/intrusion-test" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg text-center transition">🧪 İnsan Testi</a>
+                    <a href="/zone-playground" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg text-center transition">🗺️ Bölge Test</a>
+                    <a href="/cameras" class="bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded-lg text-center transition">⚙️ Kameralar</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Sistem sağlığı ── -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-bold">🩺 Sistem Sağlığı</h3>
+                <span id="yon-health-overall" class="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700">—</span>
+            </div>
+            <div id="yon-health" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                <div class="col-span-full text-gray-500">Yükleniyor…</div>
+            </div>
+            <div id="yon-health-issues" class="mt-3 space-y-1 text-xs"></div>
+        </div>
+    </div>
+</div>
+
 <!-- Foto Modal -->
 <div id="foto-modal" class="hidden fixed inset-0 z-40 bg-black/80 flex items-center justify-center" onclick="this.classList.add('hidden')">
     <div class="max-w-3xl w-full mx-4 bg-gray-900 rounded-xl overflow-hidden border border-gray-700" onclick="event.stopPropagation()">
@@ -499,6 +835,48 @@
                 <p id="modal-info" class="text-sm text-gray-400"></p>
             </div>
             <button onclick="document.getElementById('foto-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-xl px-3">✕</button>
+        </div>
+    </div>
+</div>
+
+<!-- Prominent intrusion alarm overlay (live intruder detection) -->
+<div id="intr-overlay" class="hidden fixed inset-0 z-[80] bg-black/85 flex items-center justify-center p-4"
+     onclick="if(event.target===this) intrusionKapat()">
+    <div class="w-full max-w-3xl rounded-2xl overflow-hidden border-2 border-red-500 bg-gray-900 shadow-2xl"
+         style="box-shadow:0 0 0 4px rgba(220,38,38,.25), 0 20px 60px rgba(0,0,0,.6)">
+        <div id="intr-head" class="bg-red-600 text-white px-5 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl animate-pulse">🚨</span>
+                <div>
+                    <div class="text-lg font-extrabold leading-tight">KAÇAK TESPİT EDİLDİ</div>
+                    <div id="intr-cam" class="text-sm font-semibold opacity-95">—</div>
+                </div>
+            </div>
+            <button onclick="intrusionKapat()" class="text-white/90 hover:text-white text-2xl px-2 leading-none">✕</button>
+        </div>
+        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+                <div class="text-[11px] text-gray-400 mb-1 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> CANLI</div>
+                <img id="intr-live" class="w-full aspect-video object-cover rounded-lg bg-black" alt="canlı görüntü">
+            </div>
+            <div>
+                <div class="text-[11px] text-gray-400 mb-1">📸 TESPİT ANI (kanıt)</div>
+                <img id="intr-proof" class="w-full aspect-video object-cover rounded-lg bg-black cursor-zoom-in"
+                     onclick="if(this.src) window.open(this.src,'_blank')" alt="tespit görüntüsü">
+            </div>
+        </div>
+        <div id="intr-meta" class="px-4 pb-1 text-sm text-gray-300 flex flex-wrap gap-x-4 gap-y-1"></div>
+        <div class="p-4 flex flex-wrap gap-2">
+            <button id="intr-mute" onclick="intrusionSustur()" class="flex-1 min-w-[130px] bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2.5 rounded-lg transition">🔇 Sesi Sustur</button>
+            <a id="intr-big" href="#" class="flex-1 min-w-[130px] bg-purple-700 hover:bg-purple-600 text-white font-semibold py-2.5 rounded-lg transition text-center">🖥️ Büyük İzle</a>
+            <a href="/intrusion-history" class="flex-1 min-w-[130px] bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2.5 rounded-lg transition text-center">🗂️ Kayıtlar</a>
+            <button onclick="intrusionKapat()" class="bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-lg transition">Kapat</button>
+        </div>
+        <div class="px-4 pb-4 -mt-1 flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
+            <kbd class="px-2 py-0.5 rounded-md bg-white/10 border border-white/20 font-mono">Boşluk</kbd>
+            <span class="text-gray-500">veya</span>
+            <kbd class="px-2 py-0.5 rounded-md bg-white/10 border border-white/20 font-mono">Enter</kbd>
+            <span>ile sesi sustur</span>
         </div>
     </div>
 </div>
@@ -523,13 +901,38 @@ let sirenLfo = null;
 let sirenLfoGain = null;
 let currentAlarmDir = '';
 let alarmAutoSilenceTimer = null;
-const ALARM_AUTO_SILENCE_MS = 7000; // 7 seconds
+// Alarm ötme süresi (saniye) — Yönetim > Ayarlar'dan değiştirilebilir.
+// Hem kaçak plaka sireni (loop, otomatik sustur) hem de hırsızlık tonu bunu
+// kullanır. SUSTUR tuşu her zaman anında durdurur.
+const ALARM_SURE_MIN = 3, ALARM_SURE_MAX = 120, ALARM_SURE_VARSAYILAN = 10;
+function alarmSuresiSn() {
+    let v = ALARM_SURE_VARSAYILAN;
+    try {
+        const s = parseInt(localStorage.getItem('gg-alarm-duration'), 10);
+        if (!isNaN(s)) v = s;
+    } catch (e) {}
+    return Math.min(ALARM_SURE_MAX, Math.max(ALARM_SURE_MIN, v));
+}
+function alarmSuresiKaydet(val) {
+    let v = parseInt(val, 10);
+    if (isNaN(v)) v = ALARM_SURE_VARSAYILAN;
+    v = Math.min(ALARM_SURE_MAX, Math.max(ALARM_SURE_MIN, v));
+    try { localStorage.setItem('gg-alarm-duration', String(v)); } catch (e) {}
+    const inp = document.getElementById('alarm-sure-input');
+    if (inp) inp.value = v;                       // clamp'lenmiş değeri geri yaz
+    if (typeof bildirim === 'function') bildirim(`Alarm ötme süresi ${v} sn olarak ayarlandı`, 'basari');
+}
+function alarmSuresiInit() {
+    const inp = document.getElementById('alarm-sure-input');
+    if (inp) inp.value = alarmSuresiSn();
+}
+let _audioPrimed = false;
 
 // ============================================================
 //  TABS
 // ============================================================
 function tabDegistir(tab) {
-    const tabs = ['ozet','canli','gecmis','galeri'];
+    const tabs = ['ozet','canli','gecmis','galeri','yonetim'];
     tabs.forEach(t => {
         const el = document.getElementById('tab-' + t);
         if (el) el.classList.toggle('hidden', t !== tab);
@@ -538,6 +941,7 @@ function tabDegistir(tab) {
         btn.classList.toggle('active', tabs[i] === tab);
     });
     if (tab === 'ozet' && typeof ozetYukle === 'function') ozetYukle();
+    if (tab === 'canli' && !gecisler.length) sonGecisleriYukle();
     if (tab === 'gecmis' && !document.getElementById('f-start').value) {
         document.getElementById('f-start').value = new Date().toISOString().slice(0,10);
         document.getElementById('f-end').value = new Date().toISOString().slice(0,10);
@@ -548,6 +952,7 @@ function tabDegistir(tab) {
         document.getElementById('g-end').value = new Date().toISOString().slice(0,10);
         galeriYukle();
     }
+    if (tab === 'yonetim') yonetimYukle();
 }
 
 // ============================================================
@@ -557,7 +962,11 @@ let reconn = 0;
 function baglan() {
     const p = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${p}//${location.host}/ws`);
-    ws.onopen = () => { reconn = 0; wsDurum('bagli'); durumAl(); istatistikAl(); alarmToggleLoad(); };
+    ws.onopen = () => {
+        reconn = 0; wsDurum('bagli');
+        durumAl(); istatistikAl(); alarmToggleLoad();
+        canliGridYukle(); saglikDurumuGuncelle(); sonGecisleriYukle();
+    };
     ws.onmessage = e => { try { mesajIsle(JSON.parse(e.data)); } catch(err) {} };
     ws.onclose = () => { wsDurum('kopuk'); reconn++; setTimeout(baglan, Math.min(3000*reconn, 30000)); };
     ws.onerror = () => ws.close();
@@ -576,13 +985,26 @@ function mesajIsle(m) {
         // Module 2: show a compact banner on the main dashboard too
         const d = m.data || {};
         const sourceTag = d.source === 'motion' ? ' [HAREKET]' : '';
-        const muteTag = d.alarm_muted ? ' (alarm susturulmuş)' : (d.shadow_mode ? ' (shadow)' : '');
-        const label = `🚨 İZİNSİZ GİRİŞ${sourceTag} — ${d.camera_name || ('Kamera ' + d.camera_id)} · ${d.duration_sec}sn${muteTag}`;
-        bildirim(label, d.alarm_muted || d.shadow_mode ? 'bilgi' : 'hata');
+        const muteTag = d.alarm_muted ? ' (alarm susturulmuş)' : (d.shadow_mode ? ' (test modu — siren çalmaz)' : '');
+        const camLabel = d.camera_name || ('Kamera ' + d.camera_id);
+        const label = `🚨 İZİNSİZ GİRİŞ${sourceTag} — ${camLabel} · ${d.duration_sec}sn${muteTag}`;
+        const isLive = !d.alarm_muted && !d.shadow_mode;
+        bildirim(label, isLive ? 'hata' : 'bilgi');
+        if (isLive) {
+            // Full-screen proof overlay + distinct longer alarm tone + tab flash
+            intrusionAlertGoster(d);
+            intrusionAlarmTone(alarmSuresiSn());
+            titleFlash(`🚨 ${camLabel}`);
+            sistemBildirimi('Kaçak Tespit Edildi', `${camLabel} · ${d.duration_sec}sn`);
+        }
     }
     else if (m.type === 'intrusion_alarm_toggle') {
-        // Sync the UI toggle when changed from another tab
-        alarmToggleApplyUI(m.data?.enabled);
+        // Sync the toggles when changed from another tab/operator
+        alarmStateUygula(m.data);
+    }
+    else if (m.type === 'alarm_hardware_status') {
+        // ESP32 siren up/down banner
+        donanimDurumGoster(m.data || {});
     }
     else if (m.type === 'sync_complete') { bildirim(`Sync: ${m.data.total} plaka`, 'basari'); durumAl(); }
 }
@@ -590,38 +1012,62 @@ function mesajIsle(m) {
 // ============================================================
 //  ALARM ENABLE/DISABLE TOGGLE
 // ============================================================
-async function alarmToggleSet(enabled) {
+// Last known alarm state {enabled (global master), cameras:[{id,name,running,alarm_enabled}]}
+let _alarmState = { enabled: true, cameras: [] };
+
+// enabled: new state. camId: omit/undefined => GLOBAL master; a number => that camera.
+async function alarmToggleSet(enabled, camId) {
+    // Friendly label from the *current* state (before it's replaced).
+    let label = 'Alarm';
+    if (camId !== undefined && camId !== null) {
+        const c = (_alarmState.cameras || []).find(x => x.id === camId);
+        label = (c ? c.name : ('Kamera ' + camId)) + ' alarmı';
+    }
     try {
+        const body = { enabled };
+        if (camId !== undefined && camId !== null) body.camera_id = camId;
         const r = await fetch('/api/intrusion/alarm-toggle', {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({enabled}),
+            body: JSON.stringify(body),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const data = await r.json();
-        alarmToggleApplyUI(data.enabled);
-        bildirim(enabled ? '🔔 Alarm açıldı' : '🔇 Alarm susturuldu', enabled ? 'basari' : 'bilgi');
+        alarmStateUygula(await r.json());
+        bildirim((enabled ? '🔔 ' : '🔇 ') + label + (enabled ? ' açıldı' : ' susturuldu'),
+                 enabled ? 'basari' : 'bilgi');
     } catch (e) {
         bildirim('Toggle hatası: ' + e.message, 'hata');
-        // Revert checkbox state
-        await alarmToggleLoad();
+        await alarmToggleLoad();   // re-sync checkboxes from server
     }
 }
 
 async function alarmToggleLoad() {
     try {
         const r = await fetch('/api/intrusion/alarm-toggle');
-        const data = await r.json();
-        alarmToggleApplyUI(data.enabled);
+        alarmStateUygula(await r.json());
     } catch {}
 }
 
+// Apply the full alarm state to every UI surface (Özet + Yönetim).
+function alarmStateUygula(data) {
+    if (!data) return;
+    if (Array.isArray(data.cameras)) _alarmState = data;
+    alarmToggleApplyUI(data.enabled);
+    alarmCamTogglesCiz(data.cameras || _alarmState.cameras || []);
+}
+
 function alarmToggleApplyUI(enabled) {
-    const cb = document.getElementById('m2-alarm-checkbox');
+    // Global master toggle appears in two places: Özet (#m2-alarm-*) + Yönetim (#yon-master-*)
+    ['m2-alarm-checkbox', 'yon-master-checkbox'].forEach(id => {
+        const cb = document.getElementById(id);
+        if (cb) cb.checked = !!enabled;
+    });
+    const yonIcon = document.getElementById('yon-master-icon');
+    if (yonIcon) yonIcon.textContent = enabled ? '🔔' : '🔇';
+
     const icon = document.getElementById('m2-alarm-icon');
     const help = document.getElementById('m2-alarm-help');
     const row = document.getElementById('m2-alarm-toggle-row');
-    if (!cb) return;
-    cb.checked = !!enabled;
+    if (!icon || !help || !row) return;
     if (enabled) {
         icon.textContent = '🔔';
         help.textContent = 'Tespit anında siren çalar. Olaylar her durumda kaydedilir.';
@@ -629,15 +1075,268 @@ function alarmToggleApplyUI(enabled) {
         row.classList.add('border-gray-800','bg-gray-800/30');
     } else {
         icon.textContent = '🔇';
-        help.innerHTML = '<b class="text-amber-400">SUSTURULDU</b> — olaylar kaydediliyor ama siren çalmayacak.';
+        help.innerHTML = '<b class="text-amber-400">TÜMÜ SUSTURULDU</b> — olaylar kaydediliyor ama siren çalmayacak.';
         row.classList.remove('border-gray-800','bg-gray-800/30');
         row.classList.add('border-amber-700/60','bg-amber-950/20');
     }
 }
 
+// Render the per-camera mute toggles into both Özet + Yönetim containers.
+function alarmCamTogglesCiz(cams) {
+    const html = (cams && cams.length)
+        ? cams.map(c => {
+            const on = !!c.alarm_enabled;
+            return `<div class="flex items-center justify-between gap-2 p-2 rounded-lg border ${on ? 'border-gray-800 bg-gray-800/30' : 'border-amber-700/60 bg-amber-950/20'}">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="w-2 h-2 rounded-full ${c.running ? 'bg-green-500' : 'bg-gray-600'}" title="${c.running ? 'Çalışıyor' : 'Durdu'}"></span>
+                    <span class="text-sm font-medium truncate">${gv(c.name)}</span>
+                    ${on ? '' : '<span class="text-[10px] text-amber-400 font-bold">SUSTURULDU</span>'}
+                </div>
+                <label class="inline-flex items-center cursor-pointer flex-shrink-0">
+                    <input type="checkbox" class="sr-only peer" ${on ? 'checked' : ''} onchange="alarmToggleSet(this.checked, ${c.id})">
+                    <div class="relative w-10 h-5 bg-gray-700 rounded-full peer-checked:bg-green-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5"></div>
+                </label>
+            </div>`;
+          }).join('')
+        : '<div class="text-xs text-gray-500 py-1">Hırsızlık kamerası yok.</div>';
+    ['m2-cam-toggles', 'yon-cam-toggles'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = html;
+    });
+}
+
+// Minimal HTML-escape for camera names rendered via innerHTML.
+function gv(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+// ============================================================
+//  YÖNETİM SEKMESİ
+// ============================================================
+async function yonetimYukle() {
+    alarmToggleLoad();   // global master + per-camera toggles
+
+    // Modül özetleri (plaka DB, senkron, olay sayısı)
+    try {
+        const d = await (await fetch('/api/dashboard/summary')).json();
+        const m1 = d.module1 || {}, m2 = d.module2 || {};
+        setYon('yon-m1-vehicle', m1.vehicle_count != null ? m1.vehicle_count : '—');
+        setYon('yon-m1-sync', m1.last_sync ? new Date(m1.last_sync).toLocaleString('tr-TR') : 'Hiç');
+        yonRozet('yon-m1-status', m1.enabled !== false, 'AKTİF', 'KAPALI');
+        const running = (m2.cameras_running || []).length;
+        const total = m2.cameras_total != null ? m2.cameras_total : running;
+        setYon('yon-m2-status', null);
+        yonRozet('yon-m2-status', !!m2.enabled, `${running}/${total} kamera`, 'KAPALI');
+    } catch {}
+
+    // Sağlık
+    try {
+        const h = await (await fetch('/api/health')).json();
+        const cams = h.cameras || [];
+        const plate = cams.find(c => c.role === 'plate');
+        setYon('yon-m1-cam', plate ? (plate.connected ? '🟢 Bağlı' : '🔴 Bağlantı yok') : '—');
+
+        const grid = document.getElementById('yon-health');
+        if (grid) {
+            const disk = h.disk || {}, mem = h.memory || {};
+            const card = (label, val, sub) => `<div class="bg-gray-800/40 border border-gray-700 rounded-lg p-2">
+                <div class="text-[10px] text-gray-500 uppercase tracking-wide">${label}</div>
+                <div class="text-sm font-bold">${val}</div>${sub ? `<div class="text-[10px] text-gray-500">${sub}</div>` : ''}</div>`;
+            grid.innerHTML =
+                card('Kamera', `${cams.filter(c=>c.connected).length}/${cams.length}`, 'bağlı') +
+                card('Disk Boş', `${disk.free_gb != null ? disk.free_gb : '—'} GB`, `%${disk.used_pct != null ? disk.used_pct : '—'} dolu`) +
+                card('RAM', mem.process_mb != null ? `${(mem.process_mb/1024).toFixed(1)} GB` : '—', mem.system_used_pct != null ? `sistem %${mem.system_used_pct}` : '') +
+                card('Siren',
+                    (h.alarm_hardware && h.alarm_hardware.enabled === false) ? '⚪ Kapalı'
+                        : (h.alarm_hardware && h.alarm_hardware.ok) ? '🟢 OK' : '🔴 Yok',
+                    (h.alarm_hardware && h.alarm_hardware.enabled === false) ? 'opsiyonel'
+                        : (h.alarm_hardware && h.alarm_hardware.mock_mode) ? 'mock' : '');
+        }
+        const ov = document.getElementById('yon-health-overall');
+        if (ov) {
+            const s = h.status || 'ok';
+            ov.textContent = s === 'ok' ? '🟢 Sorun yok' : (s === 'warn' ? '🟡 Uyarı' : '🔴 Sorun');
+            ov.className = 'text-xs px-2 py-1 rounded-full border ' + (s === 'ok'
+                ? 'bg-green-950/40 border-green-900/40 text-green-400'
+                : (s === 'warn' ? 'bg-amber-950/40 border-amber-900/40 text-amber-400'
+                               : 'bg-red-950/40 border-red-900/40 text-red-400'));
+        }
+        const iss = document.getElementById('yon-health-issues');
+        if (iss) iss.innerHTML = (h.issues || []).map(i =>
+            `<div class="text-amber-400">⚠ ${gv(i)}</div>`).join('');
+    } catch {}
+}
+function setYon(id, val) { const el = document.getElementById(id); if (el && val !== null) el.textContent = val; }
+function yonRozet(id, ok, okText, offText) {
+    const el = document.getElementById(id); if (!el) return;
+    el.textContent = ok ? okText : offText;
+    el.className = 'text-xs px-2 py-1 rounded-full border ' + (ok
+        ? 'bg-green-950/40 border-green-900/40 text-green-400'
+        : 'bg-gray-800 border-gray-700 text-gray-400');
+}
+
+// ============================================================
+//  CANLI KAMERA GRID (Özet panelinde)
+// ============================================================
+let _gridCameras = [];     // [{id, name, role}]
+let _gridRefreshTimer = null;
+
+async function canliGridYukle() {
+    try {
+        const r = await fetch('/api/cameras');
+        if (!r.ok) return;
+        const list = await r.json();
+        _gridCameras = list.filter(c => c.enabled);
+        // Always also include the legacy plate camera (id=0, single-camera mode)
+        // — only if there are no other cameras already.
+        const grid = document.getElementById('canli-grid');
+        if (!_gridCameras.length) {
+            grid.innerHTML = `<div class="col-span-full text-center py-8 text-gray-600 text-sm">
+                Kamera bulunamadı. <a href="/cameras" class="text-cyan-400 hover:underline">Kamera ekle →</a>
+            </div>`;
+            return;
+        }
+        grid.innerHTML = _gridCameras.map(c => {
+            const isIntrusion = (c.role === 'intrusion' || c.role === 'both');
+            const url = isIntrusion ? `/api/camera/${c.id}/snapshot` : '/api/camera/snapshot';
+            return `<div onclick="openCamEdit(${c.id})" title="Düzenlemek için tıklayın"
+                         class="relative rounded-xl overflow-hidden border border-gray-800 bg-black group cursor-pointer hover:border-cyan-600 hover:ring-2 hover:ring-cyan-600/40 transition">
+                <div class="aspect-video bg-gray-900 flex items-center justify-center">
+                    <img id="grid-img-${c.id}" src="${(window.ggAuthedUrl||(x=>x))(url + '?t=' + Date.now())}" class="w-full h-full object-cover"
+                         alt="" onerror="this.style.opacity=0.15;this.src='/static/icon.svg'">
+                </div>
+                <!-- üst şerit: durum LED'i + fps -->
+                <div class="absolute top-0 inset-x-0 flex items-center justify-between p-2 pointer-events-none">
+                    <span id="grid-led-${c.id}" class="w-2.5 h-2.5 rounded-full bg-gray-500 ring-2 ring-black/50"></span>
+                    <span id="grid-fps-${c.id}" class="bg-black/75 px-2 py-0.5 rounded text-[11px] text-white font-mono">— fps</span>
+                </div>
+                <!-- alt degrade: okunur kamera adı -->
+                <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black via-black/60 to-transparent pt-10 pb-2.5 px-3 pointer-events-none">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-white font-bold text-base leading-tight truncate bg-black/60 rounded px-2 py-0.5" style="text-shadow:0 1px 3px rgba(0,0,0,.95)">${escapeHtmlSafe(c.name)}</span>
+                        <span class="text-[11px] text-cyan-300 font-semibold whitespace-nowrap opacity-0 group-hover:opacity-100 transition">✏️ Düzenle</span>
+                    </div>
+                </div>
+                <button onclick="event.stopPropagation(); window.location.href='/night-watch?cam=${c.id}'"
+                        class="absolute top-8 right-2 bg-black/75 hover:bg-cyan-700 px-2 py-0.5 rounded text-[10px] text-white opacity-0 group-hover:opacity-100 transition">⛶ Tam ekran</button>
+            </div>`;
+        }).join('');
+        document.getElementById('grid-status').textContent = `${_gridCameras.length} kamera`;
+        canliGridYenile();   // immediate first refresh
+        startGridAutoRefresh();
+    } catch (e) {
+        console.warn('grid yukle:', e);
+    }
+}
+function canliGridYenile(force = false) {
+    const t = Date.now();
+    _gridCameras.forEach(c => {
+        const img = document.getElementById('grid-img-' + c.id);
+        if (img) {
+            const isIntrusion = (c.role === 'intrusion' || c.role === 'both');
+            img.src = (window.ggAuthedUrl||(x=>x))((isIntrusion ? `/api/camera/${c.id}/snapshot` : '/api/camera/snapshot') + '?t=' + t);
+        }
+    });
+}
+function startGridAutoRefresh() {
+    if (_gridRefreshTimer) clearInterval(_gridRefreshTimer);
+    let healthTick = 0;
+    _gridRefreshTimer = setInterval(() => {
+        if (document.hidden) return;
+        // Only refresh while Özet tab is visible
+        if (!document.getElementById('tab-ozet').classList.contains('hidden')) {
+            canliGridYenile();
+            // Health every 5th tick (every 10s)
+            if (++healthTick % 5 === 0) saglikDurumuGuncelle();
+        }
+    }, 2000);   // every 2 seconds
+}
+function escapeHtmlSafe(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ── Kamera düzenleme (grid karta tıklayınca açılan modal) ──
+let _camEditId = null;
+function openCamEdit(cid) {
+    const c = _gridCameras.find(x => x.id === cid);
+    if (!c) return;
+    _camEditId = cid;
+    document.getElementById('cam-edit-title').textContent = c.name || 'Kamera';
+    document.getElementById('cam-edit-name').value = c.name || '';
+    document.getElementById('cam-edit-location').value = c.location || '';
+    document.getElementById('cam-edit-rtsp').value = c.rtsp_url || '';   // /api/cameras tam URL döner
+    document.getElementById('cam-edit-role').value = c.role || 'intrusion';
+    document.getElementById('cam-edit-enabled').checked = !!c.enabled;
+    const isIntr = (c.role === 'intrusion' || c.role === 'both');
+    const u = (isIntr ? `/api/camera/${cid}/snapshot` : '/api/camera/snapshot') + '?t=' + Date.now();
+    document.getElementById('cam-edit-img').src = (window.ggAuthedUrl || (x => x))(u);
+    document.getElementById('cam-edit-modal').classList.remove('hidden');
+}
+function closeCamEdit() { document.getElementById('cam-edit-modal').classList.add('hidden'); }
+async function saveCamEdit() {
+    if (_camEditId == null) return;
+    const g = id => document.getElementById(id);
+    const body = {
+        name: g('cam-edit-name').value.trim(),
+        location: g('cam-edit-location').value.trim(),
+        rtsp_url: g('cam-edit-rtsp').value.trim(),
+        role: g('cam-edit-role').value,
+        enabled: g('cam-edit-enabled').checked,
+    };
+    if (!body.name || !body.rtsp_url) { await ggAlert('İsim ve RTSP URL gerekli.', { title: 'Eksik bilgi' }); return; }
+    const btn = g('cam-edit-save'); const old = btn.textContent; btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+    try {
+        const r = await fetch(`/api/cameras/${_camEditId}`, {
+            method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        closeCamEdit();
+        await canliGridYukle();   // grid'i tazele (isim/rol değişmiş olabilir)
+    } catch (e) { await ggAlert('Kaydedilemedi: ' + e.message, { title: 'Hata' }); }
+    finally { btn.disabled = false; btn.textContent = old; }
+}
+
+// Hook health updates onto grid LEDs/FPS counters
+async function saglikDurumuGuncelle() {
+    try {
+        const r = await fetch('/api/health');
+        if (!r.ok) return;
+        const data = await r.json();
+        for (const c of (data.cameras || [])) {
+            const led = document.getElementById('grid-led-' + c.id);
+            const fps = document.getElementById('grid-fps-' + c.id);
+            if (led) {
+                led.className = 'w-2.5 h-2.5 rounded-full ring-2 ring-black/50 ' +
+                    (c.is_stale || !c.connected ? 'bg-red-500' :
+                     c.fps < 0.5 ? 'bg-amber-500' : 'bg-green-500 animate-pulse');
+            }
+            if (fps) fps.textContent = (c.fps || 0).toFixed(1) + ' fps';
+        }
+        // Update overall system badge text from /api/health
+        const status = document.getElementById('status-text');
+        if (status) {
+            if (data.status === 'ok') status.textContent = 'Sistem aktif';
+            else if (data.status === 'warn') status.textContent = '⚠ Dikkat';
+            else status.textContent = '❌ ' + (data.issues[0] || 'Hata');
+        }
+        const dot = document.getElementById('status-dot');
+        if (dot) {
+            dot.style.background = data.status === 'ok' ? '#22c55e' :
+                                   data.status === 'warn' ? '#eab308' : '#ef4444';
+            dot.style.boxShadow = data.status === 'ok'
+                ? '0 0 0 3px rgba(34,197,94,.18), 0 0 8px rgba(34,197,94,.6)'
+                : '0 0 0 3px rgba(239,68,68,.18), 0 0 8px rgba(239,68,68,.6)';
+        }
+    } catch (e) {}
+}
+
 // ============================================================
 //  CANLI GEÇİŞ LİSTESİ
 // ============================================================
+function dirText(d) {
+    return d === 'entry' ? 'Giriş' : d === 'exit' ? 'Çıkış' : 'Yön belirsiz';
+}
 function dirBadge(d) {
     if (d === 'entry') return '<span class="dir-entry text-xs font-semibold">▼ Giriş</span>';
     if (d === 'exit') return '<span class="dir-exit text-xs font-semibold">▲ Çıkış</span>';
@@ -649,6 +1348,24 @@ function gecisEkle(v) {
     if (gecisler.length > MAX_GECIS) gecisler.pop();
     gecisleriCiz();
 }
+// Populate the live feed with the most recent passages on open (so the screen
+// isn't empty until the next car). Maps the API shape -> feed shape.
+async function sonGecisleriYukle() {
+    try {
+        const r = await fetch('/api/passages?limit=20');
+        const data = await r.json();
+        gecisler = (data.passages || []).map(p => ({
+            plate: p.plate,
+            detected_at: p.detected_at,
+            is_authorized: !!p.is_authorized,
+            owner_name: p.owner_name,
+            confidence: (p.confidence != null && p.confidence <= 1) ? p.confidence * 100 : p.confidence,
+            screenshot_url: p.screenshot_path || '',
+            direction: p.direction,
+        })).slice(0, MAX_GECIS);
+        gecisleriCiz();
+    } catch (e) {}
+}
 function gecisleriCiz() {
     const el = document.getElementById('passages-list');
     document.getElementById('passage-count').textContent = gecisler.length;
@@ -659,13 +1376,16 @@ function gecisleriCiz() {
         const bg = y ? 'bg-gray-800/40 border-gray-700/50' : 'bg-red-950/25 border-red-900/40';
         const st = y ? '<span class="text-green-400 text-xs font-semibold">✓ Yetkili</span>' : '<span class="text-red-400 text-xs font-bold">✗ KAÇAK</span>';
         const anim = i === 0 ? 'card-enter' : '';
-        return `<div class="flex items-center gap-2 p-2.5 rounded-lg border ${bg} ${anim}">
-            ${!y && g.screenshot_url ? `<img src="${g.screenshot_url}" class="w-14 h-10 object-cover rounded border border-gray-700 flex-shrink-0 cursor-pointer" onclick="fotoAc('${g.screenshot_url}','${g.plate}','${saat}','${g.direction||''}')">` : `<div class="w-14 h-10 bg-gray-800/60 rounded flex items-center justify-center text-gray-600 text-sm flex-shrink-0">${y?'🚗':'🚨'}</div>`}
+        const photo = g.screenshot_url
+            ? `<img src="${g.screenshot_url}" class="w-32 h-24 object-cover rounded-lg border-2 ${y?'border-green-500':'border-red-500'} flex-shrink-0 cursor-pointer" onclick="fotoAc('${g.screenshot_url}','${g.plate}','${saat}','${g.direction||''}')">`
+            : `<div class="w-32 h-24 bg-gray-800/60 rounded-lg flex items-center justify-center text-gray-500 text-3xl flex-shrink-0">${y?'🚗':'🚨'}</div>`;
+        return `<div class="flex items-center gap-3 p-3 rounded-xl border ${bg} ${anim}">
+            ${photo}
             <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                    <span class="font-mono font-bold text-sm">${g.plate}</span>${st} ${dirBadge(g.direction)}
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-mono font-black text-2xl tracking-wide">${g.plate}</span>${st} ${dirBadge(g.direction)}
                 </div>
-                <div class="text-[11px] text-gray-500">🕐 ${saat} ${g.owner_name?'· '+g.owner_name:''} · %${g.confidence?.toFixed(0)||'?'}</div>
+                <div class="text-xs text-gray-500 mt-1">🕐 ${saat} ${g.owner_name?'· '+g.owner_name:''} · %${g.confidence?.toFixed(0)||'?'}</div>
             </div>
         </div>`;
     }).join('');
@@ -700,14 +1420,17 @@ function alarmGoster(v) {
     document.getElementById('last-alarm-time-text').textContent =
         new Date(v.detected_at).toLocaleTimeString('tr-TR');
 
-    // Start looping siren
+    // Start looping siren + cross-tab attention helpers
     sirenBaslat();
+    titleFlash(`🚨 KAÇAK: ${v.plate}`);
+    sistemBildirimi('Kaçak Geçiş!', `${v.plate} · ${dirText(v.direction)}`);
 
-    // Auto-silence after 7 seconds (reset timer if a new alarm fires)
+    // Ayarlanan alarm ötme süresi kadar çal, sonra otomatik sustur
+    // (yeni alarm gelirse sayaç sıfırlanır).
     if (alarmAutoSilenceTimer) clearTimeout(alarmAutoSilenceTimer);
     alarmAutoSilenceTimer = setTimeout(() => {
         if (alarmAktif) susturAlarm();
-    }, ALARM_AUTO_SILENCE_MS);
+    }, alarmSuresiSn() * 1000);
 }
 
 function alarmKapat() {
@@ -752,11 +1475,74 @@ async function uygulamayiKapat() {
     }, 1500);
 }
 
+// --- Audio unlock (browser autoplay policy) ---
+// We keep ONE persistent AudioContext and try to keep it 'running' so the alarm
+// siren can sound the instant an event arrives — no manual "enable" step needed.
+// Browsers may still suspend audio until the first interaction; when that
+// happens the first click/key/touch resumes it, and a fallback bar is shown only
+// if the browser is still blocking after page load.
+let _primeCtx = null;
+function _ensurePrimeCtx() {
+    if (!_primeCtx) {
+        try { _primeCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { return null; }
+    }
+    return _primeCtx;
+}
+function sesEtkinlestir() {
+    const ctx = _ensurePrimeCtx();
+    if (ctx) {
+        try {
+            if (ctx.state === 'suspended') ctx.resume();
+            // Near-silent blip to fully unlock the audio pipeline on this gesture.
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            g.gain.value = 0.0001; o.connect(g); g.connect(ctx.destination);
+            o.start(); o.stop(ctx.currentTime + 0.05);
+        } catch (e) {}
+    }
+    markAudioPrimed();
+}
+function markAudioPrimed() {
+    _audioPrimed = true;
+    const bar = document.getElementById('audio-enable-bar');
+    if (bar) bar.classList.add('hidden');
+}
+// Try to enable alarm sound automatically on load. Show the fallback bar only if
+// the browser is still blocking audio after a short grace period.
+function sesOtomatikAc() {
+    const ctx = _ensurePrimeCtx();
+    if (ctx && ctx.state === 'running') { markAudioPrimed(); return; }
+    if (ctx) {
+        try { ctx.resume().then(() => { if (ctx.state === 'running') markAudioPrimed(); }).catch(() => {}); }
+        catch (e) {}
+    }
+    setTimeout(() => {
+        if (_audioPrimed) return;
+        if (_primeCtx && _primeCtx.state === 'running') { markAudioPrimed(); return; }
+        const bar = document.getElementById('audio-enable-bar');
+        if (bar) bar.classList.remove('hidden');
+    }, 800);
+}
+// Backwards-compatible alias.
+function sesDurumKontrol() { sesOtomatikAc(); }
+// Any user gesture unlocks audio for the page session — actively RESUME the
+// context (not just flag it) so the very next alarm is audible.
+['pointerdown', 'click', 'keydown', 'touchstart'].forEach(ev =>
+    document.addEventListener(ev, () => {
+        const ctx = _ensurePrimeCtx();
+        if (ctx) { try { if (ctx.state === 'suspended') ctx.resume(); } catch (e) {} }
+        markAudioPrimed();
+    }, { once: true, passive: true })
+);
+
 // --- Continuous siren (wail-style frequency sweep) ---
 function sirenBaslat() {
     sirenDurdur(); // cleanup any previous
     try {
         sirenCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // Some browsers suspend the context when the tab loses focus.
+        // Calling resume() on visibilitychange keeps the alarm audible.
+        if (sirenCtx.state === 'suspended') sirenCtx.resume();
 
         // Main tone oscillator
         sirenOsc = sirenCtx.createOscillator();
@@ -797,6 +1583,140 @@ function sirenDurdur() {
     try { if (sirenLfoGain) sirenLfoGain.disconnect(); } catch(e) {}
     try { if (sirenCtx && sirenCtx.state !== 'closed') sirenCtx.close(); } catch(e) {}
     sirenOsc = sirenLfo = sirenGain = sirenLfoGain = sirenCtx = null;
+    titleFlashStop();
+}
+
+// --- Intrusion alarm tone (Module 2) ---
+// Distinct from the vehicle siren (low sawtooth wail): a THINNER two-tone
+// pulse (triangle, high C6/E6) that repeats for the full duration so it's
+// unmistakably "kaçak insan" and lasts long enough to draw attention.
+let _intrCtx = null, _intrStopTimer = null;
+function intrusionAlarmTone(durationSec = 6) {
+    intrusionAlarmDurdur();
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (ctx.state === 'suspended') ctx.resume();
+        _intrCtx = ctx;
+        const master = ctx.createGain();
+        master.gain.value = 0.16;               // moderate, not deafening
+        master.connect(ctx.destination);
+        const t0 = ctx.currentTime;
+        const beep = 0.16, gap = 0.10;
+        const period = (beep + gap) * 2;        // one "bi-bip" cycle
+        const cycles = Math.max(1, Math.ceil(durationSec / period));
+        for (let i = 0; i < cycles; i++) {
+            [1047, 1319].forEach((freq, j) => {  // C6 ↔ E6
+                const start = t0 + i * period + j * (beep + gap);
+                const osc = ctx.createOscillator();
+                const g = ctx.createGain();
+                osc.type = 'triangle';           // thinner timbre than sawtooth
+                osc.frequency.value = freq;
+                g.gain.setValueAtTime(0.0001, start);
+                g.gain.exponentialRampToValueAtTime(1.0, start + 0.008);
+                g.gain.exponentialRampToValueAtTime(0.0001, start + beep);
+                osc.connect(g).connect(master);
+                osc.start(start);
+                osc.stop(start + beep + 0.03);
+            });
+        }
+        _intrStopTimer = setTimeout(intrusionAlarmDurdur, durationSec * 1000 + 300);
+    } catch (e) { console.warn('intrusion tone failed', e); }
+}
+function intrusionAlarmDurdur() {
+    if (_intrStopTimer) { clearTimeout(_intrStopTimer); _intrStopTimer = null; }
+    try { if (_intrCtx && _intrCtx.state !== 'closed') _intrCtx.close(); } catch(e) {}
+    _intrCtx = null;
+}
+
+// --- Prominent intrusion overlay: names the camera, shows it LIVE + the
+// detection proof frame, auto-refreshes the live shot, auto-dismisses. ---
+let _intrLiveTimer = null, _intrAutoClose = null, _intrCamId = null;
+function intrusionAlertGoster(d) {
+    _intrCamId = d.camera_id;
+    const camLabel = d.camera_name || ('Kamera ' + d.camera_id);
+    document.getElementById('intr-cam').textContent = camLabel;
+    document.getElementById('intr-big').href = `/night-watch?cam=${d.camera_id}`;
+
+    // Proof frame (bbox screenshot captured at detection)
+    const proof = document.getElementById('intr-proof');
+    if (d.screenshot_url) { proof.src = d.screenshot_url; proof.style.display=''; }
+    else proof.style.display = 'none';
+
+    // Meta line
+    const conf = (typeof d.confidence === 'number') ? Math.round(d.confidence) : d.confidence;
+    const src = d.source === 'motion' ? 'Hareket algısı' : 'Kişi algısı';
+    document.getElementById('intr-meta').innerHTML = `
+        <span><span class="text-gray-500">Süre:</span> <b>${d.duration_sec}sn</b></span>
+        <span><span class="text-gray-500">Güven:</span> <b>%${conf}</b></span>
+        <span><span class="text-gray-500">Kaynak:</span> ${src}</span>
+        <span><span class="text-gray-500">Saat:</span> ${new Date(d.detected_at).toLocaleTimeString('tr-TR')}</span>`;
+
+    // Reset mute button
+    const mute = document.getElementById('intr-mute');
+    mute.disabled = false;
+    mute.textContent = '🔇 Sesi Sustur';
+
+    // Live snapshot loop for the offending camera
+    const live = document.getElementById('intr-live');
+    const refreshLive = () => {
+        const _u = `/api/cameras/${d.camera_id}/snapshot?t=${Date.now()}`;
+        live.src = window.ggAuthedUrl ? window.ggAuthedUrl(_u) : _u;
+    };
+    refreshLive();
+    clearInterval(_intrLiveTimer);
+    _intrLiveTimer = setInterval(refreshLive, 1000);
+
+    document.getElementById('intr-overlay').classList.remove('hidden');
+
+    // Auto-dismiss after 25s (the event stays in history regardless)
+    clearTimeout(_intrAutoClose);
+    _intrAutoClose = setTimeout(intrusionKapat, 25000);
+}
+function intrusionSustur() {
+    intrusionAlarmDurdur();
+    titleFlashStop();
+    const mute = document.getElementById('intr-mute');
+    mute.disabled = true;
+    mute.textContent = '🔇 Susturuldu';
+}
+function intrusionKapat() {
+    intrusionAlarmDurdur();
+    clearInterval(_intrLiveTimer); _intrLiveTimer = null;
+    clearTimeout(_intrAutoClose); _intrAutoClose = null;
+    const live = document.getElementById('intr-live'); if (live) live.src = '';
+    document.getElementById('intr-overlay').classList.add('hidden');
+}
+
+// --- Tab title flicker (operatör başka sekmedeyken bile fark eder) ---
+let _titleOriginal = null, _titleTimer = null, _titleFlip = false;
+function titleFlash(message) {
+    if (_titleOriginal === null) _titleOriginal = document.title;
+    titleFlashStop();
+    _titleTimer = setInterval(() => {
+        _titleFlip = !_titleFlip;
+        document.title = _titleFlip ? message : _titleOriginal;
+    }, 800);
+}
+function titleFlashStop() {
+    if (_titleTimer) { clearInterval(_titleTimer); _titleTimer = null; }
+    if (_titleOriginal !== null) { document.title = _titleOriginal; }
+}
+
+// --- System notification (HTML5 Notification API) ---
+let _notifPermAsked = false;
+async function sistemBildirimi(title, body) {
+    try {
+        if (!('Notification' in window)) return;
+        // Only meaningful when window is hidden
+        if (document.visibilityState === 'visible') return;
+        if (Notification.permission === 'default' && !_notifPermAsked) {
+            _notifPermAsked = true;
+            try { await Notification.requestPermission(); } catch(e) {}
+        }
+        if (Notification.permission === 'granted') {
+            new Notification(title, { body, icon: '/static/icon.svg', tag: 'gateguard-alarm' });
+        }
+    } catch (e) {}
 }
 
 // ============================================================
@@ -832,6 +1752,7 @@ async function gecmisAra(sayfa) {
             const st = y ? '<span class="text-green-400">✓ Yetkili</span>' : '<span class="text-red-400 font-bold">✗ Kaçak</span>';
             const foto = r.screenshot_path ? `<img src="${r.screenshot_path}" class="w-12 h-8 object-cover rounded cursor-pointer border border-gray-700" onclick="fotoAc('${r.screenshot_path}','${r.plate}','${t}','${r.direction||''}')">` : '<span class="text-gray-600">—</span>';
             return `<tr class="${bg} border-b border-gray-800/50 hover:bg-gray-800/30">
+                <td class="px-3 py-2"><input type="checkbox" class="bulk-cb" data-id="${r.id}" onchange="bulkSecimGuncelle()"></td>
                 <td class="px-4 py-2 text-xs text-gray-400">${t}</td>
                 <td class="px-4 py-2 font-mono font-bold text-sm">${r.plate}</td>
                 <td class="px-4 py-2">${dirBadge(r.direction)}</td>
@@ -841,9 +1762,106 @@ async function gecmisAra(sayfa) {
                 <td class="px-4 py-2">${foto}</td>
             </tr>`;
         }).join('');
+        if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="8" class="py-16 text-center">
+                <div class="text-5xl mb-2 opacity-30">📋</div>
+                <p class="text-gray-400 font-semibold">Filtrelere uygun kayıt bulunamadı</p>
+                <p class="text-xs text-gray-600 mt-2">Tarih aralığını genişletmeyi veya filtreleri kaldırmayı deneyin.</p>
+            </td></tr>`;
+        }
+        bulkSecimGuncelle();
     } catch(err) { bildirim('Veri yüklenemedi','hata'); }
 }
 function gecmisSayfa(delta) { gecmisAra(gecmisPage + delta); }
+
+// ── Bulk operations ──
+function bulkTumunuSec(checked) {
+    document.querySelectorAll('.bulk-cb').forEach(cb => cb.checked = checked);
+    bulkSecimGuncelle();
+}
+function bulkSecimTemizle() {
+    document.querySelectorAll('.bulk-cb').forEach(cb => cb.checked = false);
+    document.getElementById('bulk-all').checked = false;
+    bulkSecimGuncelle();
+}
+function bulkSecimGuncelle() {
+    const sel = document.querySelectorAll('.bulk-cb:checked');
+    const bar = document.getElementById('bulk-bar');
+    const cnt = document.getElementById('bulk-count');
+    if (sel.length > 0) {
+        bar.classList.remove('hidden');
+        cnt.textContent = `${sel.length} seçildi`;
+    } else {
+        bar.classList.add('hidden');
+    }
+}
+async function bulkSil() {
+    const ids = [...document.querySelectorAll('.bulk-cb:checked')].map(cb => parseInt(cb.dataset.id));
+    if (!ids.length) return;
+    if (!await ggConfirm(`${ids.length} kayıt kalıcı olarak silinecek. Emin misiniz?`, { title: 'Kayıtları sil', okLabel: 'Evet, sil' })) return;
+    try {
+        const r = await fetch('/api/passages/bulk-delete', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ids}),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        bildirim(`${data.deleted} kayıt silindi`, 'basari');
+        bulkSecimTemizle();
+        gecmisAra(gecmisPage);
+        istatistikAl();
+    } catch (e) {
+        bildirim('Silme başarısız: ' + e.message, 'hata');
+    }
+}
+
+// ── Plaka autocomplete ──
+let _plateSuggestTimer = null;
+async function plakaOnerileri(q) {
+    if (_plateSuggestTimer) clearTimeout(_plateSuggestTimer);
+    const host = document.getElementById('plate-suggest');
+    if (!q || q.length < 2) { host.classList.add('hidden'); return; }
+    _plateSuggestTimer = setTimeout(async () => {
+        try {
+            const r = await fetch('/api/plates/autocomplete?q=' + encodeURIComponent(q));
+            if (!r.ok) return;
+            const data = await r.json();
+            const list = data.suggestions || [];
+            if (!list.length) { host.classList.add('hidden'); return; }
+            host.innerHTML = list.map(s => {
+                const badge = s.source === 'vehicle'
+                    ? '<span class="text-[10px] bg-green-900/40 text-green-300 px-1.5 py-0.5 rounded">KAYITLI</span>'
+                    : `<span class="text-[10px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">${s.count||1} geçiş</span>`;
+                const meta = s.owner ? `<div class="text-[10px] text-gray-500 truncate">${escapeHtmlSafe(s.owner)}${s.apartment ? ' · '+escapeHtmlSafe(s.apartment) : ''}</div>` : '';
+                return `<div class="px-3 py-2 hover:bg-gray-800 cursor-pointer border-b border-gray-800/50" onclick="plakaSec('${s.plate}')">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="font-mono font-bold text-sm">${escapeHtmlSafe(s.plate)}</span>
+                        ${badge}
+                    </div>
+                    ${meta}
+                </div>`;
+            }).join('');
+            host.classList.remove('hidden');
+        } catch (e) {}
+    }, 200);
+}
+function plakaSec(plate) {
+    document.getElementById('f-plate').value = plate;
+    document.getElementById('plate-suggest').classList.add('hidden');
+    gecmisAra(0);
+}
+
+async function gecmisCSV() {
+    // Export current filter as CSV
+    const p = new URLSearchParams();
+    const s = document.getElementById('f-start').value, e = document.getElementById('f-end').value;
+    if (s) p.set('start', s);
+    if (e) p.set('end', e);
+    const d = document.getElementById('f-dir').value; if (d) p.set('direction', d);
+    const a = document.getElementById('f-auth').value; if (a) p.set('authorized', a);
+    const pl = document.getElementById('f-plate').value.trim(); if (pl) p.set('plate', pl);
+    window.location.href = '/api/passages/export.csv?' + p.toString();
+}
 
 // ============================================================
 //  GALERİ TAB
@@ -860,7 +1878,14 @@ async function galeriYukle() {
         document.getElementById('galeri-count').textContent = `${rows.length} kaçak geçiş`;
 
         const grid = document.getElementById('galeri-grid');
-        if (!rows.length) { grid.innerHTML = '<div class="col-span-full text-center py-20 text-gray-600">Bu tarihte kaçak geçiş yok</div>'; return; }
+        if (!rows.length) {
+            grid.innerHTML = `<div class="col-span-full text-center py-20">
+                <div class="text-6xl mb-3 opacity-30">🎉</div>
+                <p class="text-gray-300 font-semibold">Bu tarihte kaçak geçiş yok</p>
+                <p class="text-xs text-gray-500 mt-2">Tüm araçlar yetkili. Sistem doğru çalışıyor.</p>
+            </div>`;
+            return;
+        }
 
         grid.innerHTML = rows.map(r => {
             const t = new Date(r.detected_at).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
@@ -917,20 +1942,499 @@ async function senkronizeEt() { try { await fetch('/api/sync',{method:'POST'}); 
 // ============================================================
 function bildirim(msg, tip='bilgi') {
     const c = document.getElementById('toast-container');
-    const cls = {basari:'bg-green-900/60 border-green-700 text-green-300',hata:'bg-red-900/60 border-red-700 text-red-300',bilgi:'bg-blue-900/60 border-blue-700 text-blue-300'};
+    // Solid backgrounds + white text set inline with !important so the toast
+    // stays legible in BOTH themes (gg-light.css rewrites text-white → dark on
+    // non-button elements, which washed out the old *-900/60 + *-300 combo).
+    const bg = { basari:'#16a34a', hata:'#dc2626', bilgi:'#2563eb' };
     const el = document.createElement('div');
-    el.className = `p-3 rounded-lg border text-sm card-enter ${cls[tip]||cls.bilgi}`;
+    el.className = 'p-3 rounded-lg text-sm font-medium shadow-lg card-enter';
+    el.style.setProperty('background', bg[tip] || bg.bilgi, 'important');
+    el.style.setProperty('color', '#ffffff', 'important');
     el.textContent = msg;
     c.appendChild(el);
     setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(() => el.remove(), 300); }, 4000);
 }
 
 // ============================================================
+//  ESP32 SİREN DURUM BANNERI
+// ============================================================
+function donanimDurumGoster(d) {
+    let banner = document.getElementById('hw-banner');
+    // Siren disabled (optional hardware) → never warn.
+    if (d.ok || d.enabled === false) {
+        if (banner) banner.remove();
+        return;
+    }
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'hw-banner';
+        banner.className = 'fixed top-14 left-0 right-0 z-40 bg-red-900/90 border-b-2 border-red-500 text-white text-sm py-2 px-4 flex items-center gap-3 shadow-lg';
+        document.body.appendChild(banner);
+    }
+    banner.innerHTML = `
+        <span class="text-xl">⚠️</span>
+        <div class="flex-1">
+            <b>Siren bağlantısı yok</b> — fiziksel alarm ÇALMAYACAK!
+            <span class="text-red-200 text-xs ml-2">(${d.esp32_ip || 'ESP32'} · ${d.last_error || 'timeout'})</span>
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-red-200 hover:text-white px-2">✕</button>
+    `;
+}
+
+// Health'i periyodik kontrol et — WS gelmese bile banner gözüksün
+async function donanimDurumKontrol() {
+    try {
+        const r = await fetch('/api/health');
+        if (!r.ok) return;
+        const d = await r.json();
+        // ── ESP32 banner ──
+        const hw = d.alarm_hardware || {};
+        if (hw.mock_mode === false && hw.ok === false) {
+            donanimDurumGoster(hw);
+        } else if (hw.ok) {
+            const b = document.getElementById('hw-banner');
+            if (b) b.remove();
+        }
+        // ── MDB sync banner ──
+        const mdb = d.mdb_sync || {};
+        if (mdb.stale && mdb.hours_since !== undefined) {
+            mdbBannerGoster(mdb);
+        } else {
+            const m = document.getElementById('mdb-banner');
+            if (m) m.remove();
+        }
+    } catch {}
+}
+setInterval(donanimDurumKontrol, 30000);
+
+function mdbBannerGoster(d) {
+    let banner = document.getElementById('mdb-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'mdb-banner';
+        banner.className = 'fixed left-0 right-0 z-30 bg-amber-900/90 border-b-2 border-amber-500 text-white text-sm py-2 px-4 flex items-center gap-3 shadow-lg';
+        banner.style.top = document.getElementById('hw-banner') ? '6rem' : '3.5rem';
+        document.body.appendChild(banner);
+    }
+    const hrs = d.hours_since;
+    const text = d.error
+        ? `Son MDB sync başarısız: ${d.error}`
+        : (hrs === null || hrs === undefined)
+            ? 'MDB sync hiç çalışmamış'
+            : `MDB ${hrs >= 1 ? Math.round(hrs)+' saattir' : 'yakın zamanda'} güncellenmedi`;
+    banner.innerHTML = `
+        <span class="text-xl">⚠️</span>
+        <div class="flex-1">
+            <b>Plaka veritabanı güncel değil</b> — ${text}
+        </div>
+        <button onclick="senkronizeEt()" class="bg-amber-700 hover:bg-amber-600 text-white px-3 py-1 rounded text-xs font-semibold">🔄 Şimdi Sync</button>
+        <button onclick="this.parentElement.remove()" class="text-amber-200 hover:text-white px-2">✕</button>
+    `;
+}
+
+// ============================================================
+//  KULLANICI MENÜSÜ
+// ============================================================
+function kullaniciMenuToggle() {
+    document.getElementById('user-menu').classList.toggle('hidden');
+}
+document.addEventListener('click', (e) => {
+    const btn = document.getElementById('user-btn');
+    const menu = document.getElementById('user-menu');
+    if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+    }
+});
+
+async function kullaniciYukle() {
+    try {
+        const r = await fetch('/api/auth/me');
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!d.authenticated) return;
+        const u = d.user;
+        window.ggCurrentUser = u;
+        const initial = (u.full_name || u.username).substring(0,1).toUpperCase();
+        document.getElementById('user-avatar').textContent = initial;
+        document.getElementById('user-name').textContent = u.full_name || u.username;
+        document.getElementById('menu-name').textContent = u.full_name || u.username;
+        document.getElementById('menu-role').textContent = u.role === 'admin' ? '⚡ Yönetici' : 'Operatör';
+        // Show user mgmt only for admins
+        document.getElementById('menu-users-btn').classList.toggle('hidden', u.role !== 'admin');
+    } catch {}
+}
+
+function parolaDegistirAc() {
+    document.getElementById('user-menu').classList.add('hidden');
+    document.getElementById('pw-modal').classList.remove('hidden');
+    document.getElementById('pw-current').focus();
+    document.getElementById('pw-err').classList.add('hidden');
+    ['pw-current','pw-new','pw-new2'].forEach(id => document.getElementById(id).value = '');
+}
+
+async function parolaDegistir(e) {
+    e.preventDefault();
+    const cur = document.getElementById('pw-current').value;
+    const n1 = document.getElementById('pw-new').value;
+    const n2 = document.getElementById('pw-new2').value;
+    const errBox = document.getElementById('pw-err');
+    errBox.classList.add('hidden');
+    if (n1 !== n2) {
+        errBox.textContent = 'Yeni parolalar eşleşmiyor';
+        errBox.classList.remove('hidden'); return false;
+    }
+    if (n1.length < 6) {
+        errBox.textContent = 'En az 6 karakter olmalı';
+        errBox.classList.remove('hidden'); return false;
+    }
+    try {
+        const r = await fetch('/api/auth/change-password', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({current_password: cur, new_password: n1}),
+        });
+        if (!r.ok) {
+            const ed = await r.json().catch(() => ({}));
+            throw new Error(ed.error || ed.detail || 'Değiştirme başarısız');
+        }
+        document.getElementById('pw-modal').classList.add('hidden');
+        bildirim('Parola değiştirildi', 'basari');
+    } catch (err) {
+        errBox.textContent = err.message;
+        errBox.classList.remove('hidden');
+    }
+    return false;
+}
+
+async function kullaniciYonetimAc() {
+    document.getElementById('user-menu').classList.add('hidden');
+    document.getElementById('users-modal').classList.remove('hidden');
+    await kullaniciListeYukle();
+}
+
+async function kullaniciListeYukle() {
+    try {
+        const r = await fetch('/api/users');
+        if (!r.ok) throw new Error('Liste alınamadı');
+        const d = await r.json();
+        const list = document.getElementById('users-list');
+        const me = window.ggCurrentUser;
+        list.innerHTML = (d.users || []).map(u => {
+            const isMe = me && u.id === me.id;
+            const roleBadge = u.role === 'admin'
+                ? '<span class="text-[10px] bg-purple-900/40 text-purple-300 px-2 py-0.5 rounded-full border border-purple-700">⚡ Admin</span>'
+                : '<span class="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full border border-gray-700">Operatör</span>';
+            const lastLogin = u.last_login_at
+                ? new Date(u.last_login_at).toLocaleString('tr-TR')
+                : '—';
+            return `<div class="bg-gray-800/40 border border-gray-700 rounded-lg p-3">
+                <div class="flex items-start gap-3">
+                    <div class="w-10 h-10 rounded-full bg-cyan-700 flex items-center justify-center font-bold">${(u.full_name || u.username).substring(0,1).toUpperCase()}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold">${escapeHtmlSafe(u.username)}</span>
+                            ${roleBadge}
+                            ${isMe ? '<span class="text-[10px] text-cyan-400">(siz)</span>' : ''}
+                            ${u.must_change_password ? '<span class="text-[10px] text-amber-400">parola değişimi bekliyor</span>' : ''}
+                        </div>
+                        ${u.full_name ? `<div class="text-xs text-gray-400">${escapeHtmlSafe(u.full_name)}</div>` : ''}
+                        <div class="text-[10px] text-gray-500 mt-0.5">Son giriş: ${lastLogin}</div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <button onclick="parolaSifirla(${u.id}, '${escapeHtmlSafe(u.username)}')" class="text-[10px] bg-amber-900/50 hover:bg-amber-800 text-amber-200 px-2 py-1 rounded">Parola Sıfırla</button>
+                        ${!isMe ? `<button onclick="kullaniciSil(${u.id}, '${escapeHtmlSafe(u.username)}')" class="text-[10px] bg-red-900/50 hover:bg-red-800 text-red-200 px-2 py-1 rounded">Sil</button>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        bildirim('Kullanıcı listesi alınamadı: ' + e.message, 'hata');
+    }
+}
+
+function yeniKullaniciAc() {
+    document.getElementById('new-user-modal').classList.remove('hidden');
+    document.getElementById('nu-err').classList.add('hidden');
+    ['nu-username','nu-fullname','nu-password'].forEach(id => document.getElementById(id).value = '');
+    // Üret rastgele bir başlangıç parolası (kullanıcı düzenleyebilir)
+    const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
+    let pw = '';
+    for (let i = 0; i < 10; i++) pw += chars[Math.floor(Math.random()*chars.length)];
+    document.getElementById('nu-password').value = pw;
+    document.getElementById('nu-role').value = 'operator';
+    document.getElementById('nu-username').focus();
+}
+
+async function yeniKullaniciKaydet(e) {
+    e.preventDefault();
+    const errBox = document.getElementById('nu-err');
+    errBox.classList.add('hidden');
+    try {
+        const r = await fetch('/api/users', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                username: document.getElementById('nu-username').value.trim(),
+                full_name: document.getElementById('nu-fullname').value.trim(),
+                password: document.getElementById('nu-password').value,
+                role: document.getElementById('nu-role').value,
+            }),
+        });
+        if (!r.ok) {
+            const ed = await r.json().catch(() => ({}));
+            throw new Error(ed.error || ed.detail || 'Oluşturulamadı');
+        }
+        const pw = document.getElementById('nu-password').value;
+        document.getElementById('new-user-modal').classList.add('hidden');
+        bildirim(`Kullanıcı oluşturuldu. Başlangıç parolası: ${pw}`, 'basari');
+        kullaniciListeYukle();
+    } catch (err) {
+        errBox.textContent = err.message;
+        errBox.classList.remove('hidden');
+    }
+    return false;
+}
+
+async function parolaSifirla(uid, username) {
+    const pw = await ggPrompt(`"${username}" için yeni parola gir (en az 6 karakter):`, { title: 'Parola sıfırla', placeholder: 'Yeni parola', okLabel: 'Kaydet' });
+    if (!pw || pw.length < 6) {
+        if (pw !== null) bildirim('Parola en az 6 karakter olmalı', 'hata');
+        return;
+    }
+    try {
+        const r = await fetch('/api/users/' + uid, {
+            method: 'PUT', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({new_password: pw}),
+        });
+        if (!r.ok) {
+            const ed = await r.json().catch(() => ({}));
+            throw new Error(ed.error || ed.detail || 'Başarısız');
+        }
+        bildirim(`"${username}" için parola sıfırlandı`, 'basari');
+        kullaniciListeYukle();
+    } catch (err) {
+        bildirim('Hata: ' + err.message, 'hata');
+    }
+}
+
+async function kullaniciSil(uid, username) {
+    if (!await ggConfirm(`"${username}" kullanıcısını silmek istediğine emin misin?`, { title: 'Kullanıcıyı sil', okLabel: 'Evet, sil' })) return;
+    try {
+        const r = await fetch('/api/users/' + uid, { method: 'DELETE' });
+        if (!r.ok) {
+            const ed = await r.json().catch(() => ({}));
+            throw new Error(ed.error || ed.detail || 'Silinemedi');
+        }
+        bildirim(`"${username}" silindi`, 'basari');
+        kullaniciListeYukle();
+    } catch (err) {
+        bildirim('Hata: ' + err.message, 'hata');
+    }
+}
+
+// Sayfa açıldığında user bilgisini yükle
+kullaniciYukle();
+
+// ============================================================
+//  TEMA TOGGLE
+// ============================================================
+function temaUygula(theme) {
+    const body = document.body;
+    const btn = document.getElementById('tema-btn');
+    if (theme === 'light') {
+        body.classList.add('light-theme');
+        if (btn) btn.textContent = '☀';
+    } else {
+        body.classList.remove('light-theme');
+        if (btn) btn.textContent = '🌙';
+    }
+    try { localStorage.setItem('gg-theme', theme); } catch(e) {}
+}
+function temaDegistir() {
+    const cur = document.body.classList.contains('light-theme') ? 'light' : 'dark';
+    temaUygula(cur === 'light' ? 'dark' : 'light');
+}
+// Initial theme from localStorage (defaults to LIGHT)
+(function() {
+    let saved = 'light';
+    try { saved = localStorage.getItem('gg-theme') || 'light'; } catch(e) {}
+    temaUygula(saved);
+    alarmSuresiInit();   // alarm ötme süresi input'unu kayıtlı değerle doldur
+})();
+
+// ============================================================
+//  KEYBOARD SHORTCUTS
+// ============================================================
+// Layout-aware: AltGr / Shift kombinasyonları kontrolü
+document.addEventListener('keydown', (e) => {
+    // Skip if user is typing in an input
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+    const key = e.key.toLowerCase();
+    // Alarm çalarken Boşluk / Enter da susturur (kolay, göz kapalı erişim).
+    // Yalnızca bir alarm aktifken devreye girer ki normal scroll / buton kullanımı bozulmasın.
+    if (e.code === 'Space' || key === ' ' || key === 'enter') {
+        const intrAcik = !document.getElementById('intr-overlay')?.classList.contains('hidden');
+        if (alarmAktif) { susturAlarm(); e.preventDefault(); return; }
+        if (intrAcik) { intrusionSustur(); e.preventDefault(); return; }
+    }
+    if (key === 's') { susturAlarm(); e.preventDefault(); }
+    else if (key === '1') { tabDegistir('ozet'); e.preventDefault(); }
+    else if (key === '2') { tabDegistir('canli'); e.preventDefault(); }
+    else if (key === '3') { tabDegistir('gecmis'); e.preventDefault(); }
+    else if (key === '4') { tabDegistir('galeri'); e.preventDefault(); }
+    else if (key === 'r') { senkronizeEt(); e.preventDefault(); }
+    else if (key === 't') { temaDegistir(); e.preventDefault(); }
+    else if (key === '?' || (e.shiftKey && key === '/')) {
+        kisayolGoster(); e.preventDefault();
+    }
+    else if (key === 'escape') {
+        // Close any open modal / suggestion / alarm
+        document.getElementById('plate-suggest')?.classList.add('hidden');
+        document.getElementById('shutdown-modal')?.classList.add('hidden');
+        const help = document.getElementById('shortcuts-modal');
+        if (help) help.classList.add('hidden');
+    }
+});
+
+function kisayolGoster() {
+    let modal = document.getElementById('shortcuts-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'shortcuts-modal';
+        modal.className = 'fixed inset-0 z-[60] bg-black/80 flex items-center justify-center';
+        modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+        modal.innerHTML = `
+            <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-md w-full mx-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold">⌨️ Klavye Kısayolları</h3>
+                    <button onclick="document.getElementById('shortcuts-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-xl">×</button>
+                </div>
+                <div class="space-y-2 text-sm">
+                    ${[
+                        ['1','📊 Özet sekmesi'],
+                        ['2','📡 Canlı sekmesi'],
+                        ['3','📋 Geçmiş sekmesi'],
+                        ['4','📸 Galeri sekmesi'],
+                        ['S / Boşluk / Enter','🔇 Alarmı sustur'],
+                        ['R','🔄 MDB senkronize et'],
+                        ['T','🌙/☀ Tema değiştir'],
+                        ['Esc','Modal/öneri kapat'],
+                        ['?','Bu yardım penceresi'],
+                    ].map(([k,v]) => `<div class="flex justify-between items-center py-1 border-b border-gray-800">
+                        <span>${v}</span>
+                        <kbd class="bg-gray-800 border border-gray-700 px-2 py-0.5 rounded text-xs font-mono">${k}</kbd>
+                    </div>`).join('')}
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove('hidden');
+}
+
+// ============================================================
 //  INIT
 // ============================================================
 baglan();
+tabDegistir('ozet');            // açılışta canlı kamera duvarı (Özet) gelsin
+sesOtomatikAc();                // auto-enable alarm sound (fallback bar only if blocked)
+saglikDurumuGuncelle();         // populate header health immediately
+setInterval(saglikDurumuGuncelle, 15000);  // keep header health fresh on every tab
 setInterval(istatistikAl, 30000);
 setInterval(durumAl, 60000);
+</script>
+
+<!-- ── Kamera düzenleme modalı (Özet gridinden açılır) ── -->
+<div id="cam-edit-modal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+     onclick="if(event.target===this) closeCamEdit()">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl max-w-lg w-full max-h-[92vh] overflow-y-auto">
+        <div class="p-4 border-b border-gray-800 flex items-center justify-between sticky top-0 bg-gray-900">
+            <h3 class="font-bold">✏️ <span id="cam-edit-title">Kamera</span> — Düzenle</h3>
+            <button onclick="closeCamEdit()" class="text-gray-400 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <div class="p-4 space-y-3">
+            <!-- Canlı önizleme (üstte) -->
+            <img id="cam-edit-img" class="w-full rounded-lg bg-black aspect-video object-cover border border-gray-800" alt=""
+                 onerror="this.style.opacity=.15;this.src='/static/icon.svg'">
+            <!-- Ayarlar (aşağıda) -->
+            <div class="space-y-2 pt-1">
+                <label class="block text-[11px] text-gray-500 uppercase tracking-wide">İsim</label>
+                <input id="cam-edit-name" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+                <label class="block text-[11px] text-gray-500 uppercase tracking-wide">Konum</label>
+                <input id="cam-edit-location" placeholder="opsiyonel" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+                <label class="block text-[11px] text-gray-500 uppercase tracking-wide">RTSP URL</label>
+                <input id="cam-edit-rtsp" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm font-mono">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[11px] text-gray-500 uppercase tracking-wide">Rol</label>
+                        <select id="cam-edit-role" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+                            <option value="intrusion">Hırsızlık Tespiti</option>
+                            <option value="plate">Plaka Tespiti</option>
+                            <option value="both">Her İkisi</option>
+                        </select>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm bg-gray-800 border border-gray-700 rounded px-3 mt-[18px]">
+                        <input type="checkbox" id="cam-edit-enabled"><span>Etkin</span>
+                    </label>
+                </div>
+            </div>
+            <div class="flex gap-2 pt-2">
+                <button id="cam-edit-save" onclick="saveCamEdit()" class="flex-1 bg-cyan-700 hover:bg-cyan-600 text-white py-2 rounded-lg font-semibold transition">💾 Kaydet</button>
+                <a href="/zone-editor" class="bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-lg text-sm flex items-center gap-1">🎯 Bölgeler</a>
+                <a href="/cameras" class="bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-lg text-sm flex items-center gap-1">⚙️ Tümü</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Shared styled dialog: window.ggConfirm / ggPrompt / ggAlert (replaces native confirm/prompt/alert) -->
+<div id="gg-modal" class="hidden fixed inset-0 z-[9998] bg-black/70 flex items-center justify-center p-4">
+  <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-md w-full shadow-2xl">
+    <div class="px-5 py-4 border-b border-gray-800">
+      <h3 id="gg-modal-title" class="text-xl font-bold">Onay</h3>
+      <p id="gg-modal-msg" class="text-base text-gray-300 mt-1" style="white-space:pre-line"></p>
+    </div>
+    <div id="gg-modal-inputwrap" class="px-5 pt-4 hidden">
+      <input id="gg-modal-input" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-lg">
+    </div>
+    <div class="px-5 py-4 flex gap-2 justify-end">
+      <button id="gg-modal-cancel" class="bg-gray-700 hover:bg-gray-600 text-white text-lg py-2.5 px-5 rounded-xl transition">İptal</button>
+      <button id="gg-modal-ok" class="text-lg font-semibold py-2.5 px-5 rounded-xl transition text-white bg-cyan-600 hover:bg-cyan-500">Tamam</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let resolver = null, mode = 'confirm';
+  function done(val){ $('gg-modal').classList.add('hidden'); const r = resolver; resolver = null; if (r) r(val); }
+  function open(o){
+    return new Promise(res => {
+      resolver = res; mode = o.mode || 'confirm';
+      $('gg-modal-title').textContent = o.title || '';
+      $('gg-modal-msg').textContent = o.msg || '';
+      const iw = $('gg-modal-inputwrap');
+      if (mode === 'prompt') { iw.classList.remove('hidden'); const i = $('gg-modal-input'); i.value = o.value || ''; i.placeholder = o.placeholder || ''; }
+      else iw.classList.add('hidden');
+      const cancel = $('gg-modal-cancel');
+      cancel.style.display = (mode === 'alert') ? 'none' : '';
+      cancel.textContent = o.cancelLabel || 'İptal';
+      const ok = $('gg-modal-ok');
+      ok.textContent = o.okLabel || (mode === 'confirm' ? 'Evet' : 'Tamam');
+      ok.className = 'text-lg font-semibold py-2.5 px-5 rounded-xl transition text-white ' + (o.danger ? 'bg-red-600 hover:bg-red-500' : 'bg-cyan-600 hover:bg-cyan-500');
+      $('gg-modal').classList.remove('hidden');
+      setTimeout(() => (mode === 'prompt' ? $('gg-modal-input') : ok).focus(), 50);
+    });
+  }
+  $('gg-modal-ok').onclick = () => done(mode === 'prompt' ? $('gg-modal-input').value : true);
+  $('gg-modal-cancel').onclick = () => done(mode === 'prompt' ? null : false);
+  $('gg-modal').addEventListener('click', e => { if (e.target === $('gg-modal')) done(mode === 'prompt' ? null : false); });
+  $('gg-modal-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('gg-modal-ok').click(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('gg-modal').classList.contains('hidden')) $('gg-modal-cancel').click(); });
+  window.ggConfirm = (msg, opts = {}) => open({ title: opts.title || 'Onay', msg, mode: 'confirm', okLabel: opts.okLabel || 'Evet', cancelLabel: opts.cancelLabel, danger: opts.danger !== false });
+  window.ggPrompt  = (msg, opts = {}) => open({ title: opts.title || 'Bilgi girin', msg, mode: 'prompt', okLabel: opts.okLabel || 'Tamam', placeholder: opts.placeholder, value: opts.value });
+  window.ggAlert   = (msg, opts = {}) => open({ title: opts.title || 'Uyarı', msg, mode: 'alert', okLabel: opts.okLabel || 'Tamam' });
+})();
 </script>
 </body>
 </html>

@@ -44,8 +44,14 @@ def save_screenshot(
     plate_text: str,
     bbox: tuple[int, int, int, int] | None,
     screenshot_dir: str,
+    authorized: bool = False,
 ) -> str:
-    """Save a frame with alarm overlay. Returns the relative URL path.
+    """Save a frame with a plate overlay. Returns the relative URL path.
+
+    authorized=False (default): red box + plate + a "KACAK GECIS" watermark
+    (evidence of an unauthorized passage). authorized=True: a NEUTRAL capture
+    (green box + green plate, no alarm watermark) so the live feed can show a
+    photo for every passage, not just alarms.
 
     Never raises — returns empty string on failure.
     """
@@ -60,10 +66,11 @@ def save_screenshot(
         # Work on a copy
         overlay = frame.copy()
 
-        # Draw bounding box if available
+        # Draw bounding box if available (green=authorized, red=unauthorized; BGR)
+        box_color = (0, 200, 0) if authorized else (0, 0, 255)
         if bbox:
             x, y, w, h = bbox
-            cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 0, 255), 3)
+            cv2.rectangle(overlay, (x, y), (x + w, y + h), box_color, 3)
 
         # Convert to PIL for better text rendering (Turkish chars)
         img = Image.fromarray(cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB))
@@ -89,26 +96,28 @@ def save_screenshot(
             [(tx - 12, h_img - 52), (tx + tw + 12, h_img - 8)],
             fill=(0, 0, 0),
         )
-        draw.text((tx, h_img - 50), plate_text, fill=(255, 50, 50), font=font_large)
+        plate_color = (50, 220, 50) if authorized else (255, 50, 50)
+        draw.text((tx, h_img - 50), plate_text, fill=plate_color, font=font_large)
 
-        # "KACAK GECIS" watermark (diagonal, semi-transparent)
-        watermark = "KACAK GECIS"
-        try:
-            wm_font = _get_font(36)
-            wm_bbox = draw.textbbox((0, 0), watermark, font=wm_font)
-            wm_w = wm_bbox[2] - wm_bbox[0]
-            wm_h = wm_bbox[3] - wm_bbox[1]
+        # "KACAK GECIS" watermark — only for UNAUTHORIZED passages
+        if not authorized:
+            try:
+                watermark = "KACAK GECIS"
+                wm_font = _get_font(36)
+                wm_bbox = draw.textbbox((0, 0), watermark, font=wm_font)
+                wm_w = wm_bbox[2] - wm_bbox[0]
+                wm_h = wm_bbox[3] - wm_bbox[1]
 
-            wm_img = Image.new("RGBA", (wm_w + 30, wm_h + 30), (0, 0, 0, 0))
-            wm_draw = ImageDraw.Draw(wm_img)
-            wm_draw.text((15, 15), watermark, fill=(255, 0, 0, 100), font=wm_font)
-            wm_img = wm_img.rotate(25, expand=True)
+                wm_img = Image.new("RGBA", (wm_w + 30, wm_h + 30), (0, 0, 0, 0))
+                wm_draw = ImageDraw.Draw(wm_img)
+                wm_draw.text((15, 15), watermark, fill=(255, 0, 0, 100), font=wm_font)
+                wm_img = wm_img.rotate(25, expand=True)
 
-            paste_x = (w_img - wm_img.width) // 2
-            paste_y = (h_img - wm_img.height) // 2
-            img.paste(wm_img, (paste_x, paste_y), wm_img)
-        except Exception:
-            pass  # Watermark is optional — don't fail the screenshot
+                paste_x = (w_img - wm_img.width) // 2
+                paste_y = (h_img - wm_img.height) // 2
+                img.paste(wm_img, (paste_x, paste_y), wm_img)
+            except Exception:
+                pass  # Watermark is optional — don't fail the screenshot
 
         # Save
         img.save(str(filepath), "JPEG", quality=85)

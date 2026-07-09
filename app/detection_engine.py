@@ -9,13 +9,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from app.database import Database
+from app.database import Database, levenshtein_distance
+from app.inference_pool import get_inference_pool, get_io_pool
 from app.models import PassageRecord
+from app.motion_gate import MotionGate
 from app.screenshot import save_screenshot
 from app.tracker import PlateTracker, Track
+
+
+def _dir_winner(votes: dict) -> str:
+    """Most-voted DEFINITE direction; 'unknown' only if no definite vote."""
+    definite = {d: w for d, w in votes.items() if d not in ("unknown", "")}
+    return max(definite, key=definite.get) if definite else "unknown"
 
 if TYPE_CHECKING:
     from app.alarm_manager import AlarmManager
@@ -47,6 +56,12 @@ class DetectionEngine:
         direction_area_ratio: float = 1.2,
         entry_size_change: str = "approach",
         entry_y_direction: str = "down",
+        # Motion gate (skip ALPR on static frames)
+        motion_gate_enabled: bool = True,
+        motion_skip_threshold: float = 0.005,
+        mandatory_detect_every_n: int = 10,
+        passage_dedup_sec: float = 30.0,
+        single_commit_conf: float = 0.9,
     ):
         self.camera = camera
         self.detector = detector
@@ -57,6 +72,21 @@ class DetectionEngine:
         self.fuzzy_tolerance = fuzzy_tolerance  # for DB lookup (different from tracker fuzzy)
         self.screenshot_dir = screenshot_dir
 
+        # Skip the (expensive) ALPR call on essentially-static frames. The gate
+        # itself forces a detection every Nth static frame so a slowly
+        # approaching vehicle or lighting drift is never missed.
+        self._motion_gate = MotionGate(
+            skip_threshold=motion_skip_threshold,
+            mandatory_every_n=mandatory_detect_every_n,
+        ) if motion_gate_enabled else None
+
+        # Collapse fragmented tracks of the same vehicle into one passage
+        # (ramp motion + OCR variance can finalize several short tracks).
+        # plate -> {"id", "ts", "votes": {dir: frames}, "direction"}
+        self._dedup_window = passage_dedup_sec
+        self._dedup_tol = track_fuzzy_tolerance
+        self._recent_commits: dict = {}
+
         self.tracker = PlateTracker(
             iou_threshold=track_iou_threshold,
             fuzzy_tolerance=track_fuzzy_tolerance,
@@ -66,10 +96,44 @@ class DetectionEngine:
             direction_area_ratio=direction_area_ratio,
             entry_size_change=entry_size_change,
             entry_y_direction=entry_y_direction,
+            single_commit_conf=single_commit_conf,
         )
 
         self._running = False
         self._task: asyncio.Task | None = None
+
+        # ── Health metrics ──
+        self._last_loop_at: float = 0.0          # any tick (success or crash)
+        self._last_success_at: float = 0.0       # only after _process_frame succeeded
+        self._loop_count: int = 0
+        self._error_count: int = 0
+        self._consecutive_errors: int = 0
+        # If consecutive errors exceed this, we mark the engine "degraded"
+        # so /api/health can surface it. Manual restart still required.
+        self.MAX_CONSECUTIVE_ERRORS = 5
+        # If no success for this long, also "degraded"
+        self.STALL_TIMEOUT_SEC = 30.0
+
+    def get_health(self) -> dict:
+        """Snapshot of detection engine health — surfaced via /api/health."""
+        now = time.time()
+        success_ago = (now - self._last_success_at) if self._last_success_at else None
+        loop_ago = (now - self._last_loop_at) if self._last_loop_at else None
+        is_stalled = (
+            success_ago is not None
+            and success_ago > self.STALL_TIMEOUT_SEC
+            and self._loop_count > 0
+        )
+        return {
+            "running": self._running,
+            "loop_count": self._loop_count,
+            "error_count": self._error_count,
+            "consecutive_errors": self._consecutive_errors,
+            "last_success_ago_sec": round(success_ago, 1) if success_ago is not None else None,
+            "last_loop_ago_sec": round(loop_ago, 1) if loop_ago is not None else None,
+            "stalled": is_stalled,
+            "degraded": is_stalled or self._consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS,
+        }
 
     async def start(self):
         if self._running:
@@ -97,10 +161,30 @@ class DetectionEngine:
     async def _loop(self):
         interval = 1.0 / self.process_fps
         while self._running:
+            self._last_loop_at = time.time()
+            self._loop_count += 1
             try:
                 await self._process_frame()
+                self._last_success_at = time.time()
+                # Reset error streak on any success
+                if self._consecutive_errors > 0:
+                    logger.info(
+                        "Detection loop recovered after %d errors",
+                        self._consecutive_errors,
+                    )
+                    self._consecutive_errors = 0
             except Exception:
-                logger.exception("Detection loop error")
+                self._error_count += 1
+                self._consecutive_errors += 1
+                logger.exception(
+                    "Detection loop error (%d consecutive, %d total)",
+                    self._consecutive_errors, self._error_count,
+                )
+                if self._consecutive_errors == self.MAX_CONSECUTIVE_ERRORS:
+                    logger.error(
+                        "Detection loop has %d consecutive errors — health flagged DEGRADED",
+                        self._consecutive_errors,
+                    )
             await asyncio.sleep(interval)
 
     async def _process_frame(self):
@@ -109,10 +193,14 @@ class DetectionEngine:
         frame = self.camera.get_frame()
 
         detections = []
-        if frame is not None:
+        if frame is not None and not (
+            self._motion_gate is not None and self._motion_gate.should_skip(frame)
+        ):
             loop = asyncio.get_event_loop()
             try:
-                detections = await loop.run_in_executor(None, self.detector.detect, frame)
+                detections = await loop.run_in_executor(
+                    get_inference_pool(), self.detector.detect, frame,
+                )
             except Exception:
                 logger.exception("Detector crashed")
                 detections = []
@@ -146,17 +234,60 @@ class DetectionEngine:
             return
 
         direction = self.tracker.classify_direction(track)
+        weight = max(1, len(track.readings))
 
-        # DB lookup
-        vehicle = self.db.find_vehicle(best.normalized, self.fuzzy_tolerance)
+        # Dedup: one vehicle that fragmented into several short tracks (ramp
+        # motion + OCR variance) is logged ONCE. A fuzzy-matching plate within
+        # the window is merged into the existing record; its direction is a
+        # frame-weighted VOTE across fragments (a short fragment can misclassify
+        # entry vs exit), and the kept passage's direction is corrected in the DB
+        # when the winning vote changes.
+        now_ts = best.timestamp
+        for p in list(self._recent_commits):
+            if (now_ts - self._recent_commits[p]["ts"]).total_seconds() > self._dedup_window:
+                del self._recent_commits[p]
+        match_key = next(
+            (p for p in self._recent_commits
+             if levenshtein_distance(best.normalized, p) <= self._dedup_tol),
+            None,
+        )
+        if match_key is not None:
+            rec = self._recent_commits[match_key]
+            rec["ts"] = now_ts
+            rec["votes"][direction] = rec["votes"].get(direction, 0) + weight
+            win = _dir_winner(rec["votes"])
+            if win != rec["direction"]:
+                rec["direction"] = win
+                try:
+                    self.db.update_passage(rec["id"], direction=win)
+                except Exception:
+                    logger.exception("Failed to update merged passage direction")
+            passages_logger.info(
+                "Duplicate passage merged: %s (1 vehicle = 1 passage, dir=%s)",
+                best.normalized, rec["direction"],
+            )
+            return
+
+        loop = asyncio.get_event_loop()
+
+        # DB lookup — the fuzzy fallback can scan the vehicle table, so run it
+        # off the event loop on the IO pool to avoid stalling websockets/health.
+        vehicle = await loop.run_in_executor(
+            get_io_pool(), self.db.find_vehicle, best.normalized, self.fuzzy_tolerance,
+        )
         is_authorized = vehicle is not None
         owner_name = vehicle.owner_name if vehicle else ""
 
-        # Screenshot (unauthorized only, using the best/sharpest frame)
+        # Screenshot for EVERY passage (authorized → neutral green capture,
+        # unauthorized → red + "KACAK" watermark) so the live feed shows a photo
+        # for each car. Uses the single retained sharpest frame + its bbox; heavy
+        # PIL rendering runs on the IO pool to keep the detection loop hot.
         screenshot_url = ""
-        if not is_authorized and best.frame is not None:
-            screenshot_url = save_screenshot(
-                best.frame, best.plate_text, best.bbox, self.screenshot_dir
+        if track.best_frame is not None:
+            screenshot_url = await loop.run_in_executor(
+                get_io_pool(), save_screenshot,
+                track.best_frame, best.plate_text, track.best_bbox,
+                self.screenshot_dir, is_authorized,
             )
 
         record = PassageRecord(
@@ -170,6 +301,13 @@ class DetectionEngine:
             direction=direction,
         )
         record.id = self.db.add_passage(record)
+
+        # Register as the canonical passage for this plate (later fragments of
+        # the same vehicle merge into it instead of adding new records).
+        self._recent_commits[best.normalized] = {
+            "id": record.id, "ts": now_ts,
+            "votes": {direction: weight}, "direction": direction,
+        }
 
         status = "AUTHORIZED" if is_authorized else "UNAUTHORIZED"
         dir_label = {"entry": "ENTRY", "exit": "EXIT"}.get(direction, "???")

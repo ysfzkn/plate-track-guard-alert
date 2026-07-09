@@ -1,0 +1,86 @@
+/* GateGuard shared LIGHT theme — include + add class="light-theme" to <body>.
+   Generic overrides over the Tailwind utility classes used across pages, so a
+   page becomes a clean, high-contrast light UI without per-element edits. */
+
+/* ── Accessibility / readability (applies in BOTH themes) ──────────────
+   Operators are often non-technical, so bump the base type size. Tailwind's
+   text-*/spacing use rem, so raising the root font-size scales the whole UI
+   proportionally (layouts stay intact). Arbitrary px sizes (text-[10px]/[11px])
+   don't scale with rem, so we floor those separately to a legible minimum. */
+html { font-size: 17px; }
+[class*="text-[10px]"] { font-size: 12px !important; }
+[class*="text-[11px]"] { font-size: 13px !important; }
+/* Bigger, easier click/tap targets on the primary action buttons + inputs */
+button, .nav-icon, select, input[type="date"], input[type="number"], input[type="text"] { line-height: 1.35; }
+
+body.light-theme{background:#f3f4f6 !important;color:#0f172a !important}
+
+/* Surfaces */
+body.light-theme [class*="bg-gray-950"]{background:#f3f4f6 !important;color:#0f172a !important}
+body.light-theme [class*="bg-gray-900"]:not(.gg-nav){background:#ffffff !important;color:#0f172a !important}
+body.light-theme [class*="bg-gray-800"]{background:#f1f5f9 !important;color:#0f172a !important}
+body.light-theme [class*="bg-gray-800/30"],body.light-theme [class*="bg-gray-800/40"]{background:#f1f5f9 !important}
+/* gray-700/600 buttons (Köşe, Temizle, Sil, toggles…) were left dark-on-light
+   → unreadable "invisible" buttons. Map them to a visible light-slate fill. */
+body.light-theme [class*="bg-gray-700"]{background:#e2e8f0 !important;color:#0f172a !important}
+body.light-theme [class*="bg-gray-600"]{background:#cbd5e1 !important;color:#0f172a !important}
+body.light-theme [class*="from-gray-900"],body.light-theme [class*="from-gray-950"]{background-image:none !important;background-color:#ffffff !important;border-color:#e2e8f0 !important}
+
+/* Borders */
+body.light-theme [class*="border-gray-800"]{border-color:#e2e8f0 !important}
+body.light-theme [class*="border-gray-700"]{border-color:#cbd5e1 !important}
+
+/* Text */
+body.light-theme [class*="text-white"],body.light-theme [class*="text-gray-100"],body.light-theme [class*="text-gray-200"]{color:#0f172a !important}
+body.light-theme [class*="text-gray-300"]{color:#1f2937 !important}
+body.light-theme [class*="text-gray-400"]{color:#475569 !important}
+body.light-theme [class*="text-gray-500"]{color:#64748b !important}
+body.light-theme [class*="text-gray-600"]{color:#94a3b8 !important}
+
+/* Accent text — readable on white */
+body.light-theme [class*="text-cyan-400"],body.light-theme [class*="text-cyan-300"]{color:#0e7490 !important}
+body.light-theme [class*="text-green-400"],body.light-theme [class*="text-green-300"],body.light-theme [class*="text-emerald-400"]{color:#15803d !important}
+body.light-theme [class*="text-red-400"],body.light-theme [class*="text-red-300"]{color:#dc2626 !important}
+body.light-theme [class*="text-amber-400"],body.light-theme [class*="text-amber-300"],body.light-theme [class*="text-yellow-400"]{color:#b45309 !important}
+body.light-theme [class*="text-blue-400"],body.light-theme [class*="text-blue-300"]{color:#2563eb !important}
+
+/* Soft tints for colored stat tiles */
+body.light-theme [class*="bg-green-950"],body.light-theme [class*="bg-emerald-950"]{background:#dcfce7 !important}
+body.light-theme [class*="bg-red-950"]{background:#fee2e2 !important}
+body.light-theme [class*="bg-amber-950"],body.light-theme [class*="bg-yellow-950"]{background:#fef3c7 !important}
+body.light-theme [class*="bg-cyan-950"],body.light-theme [class*="bg-blue-950"]{background:#cffafe !important}
+body.light-theme [class*="border-green-900"],body.light-theme [class*="border-emerald-900"]{border-color:#86efac !important}
+body.light-theme [class*="border-red-900"]{border-color:#fca5a5 !important}
+body.light-theme [class*="border-amber-900"],body.light-theme [class*="border-yellow-900"]{border-color:#fcd34d !important}
+body.light-theme [class*="border-cyan-900"],body.light-theme [class*="border-blue-900"]{border-color:#67e8f9 !important}
+
+/* Forms */
+body.light-theme input,body.light-theme select,body.light-theme textarea{background:#ffffff !important;color:#0f172a !important;border-color:#cbd5e1 !important}
+body.light-theme thead[class*="bg-gray-900"]{background:#f8fafc !important}
+
+/* Keep text white ONLY on solid-colored buttons that explicitly use text-white
+   (NOT gray tiles whose hover:bg-*-900 utility would falsely match) + alarm banner */
+body.light-theme a[class*="text-white"][class*="bg-"]:not([class*="bg-gray"]),body.light-theme button[class*="text-white"][class*="bg-"]:not([class*="bg-gray"]){color:#ffffff !important}
+body.light-theme [id*="alarm-overlay"],body.light-theme [id*="alarm-overlay"] *{color:#ffffff !important}
+
+/* Decorative blur orbs add noise on light bg */
+body.light-theme [class*="blur-3xl"]{display:none !important}
+/* Video tiles stay dark */
+body.light-theme [class*="bg-black"]{background:#0f172a !important}
+
+/* Placeholder text — Tailwind's default is near-invisible on white */
+body.light-theme input::placeholder,body.light-theme textarea::placeholder{color:#94a3b8 !important;opacity:1}
+
+/* Disabled controls — make "not clickable" obvious (washed-out + not-allowed) */
+body.light-theme button:disabled,body.light-theme button[disabled],
+body.light-theme input:disabled,body.light-theme select:disabled{
+  opacity:.55 !important;background:#e2e8f0 !important;color:#94a3b8 !important;
+  cursor:not-allowed !important;box-shadow:none !important}
+
+/* Form controls (checkbox/radio) get a visible accent on the light surface */
+body.light-theme input[type="checkbox"],body.light-theme input[type="radio"]{accent-color:#0891b2 !important}
+
+/* Clear, consistent focus ring on inputs/selects/textareas */
+body.light-theme input:focus,body.light-theme select:focus,body.light-theme textarea:focus{
+  border-color:#0891b2 !important;outline:none !important;
+  box-shadow:0 0 0 3px rgba(8,145,178,.25) !important}

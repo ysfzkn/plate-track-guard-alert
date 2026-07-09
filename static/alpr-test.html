@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
+    <script src="/static/auth-client.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GateGuard — ALPR Test</title>
@@ -17,8 +18,9 @@
         ::-webkit-scrollbar-track { background: #111827; }
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
     </style>
+    <link rel="stylesheet" href="/static/gg-light.css">
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
+<body class="bg-gray-950 text-gray-100 min-h-screen light-theme">
 
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
@@ -30,13 +32,23 @@
         </div>
         <div class="flex items-center gap-3">
             <span id="engine-badge" class="text-xs px-2.5 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-400">Motor: —</span>
+            <a href="/test-history" class="text-xs bg-cyan-800 hover:bg-cyan-700 px-3 py-1.5 rounded-lg border border-cyan-700 transition">📋 Test Arşivi</a>
             <button onclick="temizle()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">
                 🗑️ Tümünü Temizle
             </button>
         </div>
     </header>
 
+    <!-- Mode Tabs -->
+    <div class="bg-gray-900/50 border-b border-gray-800 flex">
+        <button id="tab-btn-photo" class="px-6 py-3 text-sm font-semibold border-b-2 border-cyan-500 text-cyan-400" onclick="modeSwitch('photo')">📸 Foto Testi</button>
+        <button id="tab-btn-video" class="px-6 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-300" onclick="modeSwitch('video')">🎥 Video E2E Testi</button>
+    </div>
+
     <main class="max-w-6xl mx-auto p-6 space-y-6">
+
+        <!-- ═══════════════ PHOTO MODE ═══════════════ -->
+        <section id="mode-photo">
 
         <!-- Upload Zone -->
         <div id="drop-zone"
@@ -83,6 +95,49 @@
         <!-- Results Grid -->
         <div id="results-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         </div>
+
+        </section>
+
+        <!-- ═══════════════ VIDEO E2E MODE ═══════════════ -->
+        <section id="mode-video" class="hidden space-y-5">
+
+            <div class="bg-amber-950/30 border border-amber-900/50 rounded-xl p-4 text-sm text-amber-200">
+                🎯 <b>Video E2E (Tam Pipeline) Modu:</b>
+                Yüklediğin video frame-by-frame işlenir. Her plaka okuması track'leyici (consensus),
+                MDB yetki kontrolü, yön sınıflandırması ve "alarm tetiklenirdi mi?" çıkarımından geçer.
+                Sonuç <a href="/test-history" class="underline">test arşivine</a> kaydedilir.
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <div class="flex items-center gap-4 flex-wrap">
+                    <label class="text-sm text-gray-400">Örnekleme:</label>
+                    <select id="pv-sample" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                        <option value="1" selected>Her frame (en doğru)</option>
+                        <option value="2">Her 2. frame</option>
+                        <option value="3">Her 3. frame</option>
+                        <option value="5">Her 5. frame (hızlı)</option>
+                    </select>
+                    <span class="text-xs text-gray-500">Plate testi için ÖRNEKLEME 1-2 önerilir (consensus için frame şart).</span>
+                </div>
+            </div>
+
+            <div id="pv-drop"
+                 class="border-2 border-dashed border-gray-700 rounded-2xl p-10 text-center cursor-pointer hover:border-gray-500 transition-all"
+                 onclick="document.getElementById('pv-input').click()">
+                <input type="file" id="pv-input" class="hidden" accept="video/*">
+                <div id="pv-idle">
+                    <div class="text-5xl mb-3">🎥</div>
+                    <p class="text-lg font-semibold">Plaka videosu sürükle & bırak veya tıkla</p>
+                    <p class="text-sm text-gray-500 mt-1">MP4, AVI, MOV, MKV, WebM</p>
+                </div>
+                <div id="pv-busy" class="hidden">
+                    <div class="w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full spinner mx-auto mb-3"></div>
+                    <p class="text-gray-400">İşleniyor — bekle, plate detection yavaş olabilir...</p>
+                </div>
+            </div>
+
+            <div id="pv-result" class="hidden space-y-4"></div>
+        </section>
 
     </main>
 
@@ -298,6 +353,125 @@
         sonuclar = [];
         document.getElementById('results-grid').innerHTML = '';
         document.getElementById('summary-bar').classList.add('hidden');
+    }
+
+    // ============================================================
+    //  Mode tabs
+    // ============================================================
+    function modeSwitch(mode) {
+        const phBtn = document.getElementById('tab-btn-photo');
+        const vdBtn = document.getElementById('tab-btn-video');
+        const ph = document.getElementById('mode-photo');
+        const vd = document.getElementById('mode-video');
+        if (mode === 'video') {
+            ph.classList.add('hidden'); vd.classList.remove('hidden');
+            phBtn.className = 'px-6 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-300';
+            vdBtn.className = 'px-6 py-3 text-sm font-semibold border-b-2 border-cyan-500 text-cyan-400';
+        } else {
+            ph.classList.remove('hidden'); vd.classList.add('hidden');
+            phBtn.className = 'px-6 py-3 text-sm font-semibold border-b-2 border-cyan-500 text-cyan-400';
+            vdBtn.className = 'px-6 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-300';
+        }
+    }
+
+    // ============================================================
+    //  Plate Video E2E Test
+    // ============================================================
+    const pvDrop = document.getElementById('pv-drop');
+    const pvInput = document.getElementById('pv-input');
+    ['dragenter','dragover'].forEach(ev => pvDrop.addEventListener(ev, e => { e.preventDefault(); pvDrop.classList.add('drop-active'); }));
+    ['dragleave','drop'].forEach(ev => pvDrop.addEventListener(ev, e => { e.preventDefault(); pvDrop.classList.remove('drop-active'); }));
+    pvDrop.addEventListener('drop', e => {
+        const f = [...e.dataTransfer.files].find(f => f.type.startsWith('video/'));
+        if (f) plateVideoTest(f);
+    });
+    pvInput.addEventListener('change', e => {
+        const f = e.target.files[0];
+        if (f) plateVideoTest(f);
+        pvInput.value = '';
+    });
+
+    async function plateVideoTest(file) {
+        document.getElementById('pv-idle').classList.add('hidden');
+        document.getElementById('pv-busy').classList.remove('hidden');
+        document.getElementById('pv-result').classList.add('hidden');
+        try {
+            const sample = document.getElementById('pv-sample').value;
+            const fd = new FormData(); fd.append('file', file);
+            const r = await fetch(`/api/plate/test-video-e2e?sample_rate=${sample}`, {
+                method: 'POST', body: fd,
+            });
+            if (!r.ok) throw new Error((await r.json()).detail || 'HTTP ' + r.status);
+            const d = await r.json();
+            renderPlateVideoResult(d);
+        } catch (e) {
+            alert('Hata: ' + e.message);
+        } finally {
+            document.getElementById('pv-idle').classList.remove('hidden');
+            document.getElementById('pv-busy').classList.add('hidden');
+        }
+    }
+
+    function renderPlateVideoResult(d) {
+        const tracks = d.tracks || [];
+        const s = d.stats || {};
+        const host = document.getElementById('pv-result');
+
+        const rows = tracks.map(t => {
+            const auth = t.authorized
+                ? `<span class="text-green-400">✓ ${escapeHtml(t.owner_name||'')}${t.apartment ? ' · D:'+escapeHtml(t.apartment) : ''}</span>`
+                : (t.outcome === 'DROP' ? '<span class="text-gray-500">—</span>' : '<span class="text-red-400 font-bold">✗ KAÇAK</span>');
+            const alarm = t.would_alarm ? '<span class="text-red-400 font-bold">🚨 EVET</span>' : '<span class="text-gray-500">hayır</span>';
+            const outcome = t.outcome === 'DROP'
+                ? `<span class="text-amber-400 text-xs">DROP</span><div class="text-[10px] text-gray-500">${escapeHtml(t.reason||'')}</div>`
+                : '<span class="text-green-400 text-xs">COMMIT</span>';
+            return `<tr class="border-t border-gray-800/50">
+                <td class="p-2 text-gray-500">#${t.track_id}</td>
+                <td class="p-2 font-mono font-bold">${escapeHtml(t.plate || '-')}</td>
+                <td class="p-2 text-gray-400 font-mono text-xs">${escapeHtml(t.normalized || '-')}</td>
+                <td class="p-2">${t.confidence !== undefined ? '%'+Math.round(t.confidence*100) : '-'}</td>
+                <td class="p-2">${t.valid_tr === true ? '<span class="text-green-400">✓</span>' : t.valid_tr === false ? '<span class="text-red-400">✗</span>' : '-'}</td>
+                <td class="p-2">${t.direction || '-'}</td>
+                <td class="p-2">${auth}</td>
+                <td class="p-2">${outcome}</td>
+                <td class="p-2">${alarm}</td>
+            </tr>`;
+        }).join('');
+
+        host.innerHTML = `
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                    <div><div class="text-xs text-gray-500">Toplam Tespit</div><div class="text-2xl font-bold">${s.detections}</div></div>
+                    <div><div class="text-xs text-gray-500">Geçerli TR plaka</div><div class="text-2xl font-bold text-green-400">${s.valid_detections}</div></div>
+                    <div><div class="text-xs text-gray-500">Commit edilen</div><div class="text-2xl font-bold text-cyan-400">${s.committed_tracks}</div></div>
+                    <div><div class="text-xs text-gray-500">Düşürülen</div><div class="text-2xl font-bold text-amber-400">${s.dropped_tracks}</div></div>
+                </div>
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                <div class="p-3 border-b border-gray-800 flex justify-between">
+                    <h3 class="font-semibold text-sm">🎬 İşaretli Video</h3>
+                    <a href="${d.annotated_video_url}" download class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded">⬇ İndir</a>
+                </div>
+                <video src="${d.annotated_video_url}" controls autoplay muted playsinline preload="metadata"
+                       class="w-full aspect-video bg-black"></video>
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
+                <div class="p-3 border-b border-gray-800 text-sm font-semibold">Track Sonuçları</div>
+                <table class="w-full text-xs">
+                    <thead class="bg-gray-800/30 text-gray-500">
+                        <tr class="text-left">
+                            <th class="p-2">Track</th><th class="p-2">Plaka</th><th class="p-2">Normalized</th>
+                            <th class="p-2">Güven</th><th class="p-2">TR?</th><th class="p-2">Yön</th>
+                            <th class="p-2">Yetki</th><th class="p-2">Sonuç</th><th class="p-2">Alarm?</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows || '<tr><td colspan="9" class="p-4 text-center text-gray-500">Track yok</td></tr>'}</tbody>
+                </table>
+            </div>
+        `;
+        host.classList.remove('hidden');
     }
 
     // ============================================================

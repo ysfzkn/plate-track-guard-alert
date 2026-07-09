@@ -16,12 +16,16 @@ Each camera gets one IntrusionEngine. It:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from app.inference_pool import get_inference_pool, get_io_pool
 from app.intrusion.models import IntrusionEvent
 from app.intrusion.motion_detector import MotionDetector, MOTION_TRACK_ID_BASE
+from app.intrusion.simple_tracker import SimpleIouTracker
 from app.intrusion.video_recorder import VideoClipRecorder
 from app.screenshot import save_screenshot
 
@@ -62,8 +66,12 @@ class IntrusionEngine:
         motion_fallback_enabled: bool = True,
         alarm_enabled_getter=None,
         zone_manager=None,
+        start_delay: float = 0.0,
     ):
         self.camera = camera
+        # Phase offset so N cameras don't all fire inference on the same tick
+        # (they share one inference worker — staggering keeps the queue smooth).
+        self._start_delay = max(0.0, float(start_delay))
         self.stream = stream
         self.detector = detector
         self.classifier = classifier
@@ -82,9 +90,34 @@ class IntrusionEngine:
         # Motion fallback for perimeter zones — only spun up if any zone on
         # this camera has enable_motion_fallback=1 (checked lazily in loop).
         self._motion_detector: MotionDetector | None = None
+        # Camera-wide default from env. NOTE: motion fallback also activates
+        # whenever ANY zone on this camera has enable_motion_fallback=1 — the
+        # per-zone UI toggle is sufficient on its own, this env just force-on's
+        # it for every zone. See the zone re-check in _loop().
         self._motion_fallback_enabled = motion_fallback_enabled
+        # Latched True only if OpenCV is missing — stops us retrying MOG2 setup
+        # every re-check when the module can never load.
+        self._motion_unavailable = False
+
+        # Per-camera tracker. We detect with the STATELESS detect_raw() and
+        # assign IDs here, instead of the shared model.track(persist=True) whose
+        # single ByteTrack timeline gets cross-contaminated across cameras.
+        self._tracker = SimpleIouTracker(camera_id=camera.id)
         self._motion_check_interval = 30   # re-check zone settings every N frames
         self._motion_check_counter = 0
+
+        # ── Motion-aware frame skip (perf optimization) ──
+        # YOLO inference is the dominant cost. If the scene hasn't changed
+        # meaningfully since the last frame we processed, skip YOLO entirely
+        # and reuse the previous result. We compare consecutive frames with a
+        # cheap absdiff; if the changed-pixel ratio < threshold, the frame is
+        # "static" and we save ~50ms of YOLO work.
+        self._prev_gray = None
+        self._static_frame_streak = 0
+        self._motion_skip_threshold = 0.005   # 0.5% of pixels must change
+        # Always run YOLO every Nth frame even on static scenes — guards against
+        # gradual lighting changes the absdiff misses.
+        self._mandatory_yolo_every_n = 10
 
         self._video_recorder = VideoClipRecorder(
             camera_id=camera.id,
@@ -94,11 +127,46 @@ class IntrusionEngine:
             output_dir=clip_dir,
         ) if clip_enabled else None
 
+        # ── Health metrics (per camera) ──
+        self._last_loop_at: float = 0.0
+        self._last_success_at: float = 0.0
+        self._loop_count: int = 0
+        self._error_count: int = 0
+        self._consecutive_errors: int = 0
+        self.MAX_CONSECUTIVE_ERRORS = 5
+        self.STALL_TIMEOUT_SEC = 30.0
+
+        # ── Runtime state ──
         self._running = False
         self._task: asyncio.Task | None = None
         # Per-event burst queue: event_id -> frames still to capture
         self._burst_remaining: dict[int, int] = {}
         self._burst_paths: dict[int, list[str]] = {}
+        # event_id -> in-flight save futures not yet completed. Lets us persist
+        # the burst paths to the DB and free the dicts only once every save has
+        # landed (otherwise the dicts leaked and paths were never stored).
+        self._burst_pending: dict[int, int] = {}
+
+    def get_health(self) -> dict:
+        now = time.time()
+        success_ago = (now - self._last_success_at) if self._last_success_at else None
+        loop_ago = (now - self._last_loop_at) if self._last_loop_at else None
+        is_stalled = (
+            success_ago is not None
+            and success_ago > self.STALL_TIMEOUT_SEC
+            and self._loop_count > 0
+        )
+        return {
+            "camera_id": self.camera.id,
+            "running": self._running,
+            "loop_count": self._loop_count,
+            "error_count": self._error_count,
+            "consecutive_errors": self._consecutive_errors,
+            "last_success_ago_sec": round(success_ago, 1) if success_ago is not None else None,
+            "last_loop_ago_sec": round(loop_ago, 1) if loop_ago is not None else None,
+            "stalled": is_stalled,
+            "degraded": is_stalled or self._consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS,
+        }
 
     async def start(self) -> None:
         if self._running:
@@ -124,7 +192,15 @@ class IntrusionEngine:
     async def _loop(self) -> None:
         interval = 1.0 / self.process_fps
         loop = asyncio.get_event_loop()
+        # Stagger startup so cameras interleave on the shared inference worker.
+        if self._start_delay:
+            try:
+                await asyncio.sleep(self._start_delay)
+            except asyncio.CancelledError:
+                return
         while self._running:
+            self._last_loop_at = time.time()
+            self._loop_count += 1
             try:
                 frame = self.stream.get_frame()
                 now = datetime.now()
@@ -145,22 +221,35 @@ class IntrusionEngine:
                     # Burst screenshot accumulation
                     self._capture_burst_frames(frame, now)
 
-                    # Detect (in executor — YOLO is CPU-bound)
-                    observations = await loop.run_in_executor(
-                        None, self.detector.detect, frame, self.camera.id, now,
-                    )
+                    # ── Motion-aware skip ──
+                    # Skip YOLO if scene hasn't changed; keep tracker state
+                    # warm by feeding it nothing this iteration.
+                    skip_yolo = self._should_skip_yolo(frame)
+
+                    if skip_yolo:
+                        observations = []
+                    else:
+                        # Stateless detection on the shared bounded inference
+                        # pool, then per-camera ID assignment (no shared
+                        # ByteTrack contention across cameras).
+                        raw = await loop.run_in_executor(
+                            get_inference_pool(), self.detector.detect_raw, frame, now,
+                        )
+                        observations = self._tracker.update(raw, now)
 
                     # ── Motion fallback (perimeter zones) ───────────
                     # Only runs if at least one zone on this camera has
                     # enable_motion_fallback=1. Re-checked every N frames so
                     # operator toggles take effect within ~15s.
                     motion_obs: list = []
-                    if self._motion_fallback_enabled and self._zone_manager is not None:
+                    if self._zone_manager is not None and not self._motion_unavailable:
                         self._motion_check_counter += 1
                         if self._motion_check_counter >= self._motion_check_interval or self._motion_detector is None:
                             self._motion_check_counter = 0
                             zones = self._zone_manager.get_zones(self.camera.id)
-                            wants_fallback = any(
+                            # Activate if the env master-switch is on OR any zone
+                            # explicitly requests it (per-zone "hareket yakalama").
+                            wants_fallback = self._motion_fallback_enabled or any(
                                 getattr(z, "enable_motion_fallback", False) and z.enabled
                                 for z in zones
                             )
@@ -170,17 +259,17 @@ class IntrusionEngine:
                                     logger.info("Motion fallback ENABLED for camera %d", self.camera.id)
                                 except ImportError:
                                     logger.warning("OpenCV unavailable; motion fallback disabled")
-                                    self._motion_fallback_enabled = False
+                                    self._motion_unavailable = True
                             elif not wants_fallback and self._motion_detector is not None:
                                 self._motion_detector = None
                                 logger.info("Motion fallback DISABLED for camera %d", self.camera.id)
 
                         if self._motion_detector is not None:
                             animals = await loop.run_in_executor(
-                                None, self.detector.detect_animals, frame,
+                                get_inference_pool(), self.detector.detect_animals, frame,
                             )
                             motion_obs = await loop.run_in_executor(
-                                None, self._motion_detector.detect,
+                                get_inference_pool(), self._motion_detector.detect,
                                 frame, observations, animals, now,
                             )
 
@@ -194,8 +283,25 @@ class IntrusionEngine:
                         if event is not None:
                             await self._commit_event(event, frame, source="motion")
 
+                # Successful tick (with or without observations)
+                self._last_success_at = time.time()
+                if self._consecutive_errors > 0:
+                    logger.info("Intrusion cam=%d recovered after %d errors",
+                                self.camera.id, self._consecutive_errors)
+                    self._consecutive_errors = 0
+
             except Exception:
-                logger.exception("IntrusionEngine loop error (cam=%d)", self.camera.id)
+                self._error_count += 1
+                self._consecutive_errors += 1
+                logger.exception(
+                    "IntrusionEngine loop error (cam=%d, %d consecutive)",
+                    self.camera.id, self._consecutive_errors,
+                )
+                if self._consecutive_errors == self.MAX_CONSECUTIVE_ERRORS:
+                    logger.error(
+                        "Intrusion engine cam=%d flagged DEGRADED (%d errors)",
+                        self.camera.id, self._consecutive_errors,
+                    )
 
             await asyncio.sleep(interval)
 
@@ -209,10 +315,13 @@ class IntrusionEngine:
         if source == "motion":
             event.notes = "motion_fallback"
 
-        # 1. Screenshot (first frame of event)
+        # 1. Screenshot (first frame of event) — heavy PIL work runs in
+        # the event-loop's default executor so the detection loop never
+        # stalls on disk I/O or font rendering.
         label = f"CAM{event.camera_id}_Z{event.zone_id}_T{event.track_id}"
-        event.screenshot_path = save_screenshot(
-            frame, label, None, self.screenshot_dir,
+        loop = asyncio.get_event_loop()
+        event.screenshot_path = await loop.run_in_executor(
+            get_io_pool(), save_screenshot, frame, label, None, self.screenshot_dir,
         )
 
         # 2. Persist to DB to get an ID
@@ -289,21 +398,97 @@ class IntrusionEngine:
         except Exception:
             logger.exception("Failed to attach clip to event %d", event_id)
 
+    def _should_skip_yolo(self, frame) -> bool:
+        """Return True if the frame is essentially identical to the previous
+        one — in which case running YOLO again is wasted CPU.
+
+        Uses a downsampled grayscale absdiff so the cost is O(N) per frame at
+        a fraction of YOLO's cost (~1ms vs ~50ms).
+        """
+        try:
+            import cv2 as _cv2
+            small = _cv2.resize(frame, (160, 90))
+            gray = _cv2.cvtColor(small, _cv2.COLOR_BGR2GRAY)
+        except Exception:
+            return False   # any error → don't skip, run YOLO
+
+        if self._prev_gray is None:
+            self._prev_gray = gray
+            return False
+
+        try:
+            import cv2 as _cv2
+            import numpy as _np
+            diff = _cv2.absdiff(gray, self._prev_gray)
+            # Pixels that differ by more than 25 grey levels = real motion
+            changed = float((diff > 25).sum()) / float(diff.size)
+        except Exception:
+            self._prev_gray = gray
+            return False
+
+        self._prev_gray = gray
+        if changed < self._motion_skip_threshold:
+            self._static_frame_streak += 1
+            # Force a YOLO call every N static frames to catch slow drifts
+            if self._static_frame_streak >= self._mandatory_yolo_every_n:
+                self._static_frame_streak = 0
+                return False
+            return True
+        self._static_frame_streak = 0
+        return False
+
     def _capture_burst_frames(self, frame, timestamp) -> None:
-        """Accumulate extra screenshots for recently-fired events."""
+        """Queue extra screenshots for recently-fired events.
+        Saves run on the IO pool — never blocks the detection loop.
+        """
         if not self._burst_remaining:
             return
+        loop = asyncio.get_event_loop()
         finalized_ids = []
         for event_id, remaining in list(self._burst_remaining.items()):
             if remaining <= 0:
                 finalized_ids.append(event_id)
                 continue
             label = f"BURST_{event_id}_{self.burst_count - remaining}"
-            path = save_screenshot(frame, label, None, self.screenshot_dir)
-            if path:
-                self._burst_paths[event_id].append(path)
+            # Fire-and-forget: result goes into self._burst_paths via callback
+            future = loop.run_in_executor(
+                get_io_pool(), save_screenshot, frame.copy(), label, None, self.screenshot_dir,
+            )
+            self._burst_pending[event_id] = self._burst_pending.get(event_id, 0) + 1
+            future.add_done_callback(
+                lambda f, eid=event_id: self._on_burst_saved(eid, f)
+            )
             self._burst_remaining[event_id] = remaining - 1
         for eid in finalized_ids:
             self._burst_remaining.pop(eid, None)
-            # Note: burst_paths remain in memory for now — could be attached to DB
-            # via a 'burst_screenshots' JSON field later.
+            # Nothing left to queue — if all saves already landed, finalize now.
+            self._maybe_finalize_burst(eid)
+
+    def _on_burst_saved(self, event_id: int, future) -> None:
+        try:
+            path = future.result()
+            if path:
+                self._burst_paths.setdefault(event_id, []).append(path)
+        except Exception:
+            logger.exception("Burst save failed for event %d", event_id)
+        finally:
+            self._burst_pending[event_id] = max(0, self._burst_pending.get(event_id, 1) - 1)
+            self._maybe_finalize_burst(event_id)
+
+    def _maybe_finalize_burst(self, event_id: int) -> None:
+        """When an event has nothing left to queue AND no saves in flight,
+        persist the collected burst paths to the DB and free the per-event
+        state (prevents the dicts from growing without bound)."""
+        if self._burst_remaining.get(event_id, 0) > 0:
+            return   # still queuing more frames
+        if self._burst_pending.get(event_id, 0) > 0:
+            return   # saves still in flight
+        paths = self._burst_paths.pop(event_id, None)
+        self._burst_pending.pop(event_id, None)
+        if paths:
+            try:
+                self.db.update_intrusion_event(
+                    event_id, burst_paths=json.dumps(paths),
+                )
+            except Exception:
+                logger.exception("Failed to persist burst paths for event %d", event_id)

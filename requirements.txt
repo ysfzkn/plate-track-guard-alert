@@ -1,10 +1,27 @@
+# GateGuard — pip install -r requirements.txt
+# (uv users: `uv sync --extra intrusion` uses pyproject.toml instead.)
+
+# ── Core ────────────────────────────────────────────────────
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 opencv-python>=4.8.0
-easyocr>=1.7.0
 numpy>=1.24.0
 Pillow>=10.0.0
 pyodbc>=5.0.0
 httpx>=0.25.0
 python-dotenv>=1.0.0
 aiosqlite>=0.19.0
+python-multipart>=0.0.6   # REQUIRED for file uploads (all test/E2E endpoints)
+openpyxl>=3.1.0           # XLSX export (test history)
+psutil>=5.9.0             # memory metrics in /api/health
+
+# ── Plate ALPR (primary engine, LPR_ENGINE=fast_alpr) ───────
+fast-alpr[onnx]>=0.1.0    # pulls onnxruntime (CPU)
+
+# ── Module 2: person / intrusion detection ──────────────────
+ultralytics>=8.0.0        # YOLOv8 person detector + ByteTrack
+lap>=0.4.0                # ByteTrack association
+
+# ── Optional fallback OCR engine (LPR_ENGINE=easyocr) ───────
+# Uncomment only if you use the EasyOCR engine instead of fast-alpr:
+# easyocr>=1.7.0

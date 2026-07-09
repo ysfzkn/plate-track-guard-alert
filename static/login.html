@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>GateGuard — Giriş</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <script src="/static/tailwind.js"></script>
+  <style>
+    body { background: linear-gradient(135deg, #0a0f1c 0%, #1e293b 100%); min-height: 100vh; }
+    .glow { box-shadow: 0 0 0 1px rgba(34,211,238,.25), 0 4px 24px -4px rgba(34,211,238,.35); }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .shake { animation: shake .35s ease-in-out 2; }
+  </style>
+</head>
+<body class="text-gray-100 flex items-center justify-center select-none">
+
+<div id="card" class="bg-gray-900/80 backdrop-blur border border-gray-800 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
+  <div class="text-center mb-6">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl glow text-3xl mb-3"
+         style="background:linear-gradient(135deg,#22d3ee 0%,#3b82f6 60%,#8b5cf6 100%)">🛡️</div>
+    <h1 class="text-2xl font-bold tracking-tight">GateGuard</h1>
+    <p id="subtitle" class="text-sm text-gray-500 mt-1">Yönetici girişi</p>
+  </div>
+
+  <!-- LOGIN form -->
+  <form id="login-form" class="space-y-4" onsubmit="return giris(event)">
+    <div>
+      <label class="text-xs text-gray-400 block mb-1.5">Kullanıcı Adı</label>
+      <input id="username" type="text" autocomplete="username" autofocus
+             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
+             placeholder="admin">
+    </div>
+    <div>
+      <label class="text-xs text-gray-400 block mb-1.5">Parola</label>
+      <input id="password" type="password" autocomplete="current-password"
+             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
+             placeholder="••••••••">
+    </div>
+
+    <label class="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+      <input id="remember" type="checkbox" checked class="rounded">
+      Beni hatırla (30 gün)
+    </label>
+
+    <div id="err" class="hidden bg-red-950/40 border border-red-900/50 text-red-300 text-sm rounded-lg px-3 py-2"></div>
+
+    <button type="submit" id="submit-btn"
+            class="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-50">
+      Giriş Yap
+    </button>
+  </form>
+
+  <!-- FORCE-CHANGE form (görünür sadece must_change_password=1 ise) -->
+  <form id="change-form" class="space-y-4 hidden" onsubmit="return zorunluParolaDegistir(event)">
+    <div class="bg-amber-950/40 border border-amber-900/50 text-amber-200 text-sm rounded-lg p-3">
+      İlk girişinizde parolanızı değiştirmeniz gerekiyor.
+    </div>
+    <div>
+      <label class="text-xs text-gray-400 block mb-1.5">Yeni Parola</label>
+      <input id="new-pw" type="password" autocomplete="new-password" required
+             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500 focus:outline-none">
+    </div>
+    <div>
+      <label class="text-xs text-gray-400 block mb-1.5">Yeni Parola (tekrar)</label>
+      <input id="new-pw2" type="password" autocomplete="new-password" required
+             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500 focus:outline-none">
+    </div>
+    <div id="cerr" class="hidden bg-red-950/40 border border-red-900/50 text-red-300 text-sm rounded-lg px-3 py-2"></div>
+    <button type="submit" id="cbtn"
+            class="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-50">
+      Parolayı Değiştir ve Devam Et
+    </button>
+  </form>
+
+  <p class="text-[11px] text-gray-600 text-center mt-6">
+    GateGuard v1.0 · Yalnızca site içi LAN erişim
+  </p>
+</div>
+
+<script>
+const STORAGE_KEY = 'gg_token';
+let _pendingToken = null;
+let _pendingUser = null;
+
+function shakeCard() {
+  const c = document.getElementById('card');
+  c.classList.add('shake');
+  setTimeout(() => c.classList.remove('shake'), 700);
+}
+
+async function giris(e) {
+  e.preventDefault();
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const remember = document.getElementById('remember').checked;
+  const errBox = document.getElementById('err');
+  const btn = document.getElementById('submit-btn');
+  errBox.classList.add('hidden');
+  if (!username || !password) {
+    errBox.textContent = 'Kullanıcı adı ve parola girin';
+    errBox.classList.remove('hidden');
+    return false;
+  }
+  btn.disabled = true; btn.textContent = 'Giriş yapılıyor...';
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username, password, remember}),
+    });
+    if (!r.ok) {
+      const errData = await r.json().catch(() => ({}));
+      throw new Error(errData.error || errData.detail || 'Giriş başarısız');
+    }
+    const data = await r.json();
+    _pendingToken = data.token;
+    _pendingUser = data.user;
+
+    if (data.user.must_change_password) {
+      // Show change-password form (don't save token yet)
+      document.getElementById('login-form').classList.add('hidden');
+      document.getElementById('change-form').classList.remove('hidden');
+      document.getElementById('subtitle').textContent = 'Parola değişikliği gerekli';
+      document.getElementById('new-pw').focus();
+      return false;
+    }
+    // Normal flow — save token, redirect
+    saveToken(_pendingToken, remember);
+    redirectAfterLogin();
+  } catch (err) {
+    errBox.textContent = err.message || 'Giriş başarısız';
+    errBox.classList.remove('hidden');
+    shakeCard();
+    btn.disabled = false; btn.textContent = 'Giriş Yap';
+  }
+  return false;
+}
+
+async function zorunluParolaDegistir(e) {
+  e.preventDefault();
+  const newPw = document.getElementById('new-pw').value;
+  const newPw2 = document.getElementById('new-pw2').value;
+  const errBox = document.getElementById('cerr');
+  const btn = document.getElementById('cbtn');
+  errBox.classList.add('hidden');
+  if (newPw.length < 6) {
+    errBox.textContent = 'Yeni parola en az 6 karakter olmalı';
+    errBox.classList.remove('hidden'); shakeCard(); return false;
+  }
+  if (newPw !== newPw2) {
+    errBox.textContent = 'Parolalar eşleşmiyor';
+    errBox.classList.remove('hidden'); shakeCard(); return false;
+  }
+  btn.disabled = true; btn.textContent = 'Değiştiriliyor...';
+  try {
+    // Mevcut session token'ı geçici olarak kullan
+    const r = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + _pendingToken,
+      },
+      body: JSON.stringify({
+        current_password: document.getElementById('password').value,
+        new_password: newPw,
+      }),
+    });
+    if (!r.ok) {
+      const ed = await r.json().catch(() => ({}));
+      throw new Error(ed.error || ed.detail || 'Değiştirme başarısız');
+    }
+    saveToken(_pendingToken, document.getElementById('remember').checked);
+    redirectAfterLogin();
+  } catch (err) {
+    errBox.textContent = err.message;
+    errBox.classList.remove('hidden'); shakeCard();
+    btn.disabled = false; btn.textContent = 'Parolayı Değiştir ve Devam Et';
+  }
+  return false;
+}
+
+function saveToken(token, remember) {
+  const store = remember ? localStorage : sessionStorage;
+  store.setItem(STORAGE_KEY, token);
+  (remember ? sessionStorage : localStorage).removeItem(STORAGE_KEY);
+}
+function redirectAfterLogin() {
+  const next = new URLSearchParams(location.search).get('next') || '/';
+  location.replace(next);
+}
+
+// Sayfa açıldığında: zaten geçerli token varsa direkt yönlendir
+(async function() {
+  const t = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
+  if (!t) return;
+  try {
+    const r = await fetch('/api/auth/me', { headers: {'Authorization':'Bearer '+t} });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.authenticated) redirectAfterLogin();
+    }
+  } catch {}
+})();
+</script>
+</body>
+</html>

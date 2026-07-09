@@ -8,6 +8,7 @@ venv/
 data/
 screenshots/
 static/screenshots/
+static/test_kamera_kayitlari/
 logs/
 *.mdb
 *.ldb

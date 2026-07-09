@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bölge Test Alanı — GateGuard</title>
+<link rel="icon" href="/static/favicon.ico">
+<script src="/static/tailwind.js"></script>
+<script src="/static/auth-client.js"></script>
+<style>
+  /* body colors come from gg-light.css (light-theme); no inline override here. */
+  #zone-canvas { cursor: crosshair; max-width:100%; border-radius:.5rem; background:#000; touch-action:none; }
+  .step-num { width:26px; height:26px; }
+  table.evt th, table.evt td { padding:.35rem .5rem; }
+</style>
+<link rel="stylesheet" href="/static/gg-light.css">
+</head>
+<body class="min-h-screen light-theme">
+<header class="sticky top-0 z-30 bg-gray-950/90 backdrop-blur border-b border-gray-800 px-5 h-14 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <span class="text-lg">🗺️</span>
+    <h1 class="text-[15px] font-bold">Bölge Test Alanı <span class="text-gray-500 font-normal">· kayıttan bölge çiz & test et</span></h1>
+  </div>
+  <div class="flex items-center gap-2 text-sm">
+    <a href="/" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700">← Panel</a>
+    <a href="/intrusion-test" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700">İnsan Testi</a>
+    <a href="/zone-editor" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700">Canlı Bölge Editörü</a>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-5 space-y-5">
+
+  <p class="text-sm text-gray-400 bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+    Canlı kameran olmadan: bir <b>kayıt videosu yükle</b> → bir karenin üstüne <b>yasak bölge(ler) çiz</b> →
+    aynı videoyu o bölgelerle <b>uçtan uca test et</b>. Hiçbir kamera/bölge veritabanına kaydedilmez.
+  </p>
+
+  <!-- Where to draw / where not -->
+  <div class="grid sm:grid-cols-2 gap-3">
+    <div class="bg-emerald-950/30 border border-emerald-800/50 rounded-xl p-3 text-sm">
+      <div class="font-semibold text-emerald-300 mb-1">✅ Buraya çiz (kimsenin olmaması gereken yer)</div>
+      <ul class="text-gray-300 text-[13px] space-y-0.5 list-disc list-inside">
+        <li>Çevre <b>duvarı / tel</b> — üstü + dibindeki dar iç şerit (tırmananı yakalar)</li>
+        <li><b>Acil çıkış / kilitli servis kapısı</b> — kapı + iç eşik</li>
+        <li>Çatı, yasak teras, girilmez servis alanı</li>
+      </ul>
+      <div class="text-[11px] text-emerald-300/70 mt-1">⚠️ Bölgeyi kişinin <b>AYAK BASTIĞI ZEMİNE</b> çiz (yürüdüğü yol/iniş yeri) — çitin/duvarın <b>üstüne</b> değil. Sistem kişinin yere bastığı yere bakar; "geçeni yakala" istiyorsan yolu enine kesen bir bant çiz.</div>
+    </div>
+    <div class="bg-red-950/30 border border-red-800/50 rounded-xl p-3 text-sm">
+      <div class="font-semibold text-red-300 mb-1">⛔ Buraya ÇİZME (sakinlerin kullandığı yer)</div>
+      <ul class="text-gray-300 text-[13px] space-y-0.5 list-disc list-inside">
+        <li>Ana yaya giriş kapısı / sakinlerin kullandığı kapı</li>
+        <li>Sakinlerin yürüdüğü iç yollar, avlu</li>
+        <li>Çitin <b>dış</b> tarafı / sokak (yayalar geçer)</li>
+      </ul>
+      <div class="text-[11px] text-red-300/70 mt-1">Kamera sakini–yabancıyı ayırt edemez; sakinin geçtiği yere çizersen herkese öter.</div>
+    </div>
+  </div>
+
+  <!-- STEP 1 — upload + frame -->
+  <section class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="step-num rounded-full bg-cyan-700 text-white text-sm font-bold flex items-center justify-center">1</span>
+      <h2 class="font-semibold">Kayıt yükle ve bir kare seç</h2>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <input id="video-file" type="file" accept="video/*"
+             class="text-sm file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-cyan-700 file:text-white file:cursor-pointer">
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-400">Kare konumu:</label>
+        <input id="frame-pos" type="range" min="0" max="0.99" step="0.01" value="0.1" class="w-40" disabled>
+        <span id="frame-pos-val" class="text-xs font-mono text-cyan-400 w-10">%10</span>
+      </div>
+      <button id="regrab-btn" onclick="grabFrame()" disabled
+              class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm disabled:opacity-40">Kareyi yenile</button>
+      <span id="upload-status" class="text-xs text-gray-500"></span>
+    </div>
+  </section>
+
+  <!-- STEP 2 — draw -->
+  <section class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="step-num rounded-full bg-cyan-700 text-white text-sm font-bold flex items-center justify-center">2</span>
+      <h2 class="font-semibold">Bölge(leri) çiz</h2>
+    </div>
+    <div class="grid md:grid-cols-[1fr,300px] gap-4">
+      <div>
+        <canvas id="zone-canvas" width="960" height="540"></canvas>
+        <p class="text-[11px] text-gray-500 mt-1">Tıkla = köşe ekle · <b>Z</b> = son köşeyi geri al · en az 3 köşe sonra “Bölgeyi bitir”.</p>
+        <p class="text-[11px] text-amber-300/80 mt-0.5">💡 Bölgeyi kişinin <b>bulunacağı alanı</b> (kapı/duvar önü + zemin) kapsayacak şekilde geniş çiz — sistem hem ayağa hem gövdeye bakar.</p>
+      </div>
+      <div class="space-y-3">
+        <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-3 space-y-2">
+          <div>
+            <label class="text-xs text-gray-400 block mb-1">Bölge adı</label>
+            <input id="zone-name" value="Bölge 1" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+          </div>
+          <label class="flex items-center gap-2 text-sm"><input id="zone-night" type="checkbox"> 🌙 Sadece gece <span class="text-[10px] text-gray-500">(işaretsiz = 7/24, her zaman aktif)</span></label>
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-gray-400">Bekleme (sn):</label>
+            <input id="zone-loiter" type="number" min="0" max="60" value="0" class="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+            <span class="text-[10px] text-gray-500">0 = anında (duvar/çit için)</span>
+          </div>
+          <label class="flex items-center gap-2 text-xs text-gray-400"><input id="zone-motion" type="checkbox"> 🛡️ Hareket yakalama (çevre/duvar)</label>
+          <button onclick="tumGoruntu()" class="w-full text-xs bg-cyan-800/60 border border-cyan-700/50 text-cyan-200 hover:bg-cyan-800 px-2 py-1.5 rounded font-semibold mt-1"
+                  title="Avlu/geçiş gibi tüm görüntüyü izlemek için tek tıkla bütün kareyi kaplar. Sonra 'Bölgeyi bitir'e bas.">⬜ Tüm görüntüyü kapla</button>
+          <div class="flex gap-1 pt-1">
+            <button onclick="finishZone()" class="flex-1 text-xs text-white bg-emerald-700 hover:bg-emerald-600 px-2 py-1.5 rounded font-semibold">Bölgeyi bitir</button>
+            <button onclick="undoPoint()" class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1.5 rounded">↶ Geri al</button>
+            <button onclick="clearDrawing()" class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1.5 rounded">Temizle</button>
+          </div>
+          <p id="point-count" class="text-[11px] text-gray-500">0 köşe çizildi</p>
+        </div>
+        <div>
+          <h3 class="text-xs font-semibold text-gray-400 mb-1">Çizilen bölgeler (<span id="zone-count">0</span>)</h3>
+          <div id="zone-list" class="space-y-1 text-sm"><p class="text-xs text-gray-600">Henüz bölge yok.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3 — test -->
+  <section class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="step-num rounded-full bg-cyan-700 text-white text-sm font-bold flex items-center justify-center">3</span>
+      <h2 class="font-semibold">Testi çalıştır</h2>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-400">Örnekleme:</label>
+        <select id="t-sample" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+          <option value="1" selected>Her frame (takip için en iyi)</option>
+          <option value="2">Her 2. frame</option>
+          <option value="3">Her 3. frame</option>
+          <option value="5">Her 5. frame (hızlı)</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-400">Güven:</label>
+        <input id="t-conf" type="range" min="0.05" max="0.9" step="0.05" value="0.30"
+               oninput="document.getElementById('t-conf-val').textContent='%'+Math.round(this.value*100)" class="w-28">
+        <span id="t-conf-val" class="text-xs font-mono text-cyan-400 w-10">%30</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-400">Saat:</label>
+        <select id="t-daynight" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+          <option value="night" selected>🌙 Gece (22:00)</option>
+          <option value="day">☀️ Gündüz (12:00)</option>
+        </select>
+      </div>
+      <button id="run-btn" onclick="runTest()" disabled
+              class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm disabled:opacity-40">
+        ▶ Testi çalıştır
+      </button>
+      <span id="run-status" class="text-xs text-gray-400"></span>
+    </div>
+    <p class="text-[11px] text-gray-500 mt-2">💡 “Bekleme=0 + Her frame” en çok olay üretir. Olay çıkmıyorsa <b>kural istatistiklerine</b> bak: hangi aşamada eleniyor?</p>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="results" class="hidden bg-gray-900 border border-gray-800 rounded-2xl p-4">
+    <h2 class="font-semibold mb-3">Sonuç</h2>
+    <div id="result-stats" class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3"></div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div>
+        <h3 class="text-xs font-semibold text-gray-400 mb-1">Tetiklenen olaylar</h3>
+        <div id="result-events" class="max-h-72 overflow-auto text-sm"></div>
+      </div>
+      <div>
+        <h3 class="text-xs font-semibold text-gray-400 mb-1">Açıklamalı video</h3>
+        <video id="result-video" controls class="w-full rounded-lg bg-black"></video>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="hidden fixed bottom-4 right-4 px-4 py-2 rounded-lg text-sm shadow-lg z-50"></div>
+
+<script>
+let canvas, ctx, frameImg = null;
+let videoToken = null, nativeW = 0, nativeH = 0;
+let drawingPoints = [];          // current polygon [[x,y]...] normalized
+let zones = [];                  // finished: {name, points, is_night_only, min_loiter_sec, enable_motion_fallback}
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function toast(msg, kind='bilgi'){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'fixed bottom-4 right-4 px-4 py-2 rounded-lg text-sm shadow-lg z-50 ' +
+    (kind==='hata'?'bg-red-700 text-white':kind==='basari'?'bg-emerald-700 text-white':'bg-gray-700 text-white');
+  setTimeout(()=>t.classList.add('hidden'), 2600);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  canvas = document.getElementById('zone-canvas');
+  ctx = canvas.getContext('2d');
+  redraw();
+  document.getElementById('video-file').addEventListener('change', onFilePicked);
+  document.getElementById('frame-pos').addEventListener('input', e => {
+    document.getElementById('frame-pos-val').textContent = '%' + Math.round(e.target.value*100);
+  });
+  canvas.addEventListener('click', e => {
+    if (!frameImg) { toast('Önce bir video yükle', 'hata'); return; }
+    const r = canvas.getBoundingClientRect();
+    drawingPoints.push([(e.clientX-r.left)/r.width, (e.clientY-r.top)/r.height]);
+    document.getElementById('point-count').textContent = drawingPoints.length + ' köşe çizildi';
+    redraw();
+  });
+  document.addEventListener('keydown', e => { if (e.key==='z'||e.key==='Z') undoPoint(); });
+});
+
+let pendingFile = null;
+function onFilePicked(e){
+  pendingFile = e.target.files[0] || null;
+  if (!pendingFile) return;
+  document.getElementById('frame-pos').disabled = false;
+  document.getElementById('regrab-btn').disabled = false;
+  grabFrame();
+}
+
+async function grabFrame(){
+  if (!pendingFile) return;
+  const pos = document.getElementById('frame-pos').value;
+  setUploadStatus('Kare çıkarılıyor…');
+  const fd = new FormData(); fd.append('file', pendingFile);
+  try {
+    const r = await fetch('/api/intrusion/playground/extract-frame?pos='+pos, {method:'POST', body:fd});
+    if (!r.ok) throw new Error((await r.json()).detail || ('HTTP '+r.status));
+    const d = await r.json();
+    videoToken = d.token; nativeW = d.width; nativeH = d.height;
+    const img = new Image();
+    img.onload = () => {
+      frameImg = img;
+      // size canvas to frame aspect ratio (cap width 960)
+      const w = Math.min(960, nativeW || 960);
+      canvas.width = w;
+      canvas.height = Math.round(w * (nativeH||540) / (nativeW||960));
+      redraw();
+      document.getElementById('run-btn').disabled = false;
+    };
+    img.src = d.frame;
+    setUploadStatus(`✓ ${nativeW}×${nativeH} · ${d.frame_count} kare · ${d.fps} fps`);
+  } catch(err){
+    setUploadStatus('✗ ' + err.message); toast('Kare alınamadı: '+err.message,'hata');
+  }
+}
+function setUploadStatus(s){ document.getElementById('upload-status').textContent = s; }
+
+function redraw(){
+  if (!ctx) return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if (frameImg) ctx.drawImage(frameImg, 0,0, canvas.width, canvas.height);
+  else { ctx.fillStyle='#111827'; ctx.fillRect(0,0,canvas.width,canvas.height);
+         ctx.fillStyle='#4b5563'; ctx.font='14px sans-serif'; ctx.fillText('Video yükleyince kare burada görünür', 20, 30); }
+  zones.forEach((z,i)=> drawPoly(z.points, 'rgba(6,182,212,0.20)', '#06b6d4', `${i+1}. ${z.name}`));
+  if (drawingPoints.length){
+    drawPoly(drawingPoints, drawingPoints.length>=3?'rgba(220,38,38,0.22)':'transparent', '#dc2626', null, true);
+    drawingPoints.forEach(p=>{
+      const px=p[0]*canvas.width, py=p[1]*canvas.height;
+      ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2); ctx.fillStyle='#dc2626'; ctx.fill();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+    });
+  }
+}
+function drawPoly(points, fill, stroke, label, open=false){
+  if (!points.length) return;
+  ctx.beginPath();
+  points.forEach((p,i)=>{ const x=p[0]*canvas.width, y=p[1]*canvas.height; i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  if (!open) ctx.closePath();
+  ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=stroke; ctx.lineWidth=2; ctx.stroke();
+  if (label && points.length>=3){
+    const x=points[0][0]*canvas.width, y=points[0][1]*canvas.height;
+    ctx.font='12px sans-serif'; const m=ctx.measureText(label);
+    ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(x, y-16, m.width+8, 15);
+    ctx.fillStyle='#fff'; ctx.fillText(label, x+4, y-5);
+  }
+}
+
+function tumGoruntu(){ drawingPoints=[[0.001,0.001],[0.999,0.001],[0.999,0.999],[0.001,0.999]]; document.getElementById('point-count').textContent='Tüm görüntü (4 köşe)'; redraw(); }
+function undoPoint(){ drawingPoints.pop(); document.getElementById('point-count').textContent = drawingPoints.length+' köşe çizildi'; redraw(); }
+function clearDrawing(){ drawingPoints=[]; document.getElementById('point-count').textContent='0 köşe çizildi'; redraw(); }
+
+function finishZone(){
+  if (drawingPoints.length < 3){ toast('En az 3 köşe çiz', 'hata'); return; }
+  zones.push({
+    name: document.getElementById('zone-name').value.trim() || ('Bölge '+(zones.length+1)),
+    points: drawingPoints.slice(),
+    is_night_only: document.getElementById('zone-night').checked,
+    min_loiter_sec: parseInt(document.getElementById('zone-loiter').value)||0,
+    enable_motion_fallback: document.getElementById('zone-motion').checked,
+  });
+  drawingPoints = [];
+  document.getElementById('zone-name').value = 'Bölge '+(zones.length+1);
+  document.getElementById('point-count').textContent='0 köşe çizildi';
+  renderZoneList(); redraw();
+  toast('Bölge eklendi', 'basari');
+}
+function removeZone(i){ zones.splice(i,1); renderZoneList(); redraw(); }
+function renderZoneList(){
+  document.getElementById('zone-count').textContent = zones.length;
+  const host = document.getElementById('zone-list');
+  if (!zones.length){ host.innerHTML='<p class="text-xs text-gray-600">Henüz bölge yok.</p>'; return; }
+  host.innerHTML = zones.map((z,i)=>`<div class="bg-gray-800/60 border border-gray-700 rounded p-2 flex items-center justify-between">
+      <div><div class="font-semibold text-sm">${i+1}. ${esc(z.name)}</div>
+      <div class="text-[10px] text-gray-500">${z.points.length} köşe · ${z.is_night_only?'🌙 gece':'🕐 7/24'} · ${z.min_loiter_sec}sn${z.enable_motion_fallback?' · 🛡️':''}</div></div>
+      <button onclick="removeZone(${i})" class="text-[10px] text-white bg-red-600 hover:bg-red-700 px-2 py-1 rounded">Sil</button>
+    </div>`).join('');
+}
+
+async function runTest(){
+  if (!videoToken){ toast('Önce video yükle', 'hata'); return; }
+  if (!zones.length && !confirm('Bölge çizmediniz. Bölgesiz (sadece classifier) test edilsin mi?')) return;
+  const sample = document.getElementById('t-sample').value;
+  const conf = document.getElementById('t-conf').value;
+  const daynight = document.getElementById('t-daynight').value;
+  // Guard the most common "0 events" trap: night-only zones tested at daytime.
+  if (daynight === 'day' && zones.some(z => z.is_night_only)) {
+    if (!confirm('Uyarı: "Sadece gece" bölgelerin var ama testi GÜNDÜZ saatiyle çalıştırıyorsun → o bölgeler GÜNDÜZ PASİF olur ve tetiklenmez.\n\nDevam etmek yerine: ya saati Gece yap, ya da bölgelerdeki "Sadece gece"yi kaldır (7/24).\n\nYine de gündüz çalıştırılsın mı?')) return;
+  }
+  const fd = new FormData();
+  fd.append('video_token', videoToken);
+  if (zones.length) fd.append('zones_json', JSON.stringify(zones));
+  setRun('İşleniyor… (GPU yok; ~1-2 dk. Uzun videolar otomatik seyrekleştirilir)', true);
+  try {
+    const url = `/api/intrusion/test-video-e2e?sample_rate=${sample}&conf=${conf}&daynight=${daynight}`;
+    const r = await fetch(url, {method:'POST', body:fd});
+    if (!r.ok) throw new Error((await r.json()).detail || ('HTTP '+r.status));
+    renderResult(await r.json());
+    setRun('✓ Tamamlandı', false);
+  } catch(err){ setRun('✗ '+err.message, false); toast('Test hatası: '+err.message,'hata'); }
+}
+function setRun(s, busy){ document.getElementById('run-status').textContent=s; document.getElementById('run-btn').disabled = busy; }
+
+function renderResult(d){
+  document.getElementById('results').classList.remove('hidden');
+  const rs = d.rule_stats || {};
+  const cards = [
+    ['İşlenen kare', d.processed_frames||0],
+    ['Tespit', rs.detections||0],
+    ['Bölgede', rs.in_zone||0],
+    ['Kural geçti', rs.passed_classifier||0],
+    ['Olay', d.event_count||0],
+  ];
+  document.getElementById('result-stats').innerHTML = cards.map(([k,v])=>
+    `<div class="bg-gray-800/60 border border-gray-700 rounded-lg p-2 text-center">
+       <div class="text-xl font-bold ${k==='Olay'&&v>0?'text-red-400':'text-cyan-300'}">${v}</div>
+       <div class="text-[10px] text-gray-400">${k}</div></div>`).join('');
+  const note = d.auto_sampled
+    ? `<p class="text-[11px] text-amber-400 mb-2">⚡ Uzun video: hız için otomatik olarak her ${d.sample_rate}. kare işlendi (${d.processed_frames} kare, ${d.processing_time_sec}sn). Daha hassas hareket/tırmanma için 3-5 sn'lik kısa bir klip kullan.</p>`
+    : '';
+  const evs = d.events || [];
+  document.getElementById('result-events').innerHTML = note + (evs.length
+    ? `<table class="evt w-full text-left"><thead class="text-gray-500 text-xs"><tr>
+         <th>sn</th><th>kare</th><th>bölge</th><th>track</th><th>süre</th><th>güven</th></tr></thead><tbody>` +
+      evs.map(e=>`<tr class="border-t border-gray-800"><td>${e.time_sec}</td><td>${e.frame}</td>
+         <td>${e.zone_id}</td><td>${e.track_id}</td><td>${e.duration_sec}sn</td>
+         <td>%${Math.round((e.confidence||0)*100)}</td></tr>`).join('') + '</tbody></table>'
+    : '<p class="text-xs text-gray-600 py-2">Bu ayarlarla hiç olay tetiklenmedi. Güven eşiğini düşür, bekleme süresini azalt veya saat=Gece dene.</p>');
+  const vid = document.getElementById('result-video');
+  if (d.annotated_video_url){ vid.src = d.annotated_video_url + '?t=' + Date.now(); }
+}
+</script>
+</body>
+</html>

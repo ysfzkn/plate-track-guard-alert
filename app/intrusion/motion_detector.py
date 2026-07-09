@@ -115,7 +115,18 @@ class MotionDetector:
 
         self._blobs: dict[int, _MotionBlob] = {}
         self._next_blob_id = 1
-        self._lock = threading.Lock()
+        # RLock (not Lock): detect() holds this while calling _age_blobs(),
+        # which re-acquires it. A plain Lock is non-reentrant and self-deadlocks
+        # the moment the first motion blob survives to the locked section.
+        self._lock = threading.RLock()
+
+        # Score on NET displacement (start->end) + directionality instead of
+        # accumulated path length, which inflated jittery in-place blobs.
+        try:
+            from config import settings
+            self._use_net_disp = bool(settings.MOTION_USE_NET_DISPLACEMENT)
+        except Exception:
+            self._use_net_disp = True
 
     def detect(
         self,
@@ -291,16 +302,36 @@ class MotionDetector:
         # Lifetime
         life_score = min(1.0, blob.lifetime_frames / 10.0)
 
-        # Displacement: must move enough to be alive but not so much to be a bird
-        displacement = blob.centroid_path_len / max(1.0, diagonal)
-        if displacement < self.DISP_MIN_FRAC:
-            disp_score = 0.0   # static branch / no motion
-        elif displacement > self.DISP_MAX_FRAC:
-            disp_score = 0.2   # erratic / non-human
+        # Displacement: must move enough to be alive but not so much to be a bird.
+        path_frac = blob.centroid_path_len / max(1.0, diagonal)
+        if self._use_net_disp:
+            # NET displacement (start->end), not accumulated path. A branch that
+            # sways back and forth racks up path length but goes nowhere — its
+            # net displacement is ~0, so it now scores 0 instead of looking
+            # "alive". Directionality (net/path) further rewards purposeful,
+            # roughly-straight movement (a walker) over wandering jitter.
+            fx, fy = blob.first_centroid
+            lx, ly = blob.last_centroid
+            net = ((lx - fx) ** 2 + (ly - fy) ** 2) ** 0.5
+            displacement = net / max(1.0, diagonal)
+            directionality = net / max(1.0, blob.centroid_path_len)
+            if displacement < self.DISP_MIN_FRAC:
+                disp_score = 0.0   # didn't actually go anywhere → in-place jitter
+            elif displacement > self.DISP_MAX_FRAC:
+                disp_score = 0.2   # teleport / erratic
+            else:
+                disp_score = max(0.0, min(1.0, directionality))
         else:
-            # Sweet spot: displacement / lifetime ratio not too high
-            per_frame = displacement / max(1, blob.lifetime_frames)
-            disp_score = max(0.0, 1.0 - abs(per_frame - 0.015) / 0.05)
+            # Legacy: accumulated path length.
+            displacement = path_frac
+            directionality = 1.0
+            if displacement < self.DISP_MIN_FRAC:
+                disp_score = 0.0   # static branch / no motion
+            elif displacement > self.DISP_MAX_FRAC:
+                disp_score = 0.2   # erratic / non-human
+            else:
+                per_frame = displacement / max(1, blob.lifetime_frames)
+                disp_score = max(0.0, 1.0 - abs(per_frame - 0.015) / 0.05)
 
         # Aspect stability — low variance is human-like
         if len(blob.aspect_history) >= 4:
@@ -325,6 +356,8 @@ class MotionDetector:
             "stab": round(stability, 2),
             "raw_aspect": round(aspect, 2),
             "raw_displacement": round(displacement, 3),
+            "raw_path": round(path_frac, 3),
+            "directionality": round(directionality, 2),
         }
         return score, breakdown
 

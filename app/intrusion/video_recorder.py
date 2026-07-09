@@ -1,13 +1,19 @@
-"""VideoClipRecorder — ring-buffer MP4 clip recording for intrusion events.
+"""VideoClipRecorder — ring-buffer clip recording for intrusion events.
 
 Each frame is pushed into a fixed-size deque (pre-buffer). When an event
 fires, the pre-buffer is captured and we continue collecting post-frames
-for the configured duration, then we asynchronously write an MP4 file.
+for the configured duration, then we asynchronously write a video file.
 
 One recorder instance per camera.
 
+Memory note (low-RAM boxes): the ring stores JPEG-ENCODED bytes, not raw
+ndarrays. A raw 1080p frame is ~6 MB; a pre-buffer of pre_sec*fps such
+frames per camera, times 3-4 cameras, was hundreds of MB of resident RAM.
+Encoding (optionally after a downscale to INTRUSION_CLIP_MAX_WIDTH) shrinks
+each stored frame ~10-20x. Frames are decoded again only at write time.
+
 Design:
-  - push_frame() is called by the detection loop every frame. O(1).
+  - push_frame() is called by the detection loop every frame. O(1) + encode.
   - trigger_clip(event_id) snapshots the pre-buffer and registers an
     active recording that absorbs the next N post-frames.
   - Finalization (cv2.VideoWriter) is done on a worker thread to keep
@@ -29,6 +35,20 @@ import numpy as np
 
 logger = logging.getLogger("gateguard.app")
 
+# Codec fallback chain: (fourcc, file-extension). The first writer that
+# actually opens on this machine wins. mp4v is the most portable MP4 codec;
+# if the platform lacks it we fall back to AVI containers.
+_CODEC_CHAIN = [("mp4v", ".mp4"), ("XVID", ".avi"), ("MJPG", ".avi")]
+
+
+def _clip_setting(name: str, default):
+    """Read a clip knob from config.settings without a hard import dependency."""
+    try:
+        from config import settings
+        return getattr(settings, name, default)
+    except Exception:
+        return default
+
 
 class VideoClipRecorder:
     def __init__(
@@ -38,6 +58,8 @@ class VideoClipRecorder:
         pre_sec: int = 10,
         post_sec: int = 5,
         output_dir: str = "static/intrusion_clips",
+        jpeg_quality: Optional[int] = None,
+        max_width: Optional[int] = None,
     ):
         self.camera_id = camera_id
         self.fps = max(1, fps)
@@ -46,10 +68,20 @@ class VideoClipRecorder:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Memory knobs (fall back to config defaults, then hard defaults).
+        self.jpeg_quality = int(
+            jpeg_quality if jpeg_quality is not None
+            else _clip_setting("INTRUSION_CLIP_JPEG_QUALITY", 70)
+        )
+        self.max_width = int(
+            max_width if max_width is not None
+            else _clip_setting("INTRUSION_CLIP_MAX_WIDTH", 960)
+        )
+
         self._pre_len = self.pre_sec * self.fps
         self._post_len = self.post_sec * self.fps
         self._ring: deque = deque(maxlen=self._pre_len)
-        # event_id -> list of collected frames (pre + accumulating post)
+        # event_id -> list of collected (jpeg_bytes, timestamp) tuples
         self._active: dict[int, list] = {}
         # event_id -> frames_remaining
         self._remaining: dict[int, int] = {}
@@ -57,19 +89,43 @@ class VideoClipRecorder:
         self._callbacks: dict[int, Callable[[int, str], None]] = {}
         self._lock = threading.Lock()
 
+    def _encode(self, frame: np.ndarray) -> Optional[bytes]:
+        """Downscale (if wider than max_width) and JPEG-encode a frame.
+        Returns bytes, or None if encoding fails."""
+        try:
+            h, w = frame.shape[:2]
+            if self.max_width and w > self.max_width:
+                scale = self.max_width / float(w)
+                frame = cv2.resize(
+                    frame, (self.max_width, max(1, int(h * scale))),
+                    interpolation=cv2.INTER_AREA,
+                )
+            ok, buf = cv2.imencode(
+                ".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
+            )
+            if not ok:
+                return None
+            return buf.tobytes()
+        except Exception:
+            logger.exception("Clip frame encode failed (cam=%d)", self.camera_id)
+            return None
+
     def push_frame(self, frame: np.ndarray, timestamp: Optional[datetime] = None) -> None:
         """Add a frame to the pre-buffer. Safe to call every frame."""
         if frame is None:
             return
         if timestamp is None:
             timestamp = datetime.now()
-        frame_copy = frame.copy()
+        encoded = self._encode(frame)
+        if encoded is None:
+            return
+        item = (encoded, timestamp)
         with self._lock:
-            self._ring.append((frame_copy, timestamp))
+            self._ring.append(item)
             # Feed active recordings
             finalize_ids: list[int] = []
             for eid, buffer in self._active.items():
-                buffer.append((frame_copy, timestamp))
+                buffer.append(item)
                 self._remaining[eid] -= 1
                 if self._remaining[eid] <= 0:
                     finalize_ids.append(eid)
@@ -109,9 +165,30 @@ class VideoClipRecorder:
 
     # ── Internals ────────────────────────────────────────────────
 
-    def _path_for_event(self, event_id: int) -> Path:
+    def _path_for_event(self, event_id: int, ext: str = ".mp4") -> Path:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return self.output_dir / f"cam{self.camera_id}_event{event_id}_{ts}.mp4"
+        return self.output_dir / f"cam{self.camera_id}_event{event_id}_{ts}{ext}"
+
+    def _open_writer(self, tmp_base: Path, size: tuple[int, int]):
+        """Try each codec in the fallback chain until one opens.
+        Returns (writer, tmp_path, final_ext) or (None, None, None)."""
+        w, h = size
+        for fourcc_str, ext in _CODEC_CHAIN:
+            tmp_path = tmp_base.with_suffix(ext + ".tmp")
+            try:
+                fourcc = cv2.VideoWriter_fourcc(*fourcc_str)
+                writer = cv2.VideoWriter(str(tmp_path), fourcc, float(self.fps), (w, h))
+                if writer.isOpened():
+                    return writer, tmp_path, ext
+                writer.release()
+            except Exception:
+                logger.exception("VideoWriter init error for codec %s", fourcc_str)
+            # Clean up a stillborn temp file before trying the next codec
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        return None, None, None
 
     def _write_clip(
         self,
@@ -119,32 +196,62 @@ class VideoClipRecorder:
         frames: list,
         callback: Optional[Callable[[int, str], None]],
     ) -> None:
+        """Decode the buffered JPEG frames and write a clip to a .tmp file,
+        then atomically rename it. The .tmp scheme prevents the retention
+        sweeper from deleting half-written clips.
+        """
         if not frames:
             logger.warning("No frames to write for event %d", event_id)
             return
-        path = self._path_for_event(event_id)
+        # Decode the first frame to learn the dimensions.
+        first = cv2.imdecode(np.frombuffer(frames[0][0], np.uint8), cv2.IMREAD_COLOR)
+        if first is None:
+            logger.error("Clip first-frame decode failed for event %d", event_id)
+            return
+        h, w = first.shape[:2]
+
+        tmp_base = self.output_dir / self._path_for_event(event_id).stem
+        writer, tmp_path, ext = self._open_writer(tmp_base, (w, h))
+        if writer is None:
+            logger.error("No working video codec for event %d (cam=%d)",
+                         event_id, self.camera_id)
+            return
+        final_path = tmp_path.with_suffix("")  # drop ".tmp" -> "...<ext>"
+
         try:
-            h, w = frames[0][0].shape[:2]
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            writer = cv2.VideoWriter(str(path), fourcc, float(self.fps), (w, h))
-            if not writer.isOpened():
-                logger.error("cv2.VideoWriter failed to open for %s", path)
-                return
-            for frame, _ in frames:
-                writer.write(frame)
+            writer.write(first)
+            for buf, _ in frames[1:]:
+                img = cv2.imdecode(np.frombuffer(buf, np.uint8), cv2.IMREAD_COLOR)
+                if img is not None:
+                    writer.write(img)
             writer.release()
+            # Atomic rename — retention sweeper now sees a complete file
+            try:
+                os.replace(tmp_path, final_path)
+            except OSError:
+                logger.exception("Clip rename failed: %s -> %s", tmp_path, final_path)
+                # Don't leak the half-written temp file
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return
             logger.info("Clip written: event=%d frames=%d path=%s",
-                        event_id, len(frames), path)
+                        event_id, len(frames), final_path)
             if callback:
                 try:
-                    callback(event_id, str(path))
+                    callback(event_id, str(final_path))
                 except Exception:
                     logger.exception("Clip callback failed for event %d", event_id)
         except Exception:
             logger.exception("Clip write failed for event %d", event_id)
-            if os.path.exists(path):
+            try:
+                writer.release()
+            except Exception:
+                pass
+            for p in (tmp_path, final_path):
                 try:
-                    os.unlink(path)
+                    p.unlink(missing_ok=True)
                 except OSError:
                     pass
 
@@ -155,18 +262,33 @@ class VideoClipRecorder:
 
 
 def cleanup_old_clips(output_dir: str, retention_days: int = 60) -> int:
-    """Delete clips older than retention_days. Returns count deleted."""
+    """Delete clips older than retention_days. Returns count deleted.
+
+    Also reaps stale ``*.tmp`` files (left behind only by a crashed/killed
+    write) regardless of the retention window once they're older than 1 hour.
+    """
     import time
-    cutoff = time.time() - retention_days * 86400
+    now = time.time()
+    cutoff = now - retention_days * 86400
+    tmp_cutoff = now - 3600  # orphaned temp files older than 1h
     base = Path(output_dir)
     if not base.exists():
         return 0
     deleted = 0
-    for f in base.glob("*.mp4"):
+    for f in base.iterdir():
+        if not f.is_file():
+            continue
+        name = f.name.lower()
         try:
-            if f.stat().st_mtime < cutoff:
-                f.unlink()
-                deleted += 1
+            mtime = f.stat().st_mtime
+            if name.endswith(".tmp"):
+                if mtime < tmp_cutoff:
+                    f.unlink()
+                    deleted += 1
+            elif name.endswith((".mp4", ".avi")):
+                if mtime < cutoff:
+                    f.unlink()
+                    deleted += 1
         except OSError:
             continue
     if deleted:
