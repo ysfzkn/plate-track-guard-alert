@@ -37,16 +37,25 @@
         .gg-nav{background:linear-gradient(180deg,#0b1220 0%,#0a0f1c 100%);box-shadow:0 1px 0 rgba(255,255,255,.04),0 4px 18px -4px rgba(0,0,0,.6)}
         .gg-brand-mark{background:linear-gradient(135deg,#22d3ee 0%,#3b82f6 60%,#8b5cf6 100%);box-shadow:0 0 0 1px rgba(34,211,238,.25),0 4px 14px -2px rgba(34,211,238,.35)}
         .gg-tabs{background:rgba(15,23,42,.6);border:1px solid rgba(148,163,184,.08);border-radius:10px;padding:3px;backdrop-filter:blur(8px)}
-        .tab-btn{position:relative;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;font-size:13px;font-weight:600;color:#94a3b8;border-radius:7px;transition:color .15s,background .15s;cursor:pointer;border:none;background:transparent;white-space:nowrap}
+        .tab-btn{position:relative;display:inline-flex;align-items:center;gap:5px;padding:7px 11px;font-size:13px;font-weight:600;color:#94a3b8;border-radius:7px;transition:color .15s,background .15s;cursor:pointer;border:none;background:transparent;white-space:nowrap}
         .tab-btn:hover{color:#e2e8f0;background:rgba(148,163,184,.06)}
         .tab-btn.active{color:#fff;background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(59,130,246,.18));box-shadow:inset 0 0 0 1px rgba(34,211,238,.35),0 1px 0 rgba(255,255,255,.04)}
         .tab-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:2px;background:linear-gradient(90deg,transparent,#22d3ee,transparent);border-radius:2px}
         .tab-btn .tab-ico{font-size:14px;line-height:1;filter:drop-shadow(0 0 4px rgba(34,211,238,.0));transition:filter .15s}
+        /* Dar (xl altı) ekranlarda sekme emojilerini gizle — etiketler kalır, yer açılır */
+        @media (max-width:1279px){ .tab-btn .tab-ico{display:none} }
         .tab-btn.active .tab-ico{filter:drop-shadow(0 0 6px rgba(34,211,238,.5))}
         .nav-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(30,41,59,.5);border:1px solid rgba(148,163,184,.1);color:#cbd5e1;font-size:15px;transition:all .15s;cursor:pointer;text-decoration:none}
         .nav-icon:hover{background:rgba(51,65,85,.7);color:#fff;border-color:rgba(148,163,184,.25);transform:translateY(-1px)}
         .nav-icon.danger:hover{background:rgba(127,29,29,.5);border-color:rgba(239,68,68,.4);color:#fca5a5}
         .nav-divider{width:1px;height:22px;background:rgba(148,163,184,.12)}
+        /* Labeled action buttons (operasyonel kısayollar) */
+        .nav-pill{display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 10px;border-radius:9px;background:rgba(30,41,59,.5);border:1px solid rgba(148,163,184,.1);color:#cbd5e1;font-size:12.5px;font-weight:600;transition:all .15s;cursor:pointer;text-decoration:none;white-space:nowrap}
+        .nav-pill:hover{background:rgba(51,65,85,.7);color:#fff;border-color:rgba(148,163,184,.25);transform:translateY(-1px)}
+        .nav-pill.accent{background:rgba(99,102,241,.18);border-color:rgba(129,140,248,.32);color:#c7d2fe}
+        .nav-pill.accent:hover{background:rgba(99,102,241,.30);color:#fff}
+        .nav-menu-item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:8px 12px;font-size:13px;color:#e2e8f0;text-decoration:none;background:transparent;border:none;cursor:pointer;transition:background .12s}
+        .nav-menu-item:hover{background:rgba(51,65,85,.6)}
         .ws-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;font-size:11px;font-weight:600;border-radius:999px;background:rgba(30,41,59,.6);border:1px solid rgba(148,163,184,.12);color:#cbd5e1}
         .ws-pill .ws-dot{width:7px;height:7px;border-radius:999px;box-shadow:0 0 0 2px rgba(0,0,0,.3)}
         .ws-pill .ws-dot.ok{background:#22c55e;animation:wsBreath 2s ease-in-out infinite}
@@ -68,6 +77,12 @@
         body.light-theme .tab-btn.active{background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(59,130,246,.18)) !important;color:#0f172a !important}
         body.light-theme .nav-icon{background:#f1f5f9 !important;border-color:rgba(0,0,0,.08) !important;color:#334155 !important}
         body.light-theme .nav-icon:hover{background:#e2e8f0 !important;color:#0f172a !important}
+        body.light-theme .nav-pill{background:#f1f5f9 !important;border-color:rgba(0,0,0,.08) !important;color:#334155 !important}
+        body.light-theme .nav-pill:hover{background:#e2e8f0 !important;color:#0f172a !important}
+        body.light-theme .nav-pill.accent{background:#e0e7ff !important;border-color:#c7d2fe !important;color:#4338ca !important}
+        body.light-theme #test-menu,body.light-theme #user-menu{background:#ffffff !important;border-color:#e2e8f0 !important}
+        body.light-theme .nav-menu-item{color:#1f2937 !important}
+        body.light-theme .nav-menu-item:hover{background:#f1f5f9 !important}
         body.light-theme .ws-pill{background:#f1f5f9 !important;border-color:rgba(0,0,0,.08) !important;color:#334155 !important}
         body.light-theme .gg-version{background:rgba(0,0,0,.04) !important;color:#64748b !important;border-color:rgba(0,0,0,.08) !important}
         body.light-theme [class*="bg-gray-950"]{background:#f3f4f6 !important;color:#0f172a !important}
@@ -170,24 +185,24 @@
 </div>
 
 <!-- ====== HEADER ====== -->
-<header class="gg-nav sticky top-0 z-30 px-5 h-14 flex items-center justify-between gap-4">
+<header class="gg-nav sticky top-0 z-30 px-3 h-14 flex items-center justify-between gap-2 flex-nowrap">
     <!-- Brand -->
-    <div class="flex items-center gap-3 min-w-0">
-        <div class="gg-brand-mark w-9 h-9 rounded-xl flex items-center justify-center text-lg">🛡️</div>
-        <div class="leading-tight min-w-0">
+    <div class="flex items-center gap-2.5 shrink-0">
+        <div class="gg-brand-mark w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0">🛡️</div>
+        <div class="leading-tight">
             <div class="flex items-center gap-2">
-                <h1 class="text-[15px] font-bold tracking-tight text-white">GateGuard</h1>
-                <span class="gg-version">v1.0</span>
+                <h1 class="text-[15px] font-bold tracking-tight text-white whitespace-nowrap">GateGuard</h1>
+                <span class="gg-version shrink-0 hidden sm:inline">v1.0</span>
             </div>
             <div class="flex items-center gap-1.5 text-xs font-semibold text-gray-300">
-                <span id="status-dot" class="status-led"></span>
-                <span id="status-text">Sistem aktif</span>
+                <span id="status-dot" class="status-led shrink-0" title="Sistem aktif"></span>
+                <span id="status-text" class="truncate hidden 2xl:inline max-w-[150px]">Sistem aktif</span>
             </div>
         </div>
     </div>
 
     <!-- Tabs -->
-    <nav class="gg-tabs flex gap-0.5" aria-label="Ana menü">
+    <nav class="gg-tabs flex gap-0.5 shrink-0" aria-label="Ana menü">
         <button class="tab-btn active" onclick="tabDegistir('ozet')"><span class="tab-ico">📊</span><span>Özet</span></button>
         <button class="tab-btn" onclick="tabDegistir('canli')"><span class="tab-ico">📡</span><span>Canlı</span></button>
         <button class="tab-btn" onclick="tabDegistir('gecmis')"><span class="tab-ico">📋</span><span>Geçmiş</span></button>
@@ -196,28 +211,44 @@
     </nav>
 
     <!-- Actions -->
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-1.5 shrink-0">
         <div id="ws-badge" class="ws-pill" title="Sunucu bağlantı durumu">
             <span id="ws-dot" class="ws-dot warn"></span>
-            <span id="ws-status">Bağlanıyor</span>
+            <span id="ws-status" class="hidden 2xl:inline">Bağlanıyor</span>
         </div>
+        <div class="nav-divider hidden sm:block"></div>
+        <!-- Operasyonel kısayollar (etiketli, kolay basılır) -->
+        <a href="/vehicles" class="nav-pill" title="Tanımlı araçlar & plaka yönetimi">🚗 <span class="hidden xl:inline">Araçlar</span></a>
+        <a href="/night-watch" class="nav-pill accent" title="Gece izleme — çok kameralı canlı hırsızlık takibi">🌃 <span class="hidden lg:inline">Gece İzleme</span></a>
+        <a href="/intrusion-history" class="nav-pill" title="Kaçak kayıtları (kanıt foto + video)">🗂️ <span class="hidden xl:inline">Kayıtlar</span></a>
+
         <div class="nav-divider"></div>
-        <a href="/camera-test" title="Kamera testi" class="nav-icon">📹</a>
-        <a href="/alpr-test" title="Plaka okuma testi" class="nav-icon">🔬</a>
-        <a href="/zone-playground" title="Bölge test alanı (kayıttan bölge çiz & test et)" class="nav-icon">🗺️</a>
-        <a href="/night-watch" title="Gece izleme" class="nav-icon">🌙</a>
-        <a href="/intrusion-history" title="Kaçak kayıtları (kanıt foto + video, tarih filtreli)" class="nav-icon">🗂️</a>
-        <button onclick="temaDegistir()" title="Tema değiştir" class="nav-icon" id="tema-btn">🌙</button>
-        <button onclick="kisayolGoster()" title="Klavye kısayolları (?)" class="nav-icon">⌨</button>
+
+        <!-- Test & tanılama menüsü (profil yanında toplandı) -->
+        <div class="relative">
+            <button onclick="testMenuToggle(event)" id="test-btn" title="Test & tanılama araçları" class="nav-pill">🧪 <span class="hidden sm:inline">Test</span> <span class="text-[10px] opacity-60">▾</span></button>
+            <div id="test-menu" class="hidden absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl min-w-[220px] py-1 z-50">
+                <div class="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-gray-500">Test & Tanılama</div>
+                <a href="/camera-test" class="nav-menu-item">📹 Kamera Testi</a>
+                <a href="/alpr-test" class="nav-menu-item">🔬 Plaka Okuma Testi</a>
+                <a href="/intrusion-test" class="nav-menu-item">🧍 İnsan Tespit Testi</a>
+                <a href="/zone-playground" class="nav-menu-item">🗺️ Bölge Test Alanı</a>
+                <a href="/test-history" class="nav-menu-item">📊 Test Geçmişi</a>
+                <div class="border-t border-gray-800 my-1"></div>
+                <button onclick="kisayolGoster();testMenuKapat()" class="nav-menu-item">⌨ Klavye Kısayolları</button>
+            </div>
+        </div>
+
+        <!-- Küçük yardımcılar -->
         <button onclick="senkronizeEt()" title="MDB senkronize et (R)" class="nav-icon">🔄</button>
-        <div class="nav-divider"></div>
+        <button onclick="temaDegistir()" title="Aydınlık / Karanlık tema" class="nav-icon" id="tema-btn">🌙</button>
         <div class="nav-divider"></div>
         <!-- User menu -->
         <div class="relative">
             <button onclick="kullaniciMenuToggle()" id="user-btn" title="Kullanıcı menüsü"
                     class="nav-icon flex items-center gap-1.5" style="width:auto;padding:0 10px">
                 <span id="user-avatar" class="w-5 h-5 rounded-full bg-cyan-700 text-[10px] font-bold flex items-center justify-center">?</span>
-                <span id="user-name" class="text-xs font-semibold hidden sm:inline">—</span>
+                <span id="user-name" class="text-xs font-semibold hidden 2xl:inline max-w-[120px] truncate">—</span>
                 <span class="text-[10px] opacity-60">▾</span>
             </button>
             <div id="user-menu" class="hidden absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl min-w-[200px] py-1 z-50">
@@ -966,6 +997,7 @@ function baglan() {
         reconn = 0; wsDurum('bagli');
         durumAl(); istatistikAl(); alarmToggleLoad();
         canliGridYukle(); saglikDurumuGuncelle(); sonGecisleriYukle();
+        ozetYukle();   // Özet modül kartları (default sekme)
     };
     ws.onmessage = e => { try { mesajIsle(JSON.parse(e.data)); } catch(err) {} };
     ws.onclose = () => { wsDurum('kopuk'); reconn++; setTimeout(baglan, Math.min(3000*reconn, 30000)); };
@@ -978,8 +1010,8 @@ function wsDurum(d) {
 }
 
 function mesajIsle(m) {
-    if (m.type === 'passage') { gecisEkle(m.data); istatistikAl(); }
-    else if (m.type === 'alarm_on') { gecisEkle(m.data); alarmGoster(m.data); istatistikAl(); }
+    if (m.type === 'passage') { gecisEkle(m.data); istatistikAl(); ozetYukle(); }
+    else if (m.type === 'alarm_on') { gecisEkle(m.data); alarmGoster(m.data); istatistikAl(); ozetYukle(); }
     else if (m.type === 'alarm_off') { alarmKapat(); }
     else if (m.type === 'intrusion_on') {
         // Module 2: show a compact banner on the main dashboard too
@@ -990,6 +1022,7 @@ function mesajIsle(m) {
         const label = `🚨 İZİNSİZ GİRİŞ${sourceTag} — ${camLabel} · ${d.duration_sec}sn${muteTag}`;
         const isLive = !d.alarm_muted && !d.shadow_mode;
         bildirim(label, isLive ? 'hata' : 'bilgi');
+        ozetYukle();   // Modül 2 sayaçlarını tazele
         if (isLive) {
             // Full-screen proof overlay + distinct longer alarm tone + tab flash
             intrusionAlertGoster(d);
@@ -1177,6 +1210,69 @@ function yonRozet(id, ok, okText, offText) {
 }
 
 // ============================================================
+//  ÖZET (Dashboard) — modül kartlarını /api/dashboard/summary'den doldur
+//  (Bu fonksiyon eksikti; kartlar sabit "0" gösteriyordu.)
+// ============================================================
+async function ozetYukle() {
+    let d;
+    try { d = await (await fetch('/api/dashboard/summary')).json(); }
+    catch (e) { console.warn('ozetYukle:', e); return; }
+    const m1 = d.module1 || {}, m2 = d.module2 || {};
+    const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+    // — Modül 1 (plaka) —
+    const t1 = m1.today || {};
+    setTxt('m1-total',   t1.total ?? 0);
+    setTxt('m1-auth',    t1.authorized ?? 0);
+    setTxt('m1-unauth',  t1.unauthorized ?? 0);
+    setTxt('m1-entries', t1.entries ?? 0);
+    setTxt('m1-exits',   t1.exits ?? 0);
+    const m1b = document.getElementById('m1-status');
+    if (m1b) {
+        const conn = !!m1.camera_connected;
+        m1b.textContent = conn ? '🟢 Kamera bağlı' : '🔴 Kamera yok';
+        m1b.className = 'text-xs px-2 py-1 rounded-full border ' + (conn
+            ? 'bg-green-950/40 border-green-900/40 text-green-400'
+            : 'bg-red-950/40 border-red-900/40 text-red-400');
+    }
+    const lp = m1.last_passage, lastWrap = document.getElementById('m1-last');
+    if (lastWrap) {
+        if (lp && lp.plate) {
+            setTxt('m1-last-plate', lp.plate);
+            setTxt('m1-last-time', lp.detected_at
+                ? new Date(lp.detected_at).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) : '');
+            lastWrap.classList.remove('hidden');
+        } else { lastWrap.classList.add('hidden'); }
+    }
+
+    // — Modül 2 (hırsızlık) —
+    const t2 = m2.today || {};
+    setTxt('m2-total',  t2.total ?? 0);
+    setTxt('m2-unack',  t2.unacknowledged ?? 0);
+    const running = (m2.cameras_running || []).length;
+    const camTotal = m2.cameras_total ?? running;
+    setTxt('m2-cams', camTotal ? `${running}/${camTotal}` : running);
+    const m2b = document.getElementById('m2-status');
+    if (m2b) {
+        if (!m2.enabled) {
+            m2b.textContent = 'KAPALI';
+            m2b.className = 'text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-400';
+        } else {
+            const nm = !!m2.night_mode_active;
+            m2b.textContent = nm ? '🌙 Gece modu' : '☀️ Gündüz';
+            m2b.className = 'text-xs px-2 py-1 rounded-full border ' + (nm
+                ? 'bg-cyan-950/40 border-cyan-900/40 text-cyan-400'
+                : 'bg-gray-800 border-gray-700 text-gray-400');
+        }
+    }
+    setTxt('m2-night', !m2.enabled ? 'Modül kapalı'
+        : (m2.night_mode_active ? '🌙 Gece izleme aktif' : '☀️ Gündüz — pasif'));
+    setTxt('m2-window', m2.night_window || '—');
+    const shadow = document.getElementById('m2-shadow');
+    if (shadow) shadow.classList.toggle('hidden', !(m2.enabled && m2.shadow_mode));
+}
+
+// ============================================================
 //  CANLI KAMERA GRID (Özet panelinde)
 // ============================================================
 let _gridCameras = [];     // [{id, name, role}]
@@ -1315,10 +1411,15 @@ async function saglikDurumuGuncelle() {
         }
         // Update overall system badge text from /api/health
         const status = document.getElementById('status-text');
+        const sdot = document.getElementById('status-dot');
         if (status) {
-            if (data.status === 'ok') status.textContent = 'Sistem aktif';
-            else if (data.status === 'warn') status.textContent = '⚠ Dikkat';
-            else status.textContent = '❌ ' + (data.issues[0] || 'Hata');
+            let txt = 'Sistem aktif';
+            if (data.status === 'warn') txt = '⚠ Dikkat';
+            else if (data.status !== 'ok') txt = '❌ ' + ((data.issues && data.issues[0]) || 'Hata');
+            status.textContent = txt;
+            const full = (data.issues || []).join(' · ') || txt;
+            status.title = full;
+            if (sdot) sdot.title = full;   // metin dar ekranda gizli; tooltip nokta üzerinde
         }
         const dot = document.getElementById('status-dot');
         if (dot) {
@@ -2044,7 +2145,21 @@ document.addEventListener('click', (e) => {
     if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
         menu.classList.add('hidden');
     }
+    // Test menüsü: dışına tıklayınca kapat
+    const tbtn = document.getElementById('test-btn');
+    const tmenu = document.getElementById('test-menu');
+    if (tbtn && tmenu && !tbtn.contains(e.target) && !tmenu.contains(e.target)) {
+        tmenu.classList.add('hidden');
+    }
 });
+function testMenuToggle(e){
+    if (e) e.stopPropagation();
+    const m = document.getElementById('test-menu');
+    m.classList.toggle('hidden');
+    // Diğer menü açıksa kapat
+    document.getElementById('user-menu')?.classList.add('hidden');
+}
+function testMenuKapat(){ document.getElementById('test-menu')?.classList.add('hidden'); }
 
 async function kullaniciYukle() {
     try {

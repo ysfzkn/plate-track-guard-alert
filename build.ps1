@@ -23,13 +23,26 @@ function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "    [OK] $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "    [!]  $msg" -ForegroundColor Yellow }
 
+# Native komutlari (uv/pyinstaller) calistirir. EAP=Stop iken PowerShell 5.1
+# native stderr'i (PyInstaller'in INFO satirlari dahil) fatal saydigi icin
+# gecici olarak EAP=Continue'ya alir; exit kodunu dondurur. Cikti akisini
+# birlestirmek (2>&1) ve Out-Host/Out-Null cagriyi yapan scriptblock icinde.
+function Run-Cmd([scriptblock]$Cmd) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & $Cmd
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    return $code
+}
+
 # --- 1. PyInstaller kurulu mu? ---
 Step "PyInstaller kontrol ediliyor"
-uv run python -c "import PyInstaller" 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
+$piCode = Run-Cmd { uv run python -c "import PyInstaller" 2>&1 | Out-Null }
+if ($piCode -ne 0) {
     Warn "PyInstaller yok, kuruluyor (uv pip install pyinstaller)..."
-    uv pip install pyinstaller 2>&1 | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "PyInstaller kurulamadi (exit $LASTEXITCODE)" }
+    $insCode = Run-Cmd { uv pip install pyinstaller 2>&1 | Out-Host }
+    if ($insCode -ne 0) { throw "PyInstaller kurulamadi (exit $insCode)" }
     Ok "PyInstaller kuruldu"
 } else {
     Ok "PyInstaller mevcut"
@@ -42,8 +55,8 @@ Ok "build ve dist silindi"
 
 # --- 3. PyInstaller ile derle (spec hazir) ---
 Step "PyInstaller derlemesi (birkac dakika surebilir)"
-uv run pyinstaller GateGuard.spec --clean --noconfirm 2>&1 | Out-Host
-if ($LASTEXITCODE -ne 0) { throw "Derleme basarisiz (exit $LASTEXITCODE)" }
+$buildCode = Run-Cmd { uv run pyinstaller GateGuard.spec --clean --noconfirm 2>&1 | Out-Host }
+if ($buildCode -ne 0) { throw "Derleme basarisiz (exit $buildCode)" }
 if (-not (Test-Path "$DistDir\$AppName.exe")) {
     throw "Derleme basarisiz: $DistDir\$AppName.exe olusmadi."
 }

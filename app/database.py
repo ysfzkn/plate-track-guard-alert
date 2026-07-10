@@ -125,6 +125,29 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_vehicles_plate
                 ON vehicles(plate_normalized);
 
+            -- ── Manuel / ek plakalar (MDB dışı) ─────────────────────
+            -- MDB'de tanımlı olmayan ama sistemde elle eklenen plakalar.
+            -- MDB sync bu tabloya ASLA dokunmaz (moonwell_id ile eşleşmez),
+            -- böylece yeniden senkronizasyonda silinmezler.
+            --   vehicle_moonwell_id NOT NULL  → mevcut bir kişiye EK plaka
+            --   vehicle_moonwell_id NULL      → bağımsız (kişisi MDB'de yok) plaka
+            CREATE TABLE IF NOT EXISTS extra_plates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plate TEXT NOT NULL,
+                plate_normalized TEXT NOT NULL UNIQUE,
+                vehicle_moonwell_id INTEGER,
+                owner_name TEXT DEFAULT '',
+                block_no TEXT DEFAULT '',
+                apartment TEXT DEFAULT '',
+                note TEXT DEFAULT '',
+                created_by TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_extra_plates_norm
+                ON extra_plates(plate_normalized);
+            CREATE INDEX IF NOT EXISTS idx_extra_plates_vehicle
+                ON extra_plates(vehicle_moonwell_id);
+
             CREATE TABLE IF NOT EXISTS passages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 plate TEXT NOT NULL,
@@ -382,15 +405,238 @@ class Database:
         return None
 
     def find_vehicle(self, normalized: str, fuzzy_tolerance: int = 1) -> Optional[Vehicle]:
-        """Exact lookup first, then fuzzy fallback."""
+        """Authorize a plate. Checks MDB vehicles first, then manual extra_plates.
+
+        Order: exact MDB → exact extra → fuzzy MDB → fuzzy extra. MDB (the
+        authoritative source) wins ties; manually-added plates are recognized
+        exactly like MDB ones so a resident's second car / a guest plate that
+        was never entered in Moonwell still opens the gate.
+        """
         vehicle = self.lookup_plate(normalized)
         if vehicle:
             return vehicle
-        return self.lookup_plate_fuzzy(normalized, fuzzy_tolerance)
+        extra = self.lookup_extra_plate(normalized)
+        if extra:
+            return extra
+        vehicle = self.lookup_plate_fuzzy(normalized, fuzzy_tolerance)
+        if vehicle:
+            return vehicle
+        return self.lookup_extra_plate_fuzzy(normalized, fuzzy_tolerance)
 
     def get_all_vehicles(self) -> list[Vehicle]:
         rows = self.conn.execute("SELECT * FROM vehicles ORDER BY owner_name").fetchall()
         return [self._row_to_vehicle(r) for r in rows]
+
+    # --- Extra (manual / non-MDB) plate operations ---
+
+    def _extra_row_to_vehicle(self, row: sqlite3.Row) -> Vehicle:
+        """Turn an extra_plates row into a Vehicle for the authorization path.
+
+        A linked extra plate (vehicle_moonwell_id set) inherits the owner /
+        block / apartment of its MDB person; a standalone one uses its own
+        stored fields.
+        """
+        owner_name = row["owner_name"] or ""
+        block_no = row["block_no"] or ""
+        apartment = row["apartment"] or ""
+        link_id = row["vehicle_moonwell_id"]
+        if link_id is not None:
+            person = self.conn.execute(
+                "SELECT owner_name, block_no, apartment FROM vehicles WHERE moonwell_id = ?",
+                (link_id,),
+            ).fetchone()
+            if person:
+                owner_name = person["owner_name"] or owner_name
+                block_no = person["block_no"] or block_no
+                apartment = person["apartment"] or apartment
+        return Vehicle(
+            # Negative synthetic id keeps it distinct from real moonwell ids.
+            moonwell_id=link_id if link_id is not None else -int(row["id"]),
+            plate=row["plate"],
+            plate_normalized=row["plate_normalized"],
+            owner_name=owner_name,
+            block_no=block_no,
+            apartment=apartment,
+            user_type=0,
+            kart_id="",
+        )
+
+    def lookup_extra_plate(self, normalized: str) -> Optional[Vehicle]:
+        """Exact lookup in the manual extra_plates table."""
+        if not normalized:
+            return None
+        row = self.conn.execute(
+            "SELECT * FROM extra_plates WHERE plate_normalized = ?", (normalized,)
+        ).fetchone()
+        return self._extra_row_to_vehicle(row) if row else None
+
+    def lookup_extra_plate_fuzzy(self, normalized: str, tolerance: int = 1) -> Optional[Vehicle]:
+        """Fuzzy lookup in extra_plates (same length-window + bounded-Levenshtein
+        optimization as the MDB path)."""
+        if not normalized:
+            return None
+        n = len(normalized)
+        rows = self.conn.execute(
+            "SELECT * FROM extra_plates "
+            "WHERE length(plate_normalized) BETWEEN ? AND ?",
+            (n - tolerance, n + tolerance),
+        ).fetchall()
+        best_match = None
+        best_dist = tolerance + 1
+        for row in rows:
+            dist = levenshtein_bounded(normalized, row["plate_normalized"], tolerance)
+            if dist < best_dist:
+                best_dist = dist
+                best_match = row
+                if dist == 0:
+                    break
+        return self._extra_row_to_vehicle(best_match) if best_match else None
+
+    def plate_exists(self, normalized: str) -> Optional[str]:
+        """Return where a normalized plate is already registered: 'mdb',
+        'extra', or None. Used to reject duplicate manual entries."""
+        if not normalized:
+            return None
+        if self.conn.execute(
+            "SELECT 1 FROM vehicles WHERE plate_normalized = ? LIMIT 1", (normalized,)
+        ).fetchone():
+            return "mdb"
+        if self.conn.execute(
+            "SELECT 1 FROM extra_plates WHERE plate_normalized = ? LIMIT 1", (normalized,)
+        ).fetchone():
+            return "extra"
+        return None
+
+    def add_extra_plate(self, plate: str, vehicle_moonwell_id: int | None = None,
+                        owner_name: str = "", block_no: str = "", apartment: str = "",
+                        note: str = "", created_by: str = "") -> int:
+        """Insert a manual plate. Returns the new row id.
+        Raises ValueError if the plate is invalid or already registered."""
+        raw = (plate or "").strip()
+        normalized = normalize_plate(raw)
+        if not normalized:
+            raise ValueError("Geçersiz plaka")
+        dup = self.plate_exists(normalized)
+        if dup == "mdb":
+            raise ValueError("Bu plaka zaten MDB'de tanımlı")
+        if dup == "extra":
+            raise ValueError("Bu plaka zaten eklenmiş")
+        # If linked, verify the person exists; inherit nothing here (resolved at read time)
+        if vehicle_moonwell_id is not None:
+            person = self.conn.execute(
+                "SELECT 1 FROM vehicles WHERE moonwell_id = ? LIMIT 1",
+                (vehicle_moonwell_id,),
+            ).fetchone()
+            if not person:
+                raise ValueError("Bağlanacak araç/kişi bulunamadı")
+        with self._lock:
+            cur = self.conn.execute(
+                """INSERT INTO extra_plates
+                   (plate, plate_normalized, vehicle_moonwell_id,
+                    owner_name, block_no, apartment, note, created_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (raw, normalized, vehicle_moonwell_id,
+                 owner_name.strip(), block_no.strip(), apartment.strip(),
+                 note.strip(), created_by),
+            )
+            self.conn.commit()
+            return cur.lastrowid
+
+    def update_extra_plate(self, plate_id: int, **fields) -> bool:
+        """Update a manual plate (owner info / note / link). If the plate text
+        changes it is re-normalized and re-checked for duplicates."""
+        allowed = {"plate", "vehicle_moonwell_id", "owner_name",
+                   "block_no", "apartment", "note"}
+        filtered = {k: v for k, v in fields.items() if k in allowed}
+        if not filtered:
+            return False
+        if "plate" in filtered:
+            raw = (filtered["plate"] or "").strip()
+            normalized = normalize_plate(raw)
+            if not normalized:
+                raise ValueError("Geçersiz plaka")
+            clash = self.conn.execute(
+                "SELECT id FROM extra_plates WHERE plate_normalized = ? AND id <> ?",
+                (normalized, plate_id),
+            ).fetchone()
+            if clash:
+                raise ValueError("Bu plaka zaten eklenmiş")
+            if self.conn.execute(
+                "SELECT 1 FROM vehicles WHERE plate_normalized = ? LIMIT 1", (normalized,)
+            ).fetchone():
+                raise ValueError("Bu plaka zaten MDB'de tanımlı")
+            filtered["plate"] = raw
+            filtered["plate_normalized"] = normalized
+        cols = ", ".join(f"{k}=?" for k in filtered)
+        vals = list(filtered.values()) + [plate_id]
+        with self._lock:
+            cur = self.conn.execute(
+                f"UPDATE extra_plates SET {cols} WHERE id=?", vals,
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def delete_extra_plate(self, plate_id: int) -> bool:
+        with self._lock:
+            cur = self.conn.execute("DELETE FROM extra_plates WHERE id=?", (plate_id,))
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def get_extra_plate_count(self) -> int:
+        row = self.conn.execute("SELECT COUNT(*) AS c FROM extra_plates").fetchone()
+        return row["c"] if row else 0
+
+    def get_all_extra_plates(self) -> list[dict]:
+        """All manual plates with resolved owner info (linked person's when set)."""
+        rows = self.conn.execute(
+            """SELECT e.*, v.owner_name AS v_owner, v.block_no AS v_block,
+                      v.apartment AS v_apt, v.plate AS v_plate
+               FROM extra_plates e
+               LEFT JOIN vehicles v ON v.moonwell_id = e.vehicle_moonwell_id
+               ORDER BY e.created_at DESC""",
+        ).fetchall()
+        out = []
+        for r in rows:
+            linked = r["vehicle_moonwell_id"] is not None
+            out.append({
+                "id": r["id"],
+                "plate": r["plate"],
+                "plate_normalized": r["plate_normalized"],
+                "vehicle_moonwell_id": r["vehicle_moonwell_id"],
+                "linked": linked,
+                "owner_name": (r["v_owner"] if linked and r["v_owner"] else r["owner_name"]) or "",
+                "block_no": (r["v_block"] if linked and r["v_block"] else r["block_no"]) or "",
+                "apartment": (r["v_apt"] if linked and r["v_apt"] else r["apartment"]) or "",
+                "linked_plate": r["v_plate"] if linked else None,
+                "note": r["note"] or "",
+                "created_at": r["created_at"],
+            })
+        return out
+
+    def get_vehicles_page(self, search: str | None = None,
+                          limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
+        """Paginated MDB people list (search over plate / owner / block / apartment).
+        Returns (rows, total)."""
+        where = ""
+        params: list = []
+        if search:
+            s = search.strip()
+            where = ("WHERE plate_normalized LIKE ? OR owner_name LIKE ? "
+                     "OR block_no LIKE ? OR apartment LIKE ?")
+            like = f"%{s.upper()}%"
+            like_raw = f"%{s}%"
+            params = [like, like_raw, like_raw, like_raw]
+        total = self.conn.execute(
+            f"SELECT COUNT(*) AS c FROM vehicles {where}", params,
+        ).fetchone()["c"]
+        rows = self.conn.execute(
+            f"""SELECT moonwell_id, plate, plate_normalized, owner_name,
+                       block_no, apartment, user_type, kart_id, synced_at
+                FROM vehicles {where}
+                ORDER BY owner_name, plate LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        ).fetchall()
+        return [dict(r) for r in rows], total
 
     # --- Passage operations ---
 
@@ -792,6 +1038,10 @@ class Database:
     def get_passages_by_day(self, days: int = 7) -> list[dict]:
         """Daily aggregate of passages for the last N days (oldest first).
         Returns: [{day:'YYYY-MM-DD', total, authorized, unauthorized, entries, exits}]"""
+        # Local-date window (detected_at is stored in LOCAL time). Using SQLite's
+        # date('now') here would be UTC and could shift the window by a day.
+        from datetime import timedelta as _td
+        start_day = (date.today() - _td(days=days - 1)).isoformat()
         rows = self.conn.execute(
             """SELECT
                  DATE(detected_at) AS day,
@@ -801,10 +1051,10 @@ class Database:
                  SUM(CASE WHEN direction='entry' THEN 1 ELSE 0 END) AS entries,
                  SUM(CASE WHEN direction='exit' THEN 1 ELSE 0 END) AS exits
                FROM passages
-               WHERE detected_at >= date('now', ?)
+               WHERE detected_at >= ?
                GROUP BY DATE(detected_at)
                ORDER BY day ASC""",
-            (f"-{days - 1} days",),
+            (start_day,),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -836,6 +1086,8 @@ class Database:
 
     def get_intrusions_by_day(self, days: int = 7) -> list[dict]:
         """Daily intrusion event counts for the last N days."""
+        from datetime import timedelta as _td
+        start_day = (date.today() - _td(days=days - 1)).isoformat()
         rows = self.conn.execute(
             """SELECT
                  DATE(detected_at) AS day,
@@ -843,10 +1095,10 @@ class Database:
                  SUM(CASE WHEN shadow_mode=1 THEN 1 ELSE 0 END) AS shadow,
                  SUM(CASE WHEN acknowledged=0 THEN 1 ELSE 0 END) AS unacknowledged
                FROM intrusion_events
-               WHERE detected_at >= date('now', ?)
+               WHERE detected_at >= ?
                GROUP BY DATE(detected_at)
                ORDER BY day ASC""",
-            (f"-{days - 1} days",),
+            (start_day,),
         ).fetchall()
         return [dict(r) for r in rows]
 

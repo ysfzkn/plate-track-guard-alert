@@ -518,6 +518,12 @@ async def admin_page():
     return FileResponse(str(BASE_DIR / "static" / "admin.html"))
 
 
+@app.get("/vehicles")
+async def vehicles_page():
+    # Tanımlı Araç / Plaka Yönetimi (MDB kişileri + elle eklenen ek plakalar)
+    return FileResponse(str(BASE_DIR / "static" / "vehicles.html"))
+
+
 @app.get("/cameras")
 async def cameras_page():
     # Camera management lives in admin.html; /cameras is the link used in the UI.

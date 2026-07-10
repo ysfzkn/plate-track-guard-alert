@@ -52,7 +52,7 @@ PUBLIC_PATHS: set[str] = {
     # HTML shells are public — auth-client.js gates their content
     "/", "/alpr-test", "/camera-test", "/night-watch",
     "/zone-editor", "/admin", "/intrusion-test", "/test-history",
-    "/zone-playground", "/cameras",
+    "/intrusion-history", "/zone-playground", "/cameras", "/vehicles",
 }
 PUBLIC_PREFIXES: tuple[str, ...] = ("/static/",)
 

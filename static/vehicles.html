@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <script src="/static/auth-client.js?v=2"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard — Tanımlı Araçlar</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/tailwind.js"></script>
+    <style>
+        @keyframes slideDown { from {opacity:0;transform:translateY(-8px);} to {opacity:1;transform:translateY(0);} }
+        @keyframes toastIn { from {opacity:0;transform:translateY(12px);} to {opacity:1;transform:translateY(0);} }
+        .card-enter { animation: slideDown 0.2s ease-out; }
+        ::-webkit-scrollbar { width:7px; height:7px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        .plate-chip { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; letter-spacing: .04em; }
+        .row-card { transition: border-color .12s ease, background .12s ease; }
+        .row-card:hover { border-color:#334155; }
+        #toast { animation: toastIn .2s ease-out; }
+    </style>
+    <link rel="stylesheet" href="/static/gg-light.css">
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+<header class="bg-gray-900 border-b border-gray-800 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30">
+    <div class="flex items-center gap-3">
+        <a href="/" class="text-gray-500 hover:text-gray-300 text-sm">← Ana Panel</a>
+        <div class="w-px h-5 bg-gray-700"></div>
+        <h1 class="text-lg font-bold flex items-center gap-2">🚗 Tanımlı Araçlar</h1>
+    </div>
+    <div class="flex items-center gap-2">
+        <button onclick="senkronizeEt()" id="sync-btn" title="MDB'den plakaları güncelle"
+                class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🔄 MDB Güncelle</button>
+        <button onclick="plakaEkleAc()" class="text-sm bg-cyan-700 hover:bg-cyan-600 text-white font-semibold px-4 py-1.5 rounded-lg transition shadow">+ Plaka Ekle</button>
+    </div>
+</header>
+
+<main class="p-4 space-y-4 max-w-5xl mx-auto">
+
+    <!-- Özet şeridi -->
+    <div class="grid grid-cols-3 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+            <div id="c-mdb" class="text-2xl font-bold text-cyan-400">—</div>
+            <div class="text-[11px] text-gray-500 mt-0.5">MDB Plakası (Moonwell)</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+            <div id="c-extra" class="text-2xl font-bold text-emerald-400">—</div>
+            <div class="text-[11px] text-gray-500 mt-0.5">Elle Eklenen Plaka</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+            <div id="c-total" class="text-2xl font-bold text-gray-100">—</div>
+            <div class="text-[11px] text-gray-500 mt-0.5">Tanınan Toplam Plaka</div>
+        </div>
+    </div>
+
+    <!-- Arama -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 flex items-center gap-2">
+        <input id="search" type="text" placeholder="Plaka, isim, blok veya daire ara…" autocomplete="off"
+               class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-cyan-600 focus:outline-none">
+        <button onclick="aramaTemizle()" class="text-xs text-gray-400 hover:text-gray-200 px-2">Temizle</button>
+    </div>
+
+    <!-- Bağımsız plakalar (MDB'de olmayan) -->
+    <section id="standalone-section" class="hidden">
+        <h2 class="text-sm font-semibold text-emerald-400 mb-2 flex items-center gap-2">
+            🆕 Bağımsız Plakalar <span class="text-[11px] text-gray-500 font-normal">(MDB'de kaydı yok, sistemde elle eklendi)</span>
+        </h2>
+        <div id="standalone-list" class="space-y-2"></div>
+    </section>
+
+    <!-- MDB kişileri -->
+    <section>
+        <h2 class="text-sm font-semibold text-gray-400 mb-2 flex items-center gap-2">
+            👤 Kişiler & Plakalar <span class="text-[11px] text-gray-600 font-normal">(Moonwell verisi — salt okunur, üzerine ek plaka tanımlanabilir)</span>
+        </h2>
+        <div id="people-list" class="space-y-2">
+            <div class="text-center py-16 text-gray-600 text-sm">Yükleniyor…</div>
+        </div>
+    </section>
+
+    <!-- Sayfalama -->
+    <div id="pager" class="flex items-center justify-center gap-3 py-2 hidden">
+        <button id="prev-btn" onclick="sayfaGit(-1)" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-4 py-1.5 rounded-lg text-sm transition disabled:opacity-40 disabled:cursor-not-allowed">← Önceki</button>
+        <span id="page-info" class="text-sm text-gray-400"></span>
+        <button id="next-btn" onclick="sayfaGit(1)" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-4 py-1.5 rounded-lg text-sm transition disabled:opacity-40 disabled:cursor-not-allowed">Sonraki →</button>
+    </div>
+</main>
+
+<!-- ══ Plaka Ekle / Düzenle Modalı ══ -->
+<div id="modal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+     onclick="if(event.target===this) modalKapat()">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl max-w-md w-full max-h-[92vh] overflow-y-auto card-enter">
+        <div class="p-4 border-b border-gray-800 flex items-center justify-between sticky top-0 bg-gray-900 z-10">
+            <h3 id="m-title" class="font-bold">Plaka Ekle</h3>
+            <button onclick="modalKapat()" class="text-gray-400 hover:text-white text-xl px-2 leading-none">✕</button>
+        </div>
+        <div class="p-4 space-y-4">
+            <!-- Tür seçimi (yalnızca EKLEME modunda) -->
+            <div id="m-mode-wrap">
+                <label class="block text-[11px] text-gray-500 mb-1.5">Plaka türü</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" id="mode-linked" onclick="modTur('linked')"
+                            class="text-sm px-3 py-2 rounded-lg border transition">👤 Mevcut kişiye ek</button>
+                    <button type="button" id="mode-standalone" onclick="modTur('standalone')"
+                            class="text-sm px-3 py-2 rounded-lg border transition">🆕 Bağımsız</button>
+                </div>
+            </div>
+
+            <!-- Kişi seçici (linked) -->
+            <div id="m-person-wrap">
+                <label class="block text-[11px] text-gray-500 mb-1.5">Kişi <span class="text-red-400">*</span></label>
+                <div id="m-person-selected" class="hidden mb-2 flex items-center justify-between bg-gray-800 border border-cyan-800 rounded-lg px-3 py-2 text-sm">
+                    <span id="m-person-label" class="truncate"></span>
+                    <button type="button" onclick="kisiSecimTemizle()" class="text-gray-400 hover:text-white text-xs ml-2">değiştir</button>
+                </div>
+                <div id="m-person-search-wrap">
+                    <input id="m-person-search" type="text" placeholder="İsim / plaka / daire ile kişi ara…" autocomplete="off"
+                           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-cyan-600 focus:outline-none">
+                    <div id="m-person-results" class="mt-1 max-h-44 overflow-y-auto space-y-1"></div>
+                </div>
+            </div>
+
+            <!-- Bağımsız kişi bilgileri -->
+            <div id="m-owner-wrap" class="hidden space-y-3">
+                <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Sahip / Açıklama</label>
+                    <input id="m-owner" type="text" placeholder="Örn. Misafir - A Blok"
+                           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-cyan-600 focus:outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[11px] text-gray-500 mb-1">Blok</label>
+                        <input id="m-block" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-cyan-600 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-gray-500 mb-1">Daire</label>
+                        <input id="m-apt" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-cyan-600 focus:outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Plaka -->
+            <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Plaka <span class="text-red-400">*</span></label>
+                <input id="m-plate" type="text" placeholder="34 ABC 123" autocomplete="off"
+                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-base plate-chip uppercase focus:border-cyan-600 focus:outline-none">
+                <div id="m-plate-hint" class="text-[11px] text-gray-500 mt-1">Türkçe plaka; boşluklar otomatik yok sayılır.</div>
+            </div>
+
+            <!-- Not -->
+            <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Not (opsiyonel)</label>
+                <input id="m-note" type="text" placeholder="Örn. ikinci araç"
+                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-cyan-600 focus:outline-none">
+            </div>
+
+            <div id="m-error" class="hidden text-sm text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2"></div>
+
+            <div class="flex gap-2 pt-1">
+                <button id="m-save" onclick="plakaKaydet()" class="flex-1 bg-cyan-700 hover:bg-cyan-600 text-white py-2.5 rounded-lg transition font-semibold">Kaydet</button>
+                <button onclick="modalKapat()" class="bg-gray-700 hover:bg-gray-600 text-white py-2.5 px-4 rounded-lg transition">İptal</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-lg text-sm font-medium shadow-lg"></div>
+
+<script>
+// ── Tema (index ile tutarlı) ──
+(function(){ let s='light'; try{ s=localStorage.getItem('gg-theme')||'light'; }catch(e){}
+    if (s==='light') document.body.classList.add('light-theme'); })();
+
+const USER_TYPE = {0:'Sakin', 1:'Ziyaretçi'};
+let page = 0, pageSize = 25, totalPeople = 0;
+let curSearch = '';
+let editId = null;         // null=ekleme, sayısal=düzenleme
+let modType = 'linked';    // 'linked' | 'standalone'
+let selPerson = null;      // {moonwell_id, owner_name, plate, block_no, apartment}
+
+const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function toast(msg, ok=true){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-lg text-sm font-medium shadow-lg ' +
+        (ok ? 'bg-emerald-700 text-white' : 'bg-red-700 text-white');
+    t.classList.remove('hidden');
+    clearTimeout(t._t); t._t = setTimeout(()=> t.classList.add('hidden'), 2600);
+}
+
+// ── Veri yükle ──
+async function veriYukle(){
+    const params = new URLSearchParams({ search: curSearch, limit: pageSize, offset: page*pageSize });
+    let data;
+    try {
+        const r = await fetch('/api/vehicles?' + params);
+        data = await r.json();
+    } catch(e){ toast('Veri alınamadı', false); return; }
+
+    // Sayaçlar
+    document.getElementById('c-mdb').textContent = data.counts?.mdb ?? 0;
+    document.getElementById('c-extra').textContent = data.counts?.extra ?? 0;
+    document.getElementById('c-total').textContent = (data.counts?.mdb ?? 0) + (data.counts?.extra ?? 0);
+
+    totalPeople = data.total || 0;
+    kisileriCiz(data.vehicles || []);
+    bagimsizCiz(data.standalone || []);
+    sayfalamaCiz();
+}
+
+function plakaChip(plate, {extraId=null, linked=null}={}){
+    // linked=null → MDB plakası (silinemez). extraId → silinebilir ek plaka.
+    const base = 'plate-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-sm font-semibold';
+    if (extraId == null){
+        return `<span class="${base} bg-gray-800 text-cyan-300 border border-gray-700" title="MDB (Moonwell) plakası">${esc(plate)}</span>`;
+    }
+    return `<span class="${base} bg-emerald-950/60 text-emerald-300 border border-emerald-800" title="Elle eklendi">
+        ${esc(plate)}
+        <button onclick="plakaDuzenle(${extraId})" class="text-emerald-400/70 hover:text-emerald-200 ml-0.5" title="Düzenle">✎</button>
+        <button onclick="plakaSil(${extraId}, '${esc(plate)}')" class="text-red-400/70 hover:text-red-300" title="Sil">✕</button>
+    </span>`;
+}
+
+function kisileriCiz(people){
+    const box = document.getElementById('people-list');
+    if (!people.length){
+        box.innerHTML = `<div class="text-center py-12 text-gray-600 text-sm">${curSearch?'Eşleşen kişi yok.':'Kayıt yok. MDB senkronizasyonu yapıldı mı?'}</div>`;
+        return;
+    }
+    box.innerHTML = people.map(p => {
+        const extras = (p.extra_plates||[]).map(e => plakaChip(e.plate, {extraId:e.id, linked:true})).join(' ');
+        const badge = p.user_type ? '<span class="text-[10px] bg-amber-900/50 text-amber-300 px-1.5 py-0.5 rounded">Ziyaretçi</span>' : '';
+        const name = esc(p.owner_name) || '<span class="text-gray-500">İsimsiz</span>';
+        const meta = [p.block_no?('Blok '+esc(p.block_no)):'', p.apartment?('Daire '+esc(p.apartment)):'', p.kart_id?('Kart '+esc(p.kart_id)):''].filter(Boolean).join(' · ');
+        const pdata = JSON.stringify({moonwell_id:p.moonwell_id, owner_name:p.owner_name, plate:p.plate, block_no:p.block_no, apartment:p.apartment}).replace(/'/g,'&#39;');
+        return `<div class="row-card bg-gray-900 border border-gray-800 rounded-xl p-3">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="font-semibold truncate flex items-center gap-2">${name} ${badge}</div>
+                    <div class="text-[11px] text-gray-500 mt-0.5">${meta}</div>
+                </div>
+                <button onclick='kisiyeEkle(${pdata})'
+                        class="shrink-0 text-xs bg-gray-800 hover:bg-emerald-800 border border-gray-700 hover:border-emerald-700 text-gray-300 hover:text-white px-2.5 py-1.5 rounded-lg transition">+ Ek Plaka</button>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mt-2">
+                ${plakaChip(p.plate, {})}
+                ${extras}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function bagimsizCiz(list){
+    const sec = document.getElementById('standalone-section');
+    const box = document.getElementById('standalone-list');
+    if (!list.length){ sec.classList.add('hidden'); return; }
+    sec.classList.remove('hidden');
+    box.innerHTML = list.map(e => `
+        <div class="row-card bg-gray-900 border border-emerald-900/50 rounded-xl p-3 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+                ${plakaChip(e.plate, {extraId:e.id, linked:false})}
+                <div class="min-w-0">
+                    <div class="text-sm truncate">${esc(e.owner_name)||'<span class="text-gray-500">Sahip belirtilmemiş</span>'}</div>
+                    <div class="text-[11px] text-gray-500">${e.block_no?('Blok '+esc(e.block_no)):''}${e.apartment?(' · Daire '+esc(e.apartment)):''}${e.note?(' · '+esc(e.note)):''}</div>
+                </div>
+            </div>
+        </div>`).join('');
+}
+
+function sayfalamaCiz(){
+    const pager = document.getElementById('pager');
+    const pages = Math.max(1, Math.ceil(totalPeople/pageSize));
+    if (totalPeople <= pageSize){ pager.classList.add('hidden'); return; }
+    pager.classList.remove('hidden');
+    document.getElementById('page-info').textContent = `Sayfa ${page+1} / ${pages} · ${totalPeople} kişi`;
+    document.getElementById('prev-btn').disabled = page<=0;
+    document.getElementById('next-btn').disabled = page>=pages-1;
+}
+function sayfaGit(d){ page = Math.max(0, page+d); veriYukle(); }
+
+// ── Arama (debounce) ──
+let searchTimer;
+document.getElementById('search').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(()=>{ curSearch = e.target.value.trim(); page = 0; veriYukle(); }, 250);
+});
+function aramaTemizle(){ document.getElementById('search').value=''; curSearch=''; page=0; veriYukle(); }
+
+// ── Modal ──
+function modTur(t){
+    modType = t;
+    document.getElementById('mode-linked').className = 'text-sm px-3 py-2 rounded-lg border transition ' +
+        (t==='linked' ? 'bg-cyan-900/50 border-cyan-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400');
+    document.getElementById('mode-standalone').className = 'text-sm px-3 py-2 rounded-lg border transition ' +
+        (t==='standalone' ? 'bg-emerald-900/50 border-emerald-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400');
+    document.getElementById('m-person-wrap').classList.toggle('hidden', t!=='linked');
+    document.getElementById('m-owner-wrap').classList.toggle('hidden', t!=='standalone');
+}
+
+function modalAc(){ document.getElementById('modal').classList.remove('hidden'); }
+function modalKapat(){ document.getElementById('modal').classList.add('hidden'); }
+function hataGoster(msg){ const e=document.getElementById('m-error'); e.textContent=msg; e.classList.remove('hidden'); }
+function hataGizle(){ document.getElementById('m-error').classList.add('hidden'); }
+
+function modalSifirla(){
+    editId = null; selPerson = null;
+    document.getElementById('m-plate').value='';
+    document.getElementById('m-note').value='';
+    document.getElementById('m-owner').value='';
+    document.getElementById('m-block').value='';
+    document.getElementById('m-apt').value='';
+    document.getElementById('m-person-search').value='';
+    document.getElementById('m-person-results').innerHTML='';
+    document.getElementById('m-person-selected').classList.add('hidden');
+    document.getElementById('m-person-search-wrap').classList.remove('hidden');
+    document.getElementById('m-mode-wrap').classList.remove('hidden');
+    document.getElementById('m-plate').readOnly = false;
+    document.getElementById('m-plate-hint').classList.remove('hidden');
+    hataGizle();
+}
+
+function plakaEkleAc(){
+    modalSifirla();
+    document.getElementById('m-title').textContent = 'Plaka Ekle';
+    modTur('linked');
+    modalAc();
+    setTimeout(()=>document.getElementById('m-person-search').focus(), 50);
+}
+
+function kisiyeEkle(person){
+    modalSifirla();
+    document.getElementById('m-title').textContent = 'Ek Plaka — ' + (person.owner_name||'');
+    modTur('linked');
+    kisiSec(person);
+    modalAc();
+    setTimeout(()=>document.getElementById('m-plate').focus(), 50);
+}
+
+function kisiSec(p){
+    selPerson = p;
+    document.getElementById('m-person-label').textContent =
+        (p.owner_name||'İsimsiz') + (p.plate?(' · '+p.plate):'') + (p.apartment?(' · D:'+p.apartment):'');
+    document.getElementById('m-person-selected').classList.remove('hidden');
+    document.getElementById('m-person-search-wrap').classList.add('hidden');
+}
+function kisiSecimTemizle(){
+    selPerson = null;
+    document.getElementById('m-person-selected').classList.add('hidden');
+    document.getElementById('m-person-search-wrap').classList.remove('hidden');
+    document.getElementById('m-person-results').innerHTML='';
+    document.getElementById('m-person-search').value='';
+    setTimeout(()=>document.getElementById('m-person-search').focus(), 30);
+}
+
+// Modal içi kişi arama
+let personTimer;
+document.getElementById('m-person-search').addEventListener('input', e => {
+    clearTimeout(personTimer);
+    const q = e.target.value.trim();
+    if (q.length < 2){ document.getElementById('m-person-results').innerHTML=''; return; }
+    personTimer = setTimeout(async ()=>{
+        try {
+            const r = await fetch('/api/vehicles?limit=8&search=' + encodeURIComponent(q));
+            const d = await r.json();
+            const res = document.getElementById('m-person-results');
+            if (!(d.vehicles||[]).length){ res.innerHTML='<div class="text-xs text-gray-600 px-2 py-1">Eşleşme yok</div>'; return; }
+            res.innerHTML = d.vehicles.map(p => `
+                <button type="button" onclick='kisiSec(${JSON.stringify({moonwell_id:p.moonwell_id, owner_name:p.owner_name, plate:p.plate, block_no:p.block_no, apartment:p.apartment}).replace(/'/g,"&#39;")})'
+                    class="w-full text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg px-2.5 py-1.5 text-sm">
+                    <span class="font-medium">${esc(p.owner_name)||'İsimsiz'}</span>
+                    <span class="text-[11px] text-gray-400 plate-chip"> · ${esc(p.plate)}</span>
+                    ${p.apartment?`<span class="text-[11px] text-gray-500"> · D:${esc(p.apartment)}</span>`:''}
+                </button>`).join('');
+        } catch(e){}
+    }, 250);
+});
+
+async function plakaDuzenle(id){
+    // Bağlı ek plakayı da bağımsızı da düzenleyebiliriz. Tam kaydı listeden alalım.
+    let rec = null;
+    try {
+        const r = await fetch('/api/vehicles?limit=1000');
+        const d = await r.json();
+        for (const p of (d.vehicles||[])) for (const e of (p.extra_plates||[])) if (e.id===id) rec = {...e, _person:p};
+        for (const e of (d.standalone||[])) if (e.id===id) rec = e;
+    } catch(e){}
+    if (!rec){ toast('Kayıt bulunamadı', false); return; }
+    modalSifirla();
+    editId = id;
+    document.getElementById('m-title').textContent = 'Plaka Düzenle';
+    document.getElementById('m-mode-wrap').classList.add('hidden');
+    document.getElementById('m-plate').value = rec.plate;
+    document.getElementById('m-note').value = rec.note || '';
+    if (rec.vehicle_moonwell_id != null && rec._person){
+        modTur('linked');
+        kisiSec({moonwell_id:rec._person.moonwell_id, owner_name:rec._person.owner_name, plate:rec._person.plate, apartment:rec._person.apartment});
+    } else {
+        modTur('standalone');
+        document.getElementById('m-owner').value = rec.owner_name || '';
+        document.getElementById('m-block').value = rec.block_no || '';
+        document.getElementById('m-apt').value = rec.apartment || '';
+    }
+    modalAc();
+}
+
+async function plakaKaydet(){
+    hataGizle();
+    const plate = document.getElementById('m-plate').value.trim();
+    if (!plate){ hataGoster('Plaka zorunlu.'); return; }
+    const note = document.getElementById('m-note').value.trim();
+
+    const body = { plate, note };
+    if (modType === 'linked'){
+        if (!selPerson){ hataGoster('Lütfen bir kişi seçin.'); return; }
+        body.vehicle_moonwell_id = selPerson.moonwell_id;
+    } else {
+        body.owner_name = document.getElementById('m-owner').value.trim();
+        body.block_no = document.getElementById('m-block').value.trim();
+        body.apartment = document.getElementById('m-apt').value.trim();
+    }
+
+    const btn = document.getElementById('m-save');
+    btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+    try {
+        const url = editId ? ('/api/extra-plates/'+editId) : '/api/extra-plates';
+        const method = editId ? 'PUT' : 'POST';
+        const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        const d = await r.json().catch(()=>({}));
+        if (!r.ok){ hataGoster(d.error || d.detail || 'İşlem başarısız'); return; }
+        toast(editId ? 'Plaka güncellendi' : 'Plaka eklendi');
+        modalKapat();
+        veriYukle();
+    } catch(e){ hataGoster('Ağ hatası'); }
+    finally { btn.disabled=false; btn.textContent='Kaydet'; }
+}
+
+async function plakaSil(id, plate){
+    if (!confirm(`"${plate}" plakasını silmek istediğinize emin misiniz?`)) return;
+    try {
+        const r = await fetch('/api/extra-plates/'+id, {method:'DELETE'});
+        if (!r.ok){ toast('Silinemedi', false); return; }
+        toast('Plaka silindi');
+        veriYukle();
+    } catch(e){ toast('Ağ hatası', false); }
+}
+
+// ── MDB senkron ──
+async function senkronizeEt(){
+    const btn = document.getElementById('sync-btn');
+    btn.disabled = true; const old = btn.textContent; btn.textContent = '⏳ Güncelleniyor…';
+    try {
+        const r = await fetch('/api/sync', {method:'POST'});
+        const d = await r.json().catch(()=>({}));
+        toast(`MDB güncellendi (+${d.new_count??0} yeni, ${d.updated_count??0} güncel)`);
+        veriYukle();
+    } catch(e){ toast('Senkronizasyon başarısız', false); }
+    finally { btn.disabled=false; btn.textContent=old; }
+}
+
+// Enter ile kaydet
+document.getElementById('m-plate').addEventListener('keydown', e => { if(e.key==='Enter') plakaKaydet(); });
+document.getElementById('m-note').addEventListener('keydown', e => { if(e.key==='Enter') plakaKaydet(); });
+document.addEventListener('keydown', e => { if(e.key==='Escape') modalKapat(); });
+
+veriYukle();
+</script>
+</body>
+</html>

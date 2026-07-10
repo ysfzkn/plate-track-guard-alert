@@ -356,6 +356,115 @@ async def plate_autocomplete(q: str = "", limit: int = 8):
     return JSONResponse({"suggestions": suggestions[:limit]})
 
 
+# ── Tanımlı Araç / Plaka Yönetimi ───────────────────────────
+# MDB kişileri (read-only) + elle eklenen ek/bağımsız plakalar (extra_plates).
+
+class ExtraPlateCreateRequest(BaseModel):
+    plate: str
+    vehicle_moonwell_id: int | None = None   # bir MDB kişisine ek plaka; None = bağımsız
+    owner_name: str = ""
+    block_no: str = ""
+    apartment: str = ""
+    note: str = ""
+
+
+class ExtraPlateUpdateRequest(BaseModel):
+    plate: str | None = None
+    vehicle_moonwell_id: int | None = None
+    owner_name: str | None = None
+    block_no: str | None = None
+    apartment: str | None = None
+    note: str | None = None
+
+
+@router.get("/api/vehicles")
+async def list_vehicles(search: str = "", limit: int = 50, offset: int = 0):
+    """Kişi + tanımlı plakalar. Her MDB kişisine bağlı ek plakalar iliştirilir;
+    bağımsız (kişisi MDB'de olmayan) plakalar ayrı listelenir."""
+    if not _db:
+        return JSONResponse({"vehicles": [], "total": 0, "standalone": [],
+                             "counts": {"mdb": 0, "extra": 0}})
+    try:
+        rows, total = _db.get_vehicles_page(search.strip() or None, limit, offset)
+        extras = _db.get_all_extra_plates()
+
+        # moonwell_id -> [ek plakalar]
+        by_person: dict[int, list] = {}
+        standalone: list = []
+        s = search.strip().upper()
+        for e in extras:
+            if e["vehicle_moonwell_id"] is not None:
+                by_person.setdefault(e["vehicle_moonwell_id"], []).append(e)
+            else:
+                # Bağımsız plakaları da aramaya dahil et
+                if not s or s in (e["plate_normalized"] or "") or s in (e["owner_name"] or "").upper():
+                    standalone.append(e)
+
+        vehicles = []
+        for r in rows:
+            v = dict(r)
+            v["extra_plates"] = by_person.get(r["moonwell_id"], [])
+            vehicles.append(v)
+
+        return JSONResponse({
+            "vehicles": vehicles,
+            "total": total,
+            "standalone": standalone,
+            "counts": {
+                "mdb": _db.get_vehicle_count(),
+                "extra": _db.get_extra_plate_count(),
+            },
+        })
+    except Exception:
+        logger.exception("list_vehicles failed")
+        return JSONResponse({"vehicles": [], "total": 0, "standalone": [],
+                             "counts": {"mdb": 0, "extra": 0}}, status_code=500)
+
+
+@router.post("/api/extra-plates")
+async def add_extra_plate(req: ExtraPlateCreateRequest, request: Request):
+    """Elle plaka ekle (mevcut kişiye ek veya bağımsız)."""
+    if not _db:
+        raise HTTPException(503, "Database not ready")
+    user = getattr(request.state, "user", None) or {}
+    try:
+        pid = _db.add_extra_plate(
+            plate=req.plate,
+            vehicle_moonwell_id=req.vehicle_moonwell_id,
+            owner_name=req.owner_name, block_no=req.block_no,
+            apartment=req.apartment, note=req.note,
+            created_by=user.get("username", ""),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return JSONResponse({"id": pid, "status": "created"})
+
+
+@router.put("/api/extra-plates/{plate_id}")
+async def edit_extra_plate(plate_id: int, req: ExtraPlateUpdateRequest):
+    if not _db:
+        raise HTTPException(503, "Database not ready")
+    fields = {k: v for k, v in req.model_dump().items() if v is not None}
+    if not fields:
+        return JSONResponse({"status": "no_changes"})
+    try:
+        ok = _db.update_extra_plate(plate_id, **fields)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not ok:
+        raise HTTPException(404, "Plaka bulunamadı")
+    return JSONResponse({"status": "updated"})
+
+
+@router.delete("/api/extra-plates/{plate_id}")
+async def remove_extra_plate(plate_id: int):
+    if not _db:
+        raise HTTPException(503, "Database not ready")
+    if not _db.delete_extra_plate(plate_id):
+        raise HTTPException(404, "Plaka bulunamadı")
+    return JSONResponse({"status": "deleted"})
+
+
 @router.post("/api/passages/bulk-delete")
 async def bulk_delete_passages(payload: dict):
     """Delete multiple passages by ID. Body: {ids: [int, ...]}."""
@@ -440,10 +549,12 @@ async def get_status():
         camera_connected = _camera.is_connected
 
     vehicle_count = 0
+    extra_count = 0
     last_sync = None
     if _db:
         try:
             vehicle_count = _db.get_vehicle_count()
+            extra_count = _db.get_extra_plate_count()
             last_sync = _db.get_last_sync()
         except Exception:
             pass
@@ -455,6 +566,8 @@ async def get_status():
         "mock_mode": settings.MOCK_MODE,
         "camera_connected": camera_connected,
         "vehicle_count": vehicle_count,
+        "extra_count": extra_count,
+        "plate_count": vehicle_count + extra_count,
     })
 
 
@@ -1189,6 +1302,7 @@ async def dashboard_summary():
             }
             out["module1"]["last_passage"] = _db.get_last_passage()
             out["module1"]["vehicle_count"] = _db.get_vehicle_count()
+            out["module1"]["extra_count"] = _db.get_extra_plate_count()
             out["module1"]["last_sync"] = _db.get_last_sync()
 
             if settings.ENABLE_INTRUSION_MODULE:
