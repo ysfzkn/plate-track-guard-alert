@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from app.database import Database, levenshtein_distance
-from app.inference_pool import get_inference_pool, get_io_pool
+from app.inference_pool import get_inference_pool, get_io_pool, get_plate_pool
 from app.models import PassageRecord
 from app.motion_gate import MotionGate
 from app.screenshot import save_screenshot
@@ -198,8 +198,10 @@ class DetectionEngine:
         ):
             loop = asyncio.get_event_loop()
             try:
+                # Dedicated plate pool → the barrier read never queues behind the
+                # intrusion cameras (low, consistent latency at the gate).
                 detections = await loop.run_in_executor(
-                    get_inference_pool(), self.detector.detect, frame,
+                    get_plate_pool(), self.detector.detect, frame,
                 )
             except Exception:
                 logger.exception("Detector crashed")

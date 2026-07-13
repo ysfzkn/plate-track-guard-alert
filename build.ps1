@@ -109,6 +109,20 @@ if (Test-Path "KURULUM.md") {
     Ok "KURULUM.md kopyalandi"
 }
 
+# Prod guvenli guncelleme script'i + kullanim notu (ayar + DB koruyarak update)
+if (Test-Path "update.ps1") {
+    Copy-Item -Force "update.ps1" "$DistDir\update.ps1"
+    Ok "update.ps1 kopyalandi"
+}
+if (Test-Path "GUNCELLEME.txt") {
+    Copy-Item -Force "GUNCELLEME.txt" "$DistDir\GUNCELLEME.txt"
+    Ok "GUNCELLEME.txt kopyalandi"
+}
+if (Test-Path "GUNCELLE.bat") {
+    Copy-Item -Force "GUNCELLE.bat" "$DistDir\GUNCELLE.bat"
+    Ok "GUNCELLE.bat kopyalandi (cift tikla guncelle)"
+}
+
 # Yazilabilir bos klasorler (uygulama ilk calistiginda doldurur)
 New-Item -ItemType Directory -Force "$DistDir\data", "$DistDir\logs", "$DistDir\moonwel_db" | Out-Null
 Ok "data, logs, moonwel_db klasorleri olusturuldu"

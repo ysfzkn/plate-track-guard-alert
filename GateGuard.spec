@@ -13,6 +13,18 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('onnxruntime')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
+# ── Module 2 (intrusion): ultralytics YOLO + torch ──
+# torch is CPU in the normal build and CUDA in the GPU build (build-gpu.ps1);
+# collect_all bundles whichever flavour is installed in the build venv, plus
+# ultralytics' data files (bytetrack.yaml, default.yaml, …) that a frozen app
+# needs. Wrapped in try/except so a slim CPU-only checkout still builds.
+for _pkg in ('ultralytics', 'torch', 'torchvision', 'lap'):
+    try:
+        _r = collect_all(_pkg)
+        datas += _r[0]; binaries += _r[1]; hiddenimports += _r[2]
+    except Exception:
+        pass
+
 
 a = Analysis(
     ['C:\\Users\\asus\\Desktop\\code\\Out of work\\plate-track-guard-alert\\main.py'],

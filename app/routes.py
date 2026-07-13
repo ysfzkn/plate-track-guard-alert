@@ -1078,6 +1078,21 @@ async def test_camera_connection(camera_id: int):
             result["error"] = "No frame yet (connecting...)"
         return JSONResponse(result)
 
+    # Plaka/bariyer kamerası CANLI tespit motorunun akışıdır. Onun için AYRI bir
+    # RTSP bağlantısı AÇMA: çoğu IP kamera 1-2 eşzamanlı bağlantıya izin verir;
+    # ikinci bağlantı canlı akışı dondurur ve test 12 sn sürerken o an geçen aracı
+    # KAÇIRIRIZ (motion gate donmuş kareyi atlar). Zaten açık olan _camera'yı kullan.
+    from config import settings as _settings
+    if _camera is not None and (row["rtsp_url"] or "").strip() == (_settings.RTSP_URL or "").strip():
+        result["connected"] = bool(getattr(_camera, "is_connected", False))
+        frame = _camera.get_frame()
+        if frame is not None:
+            result["frame_size"] = {"width": frame.shape[1], "height": frame.shape[0]}
+        else:
+            result["error"] = "Canlı akıştan henüz kare yok (bağlanıyor)."
+        result["reused_live"] = True
+        return JSONResponse(result)
+
     # Otherwise create a throwaway test stream
     from app.camera import CameraStream
     import asyncio as _asyncio

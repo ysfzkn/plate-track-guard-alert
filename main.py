@@ -199,8 +199,13 @@ async def lifespan(app: FastAPI):
     if engine == "mock":
         detector = MockPlateDetector()
     elif engine == "fast_alpr":
-        detector = FastALPRDetector(confidence_threshold=settings.CONFIDENCE_THRESHOLD)
-        logger.info("LPR engine: fast-alpr (built-in detector + OCR)")
+        detector = FastALPRDetector(
+            confidence_threshold=settings.CONFIDENCE_THRESHOLD,
+            detector_model=settings.ALPR_DETECTOR_MODEL,
+            ocr_model=settings.ALPR_OCR_MODEL,
+        )
+        logger.info("LPR engine: fast-alpr (detector=%s, ocr=%s)",
+                    settings.ALPR_DETECTOR_MODEL, settings.ALPR_OCR_MODEL)
     elif engine == "yolo_easyocr":
         detector = YOLOv8Detector(
             weights_path=settings.YOLO_WEIGHTS,

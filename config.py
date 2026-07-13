@@ -131,6 +131,17 @@ class Settings:
     LPR_ENGINE: str = os.getenv("LPR_ENGINE", "fast_alpr")
     YOLO_WEIGHTS: str = os.getenv("YOLO_WEIGHTS", str(BASE_DIR / "models" / "plate_detector.pt"))
 
+    # fast-alpr models. The detector's INPUT RESOLUTION drives how tightly it
+    # localizes the plate — a low-res detector can crop an edge character (e.g.
+    # reading "34GPF89" instead of "34GPF891"). Options (low→high res / cost):
+    #   yolo-v9-t-256/384/416/512/640-license-plate-end2end  (tiny)
+    #   yolo-v9-s-608-license-plate-end2end                  (small, most accurate)
+    # Default 512: clearly better boxes than 384 at modest CPU cost on the single
+    # plate stream. On the GPU build bump to 640 or s-608.
+    ALPR_DETECTOR_MODEL: str = os.getenv(
+        "ALPR_DETECTOR_MODEL", "yolo-v9-t-512-license-plate-end2end")
+    ALPR_OCR_MODEL: str = os.getenv("ALPR_OCR_MODEL", "cct-s-v2-global-model")
+
     # Backward compat: USE_YOLO=true maps to yolo_easyocr engine
     USE_YOLO: bool = os.getenv("USE_YOLO", "false").lower() == "true"
 

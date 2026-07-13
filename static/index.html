@@ -856,16 +856,32 @@
     </div>
 </div>
 
-<!-- Foto Modal -->
-<div id="foto-modal" class="hidden fixed inset-0 z-40 bg-black/80 flex items-center justify-center" onclick="this.classList.add('hidden')">
-    <div class="max-w-3xl w-full mx-4 bg-gray-900 rounded-xl overflow-hidden border border-gray-700" onclick="event.stopPropagation()">
-        <img id="modal-img" class="w-full max-h-[70vh] object-contain bg-black" alt="">
-        <div class="p-4 flex items-center justify-between">
-            <div>
-                <p id="modal-plate" class="text-2xl font-mono font-bold text-red-400"></p>
+<!-- Foto Modal (zoom + pan) -->
+<div id="foto-modal" class="hidden fixed inset-0 z-40 bg-black/90 flex items-center justify-center" onclick="fotoKapat()">
+    <div class="max-w-4xl w-full mx-4 bg-gray-900 rounded-xl overflow-hidden border border-gray-700" onclick="event.stopPropagation()">
+        <div id="foto-viewport" class="relative bg-black overflow-hidden select-none" style="height:70vh; cursor:zoom-in; touch-action:none">
+            <img id="modal-img" class="absolute left-1/2 top-1/2 max-w-none max-h-[70vh]"
+                 style="transform:translate(-50%,-50%); transform-origin:center; will-change:transform" alt="" draggable="false">
+            <!-- Zoom kontrolleri -->
+            <div class="absolute bottom-2 right-2 flex items-center gap-1 bg-black/75 rounded-lg p-1" onclick="event.stopPropagation()">
+                <button onclick="fotoZoomBtn(-1)" title="Uzaklaştır" class="w-9 h-9 rounded bg-gray-800 hover:bg-gray-700 text-white text-xl leading-none">−</button>
+                <span id="foto-zoom-lbl" class="text-xs text-gray-100 w-12 text-center font-semibold">%100</span>
+                <button onclick="fotoZoomBtn(1)" title="Yakınlaştır" class="w-9 h-9 rounded bg-gray-800 hover:bg-gray-700 text-white text-xl leading-none">+</button>
+                <button onclick="fotoZoomReset()" title="Sıfırla" class="px-2 h-9 rounded bg-gray-800 hover:bg-gray-700 text-white text-xs">Sıfırla</button>
+            </div>
+            <div id="foto-hint" class="absolute top-2 left-2 text-[11px] text-white/80 bg-black/55 rounded px-2 py-1 pointer-events-none">
+                🔍 Fare tekeri / çift tık ile yakınlaştır · sürükleyerek gez
+            </div>
+        </div>
+        <div class="p-4 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p id="modal-plate" class="text-2xl font-mono font-bold text-red-400 truncate"></p>
                 <p id="modal-info" class="text-sm text-gray-400"></p>
             </div>
-            <button onclick="document.getElementById('foto-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-xl px-3">✕</button>
+            <div class="flex items-center gap-2 shrink-0">
+                <a id="modal-download" href="#" download class="text-gray-200 hover:text-white text-sm bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-lg">⤓ İndir</a>
+                <button onclick="fotoKapat()" title="Kapat" class="text-gray-400 hover:text-white text-xl px-3 py-1">✕</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1010,7 +1026,7 @@ function wsDurum(d) {
 }
 
 function mesajIsle(m) {
-    if (m.type === 'passage') { gecisEkle(m.data); istatistikAl(); ozetYukle(); }
+    if (m.type === 'passage') { gecisEkle(m.data); istatistikAl(); ozetYukle(); yetkiliBip(); }
     else if (m.type === 'alarm_on') { gecisEkle(m.data); alarmGoster(m.data); istatistikAl(); ozetYukle(); }
     else if (m.type === 'alarm_off') { alarmKapat(); }
     else if (m.type === 'intrusion_on') {
@@ -1729,6 +1745,36 @@ function intrusionAlarmDurdur() {
     _intrCtx = null;
 }
 
+// --- Yetkili araç geçişi: yumuşak, olumlu onay bipi ---
+// Alarm sireni ile KARIŞMAZ: yükselen iki nota (G5→C6), sine tını, kısa ve
+// alçak sesli — "geçiş onaylandı" hissi. Kalıcı prime context'i kullanır ki
+// anında çalsın (yeni AudioContext açmaz).
+function yetkiliBip() {
+    try {
+        const ctx = _ensurePrimeCtx();
+        if (!ctx) return;
+        if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+        const master = ctx.createGain();
+        master.gain.value = 0.10;                 // yumuşak; rahatsız etmez
+        master.connect(ctx.destination);
+        const t0 = ctx.currentTime;
+        const dur = 0.13;
+        [{ f: 784.0, t: 0.00 }, { f: 1046.5, t: 0.085 }].forEach(n => {  // G5 → C6 (yükselen)
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'sine';                    // en yumuşak tını, tık sesi yok
+            osc.frequency.value = n.f;
+            const s = t0 + n.t;
+            g.gain.setValueAtTime(0.0001, s);
+            g.gain.exponentialRampToValueAtTime(1.0, s + 0.018);   // yumuşak giriş
+            g.gain.exponentialRampToValueAtTime(0.0001, s + dur);  // yumuşak sönüş
+            osc.connect(g).connect(master);
+            osc.start(s);
+            osc.stop(s + dur + 0.02);
+        });
+    } catch (e) {}
+}
+
 // --- Prominent intrusion overlay: names the camera, shows it LIVE + the
 // detection proof frame, auto-refreshes the live shot, auto-dismisses. ---
 let _intrLiveTimer = null, _intrAutoClose = null, _intrCamId = null;
@@ -2011,8 +2057,66 @@ function fotoAc(url, plate, zaman, dir) {
     document.getElementById('modal-img').src = url;
     document.getElementById('modal-plate').textContent = plate;
     document.getElementById('modal-info').textContent = zaman + (dir ? (dir==='entry'?' · Giriş':' · Çıkış') : '');
+    const dl = document.getElementById('modal-download');
+    if (dl) { dl.href = url; dl.setAttribute('download', (plate || 'plaka') + '.jpg'); }
+    fotoZoomReset();
     document.getElementById('foto-modal').classList.remove('hidden');
 }
+
+// --- Foto zoom + pan (yakalanan fotoğrafı büyütme) ---
+let _fz = { s: 1, tx: 0, ty: 0, drag: false, x0: 0, y0: 0 };
+function _fzApply() {
+    const img = document.getElementById('modal-img');
+    if (img) img.style.transform = `translate(calc(-50% + ${_fz.tx}px), calc(-50% + ${_fz.ty}px)) scale(${_fz.s})`;
+    const lbl = document.getElementById('foto-zoom-lbl');
+    if (lbl) lbl.textContent = '%' + Math.round(_fz.s * 100);
+    const vp = document.getElementById('foto-viewport');
+    if (vp) vp.style.cursor = _fz.s > 1 ? (_fz.drag ? 'grabbing' : 'grab') : 'zoom-in';
+    const hint = document.getElementById('foto-hint');
+    if (hint) hint.style.opacity = _fz.s > 1 ? '0' : '1';
+}
+function _fzSet(s) {
+    _fz.s = Math.max(1, Math.min(6, s));
+    if (_fz.s === 1) { _fz.tx = 0; _fz.ty = 0; }
+    _fzApply();
+}
+function fotoZoomBtn(dir) { _fzSet(_fz.s + dir * 0.5); }
+function fotoZoomReset() { _fz.s = 1; _fz.tx = 0; _fz.ty = 0; _fz.drag = false; _fzApply(); }
+function fotoKapat() { document.getElementById('foto-modal').classList.add('hidden'); fotoZoomReset(); }
+
+(function initFotoZoom() {
+    const vp = document.getElementById('foto-viewport');
+    if (!vp) return;
+    const pointers = new Map();
+    let pinchDist = 0, pinchScale = 1;
+    vp.addEventListener('wheel', e => { e.preventDefault(); _fzSet(_fz.s + (e.deltaY < 0 ? 0.4 : -0.4)); }, { passive: false });
+    vp.addEventListener('dblclick', () => _fzSet(_fz.s > 1 ? 1 : 2.5));
+    vp.addEventListener('pointerdown', e => {
+        try { vp.setPointerCapture(e.pointerId); } catch (x) {}
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointers.size === 2) {
+            const p = [...pointers.values()];
+            pinchDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+            pinchScale = _fz.s;
+        } else {
+            _fz.drag = true; _fz.x0 = e.clientX - _fz.tx; _fz.y0 = e.clientY - _fz.ty; _fzApply();
+        }
+    });
+    vp.addEventListener('pointermove', e => {
+        if (!pointers.has(e.pointerId)) return;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointers.size === 2) {
+            const p = [...pointers.values()];
+            const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+            if (pinchDist > 0) _fzSet(pinchScale * d / pinchDist);
+        } else if (_fz.drag && _fz.s > 1) {
+            _fz.tx = e.clientX - _fz.x0; _fz.ty = e.clientY - _fz.y0; _fzApply();
+        }
+    });
+    const up = e => { pointers.delete(e.pointerId); if (pointers.size < 2) pinchDist = 0; if (pointers.size === 0) { _fz.drag = false; _fzApply(); } };
+    vp.addEventListener('pointerup', up);
+    vp.addEventListener('pointercancel', up);
+})();
 
 // ============================================================
 //  STATS + STATUS

@@ -1,0 +1,74 @@
+====================================================================
+ GateGuard - PROD GUNCELLEME (ayarlar + veritabani KORUNUR)
+====================================================================
+
+Guncelleme .env (ayarlar), data\ (veritabani) ve kanit klasorlerini
+(screenshots, intrusion_clips) KORUR.
+Yeni zip'i mevcut kurulumun UZERINE ACMA - asagidaki adimlari izle.
+
+********************************************************************
+ EN KOLAY YOL - CIFT TIKLA
+********************************************************************
+   1) Yeni GateGuard zip'ini bir klasore ac (orn. C:\GateGuard_yeni).
+   2) O klasordeki  GUNCELLE.bat  dosyasina CIFT TIKLA.
+   3) "Yonetici izni" penceresi cikarsa EVET de.
+   4) Bitince "TAMAM" yazar, pencereyi kapat.
+   (Kurulum C:\GateGuard degilse .bat sana kurulum klasorunu sorar.)
+
+   Komut ezberlemek istemiyorsan yukaridaki 4 adim YETERLI.
+   Asagidaki komut satiri yontemi sadece alternatiftir.
+********************************************************************
+
+Iki klasor var, karistirma:
+   -Source = YENI build (yeni zip'i actigin klasor, orn. C:\GateGuard_yeni)
+   -Dest   = MEVCUT kurulum (guncellenecek klasor, orn. C:\GateGuard)
+
+--------------------------------------------------------------------
+SCRIPT ESKI KURULUMU NASIL BULUR?
+--------------------------------------------------------------------
+Su sirayla arar:
+   1) -Dest parametresi verdiysen -> onu kullanir  (EN GARANTILI YOL)
+   2) vermediysen: update.ps1 hangi klasordeyse ve orada GateGuard.exe varsa
+      -> o klasoru mevcut kurulum kabul eder
+   3) o da yoksa -> C:\GateGuard
+   4) hicbiri degilse net hata verir (o zaman -Dest ile elle ver)
+
+Emin olmak icin HER ZAMAN -Dest yazabilirsin.
+
+--------------------------------------------------------------------
+DURUM A - ILK GUNCELLEME (eski kurulumda update.ps1 henuz YOK)
+--------------------------------------------------------------------
+Yeni zip'in icindeki update.ps1'i calistir, hedefi -Dest ile ver:
+
+   1) Yeni zip'i AYRI bir klasore ac:  C:\GateGuard_yeni\
+   2) Yonetici PowerShell ac.
+   3) Komut:
+
+      powershell -ExecutionPolicy Bypass -File "C:\GateGuard_yeni\update.ps1" -Source "C:\GateGuard_yeni" -Dest "C:\GateGuard" -Restart
+
+   (Bu, update.ps1'i de eski kuruluma kopyalar; sonraki sefer DURUM B gecerli olur.)
+
+--------------------------------------------------------------------
+DURUM B - SONRAKI GUNCELLEMELER (update.ps1 artik C:\GateGuard'da)
+--------------------------------------------------------------------
+Eski kurulumdaki update.ps1'i calistir; hedefi kendisi bulur:
+
+   1) Yeni zip'i AYRI bir klasore ac:  C:\GateGuard_yeni\
+   2) Yonetici PowerShell ac.
+   3) Komut:
+
+      powershell -ExecutionPolicy Bypass -File "C:\GateGuard\update.ps1" -Source "C:\GateGuard_yeni" -Restart
+
+--------------------------------------------------------------------
+NOTLAR
+--------------------------------------------------------------------
+- Kurulumun C:\GateGuard degilse, yollari kendi klasorune gore duzelt
+  (ozellikle -Dest'i dogru ver).
+- .env ve data\ ASLA degistirilmez -> ayarlarin ve DB'n korunur.
+- Otomatik yedek:  <kurulum>\_backups\<tarih-saat>\  (.env + data)
+  Sorun olursa buradan geri kopyalayip donebilirsin.
+- Yeni surumun DB degisiklikleri (yeni tablolar) acilista OTOMATIK eklenir;
+  mevcut kayitlar (kisiler, plakalar, gecisler, kullanicilar) kaybolmaz.
+- SERVIS olarak kurduysan (NSSM): -Restart YERINE guncelleme sonrasi:
+      nssm start GateGuard
+====================================================================

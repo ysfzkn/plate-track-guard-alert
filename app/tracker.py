@@ -317,31 +317,78 @@ class PlateTracker:
             return None
 
         # 1) Per-character confidence-weighted consensus over a tight cluster.
-        voted = self._consensus_by_character(valid)
-        if voted is not None:
-            return voted
+        winner = self._consensus_by_character(valid)
 
-        # 2) Whole-plate consensus = the WINNING plate (majority group) must
-        # itself have >= min_frames_for_commit readings. Requiring only the
-        # TOTAL valid count let two DIFFERENT low-quality reads (e.g. night
-        # hallucinations '66VH468' + '34FX043', each seen once) commit a garbage
-        # plate. Those need 2+ readings AGREEING on the same plate.
-        groups: dict[str, list[Reading]] = defaultdict(list)
+        if winner is None:
+            # 2) Whole-plate consensus = the WINNING plate (majority group) must
+            # itself have >= min_frames_for_commit readings. Requiring only the
+            # TOTAL valid count let two DIFFERENT low-quality reads (e.g. night
+            # hallucinations '66VH468' + '34FX043', each seen once) commit a
+            # garbage plate. Those need 2+ readings AGREEING on the same plate.
+            groups: dict[str, list[Reading]] = defaultdict(list)
+            for r in valid:
+                groups[r.normalized].append(r)
+            winning_group = max(
+                groups.values(),
+                key=lambda g: (len(g), sum(r.confidence for r in g)),
+            )
+            if len(winning_group) >= self.min_frames_for_commit:
+                winner = max(winning_group, key=lambda r: r.confidence)
+            else:
+                # 3) Fast-pass fallback: a single VERY high-confidence read is
+                # trustworthy even without a repeat (fast vehicle, one clear frame).
+                strongest = max(valid, key=lambda r: r.confidence)
+                if strongest.confidence >= self.single_commit_conf:
+                    winner = strongest
+
+        if winner is None:
+            return None
+
+        # 4) Dropped-edge-character recovery: if the winner is a strict prefix
+        # or suffix of a LONGER valid plate that was read with comparable
+        # confidence, prefer the longer one. Targets the detector cropping one
+        # edge char (e.g. "34GPF89" when the plate is "34GPF891"), where the
+        # cropped short read can out-count the single full read.
+        return self._prefer_longer_reading(valid, winner)
+
+    def _prefer_longer_reading(
+        self, valid: list[Reading], winner: Reading
+    ) -> Reading:
+        """Prefer a longer valid plate that `winner` is a prefix/suffix of.
+
+        Guardrails keep this to the genuine dropped-edge-char case and reject an
+        OCR hallucination that merely appended a character:
+          - the longer plate is exactly ONE character longer,
+          - `winner` is a strict prefix (trailing char lost) or suffix (leading
+            char lost) of it,
+          - the longer plate is a valid Turkish plate, and
+          - its best reading is about as confident as the winner (a real full
+            read is usually the SHARPEST frame; a hallucinated extra char is not).
+        """
+        wn = winner.normalized
+        best_long: dict[str, Reading] = {}
         for r in valid:
-            groups[r.normalized].append(r)
-        winning_group = max(
-            groups.values(),
-            key=lambda g: (len(g), sum(r.confidence for r in g)),
-        )
-        if len(winning_group) >= self.min_frames_for_commit:
-            return max(winning_group, key=lambda r: r.confidence)
-
-        # 3) Fast-pass fallback: a single VERY high-confidence read is
-        # trustworthy even without a repeat (fast vehicle, one clear frame).
-        strongest = max(valid, key=lambda r: r.confidence)
-        if strongest.confidence >= self.single_commit_conf:
-            return strongest
-        return None
+            rn = r.normalized
+            if len(rn) != len(wn) + 1:
+                continue
+            if not (rn.startswith(wn) or rn.endswith(wn)):
+                continue
+            if not is_valid_turkish_plate(rn):
+                continue
+            cur = best_long.get(rn)
+            if cur is None or r.confidence > cur.confidence:
+                best_long[rn] = r
+        if not best_long:
+            return winner
+        cand = max(best_long.values(), key=lambda r: r.confidence)
+        if cand.confidence >= winner.confidence - 0.05 and cand.confidence >= 0.50:
+            logger.info(
+                "Plate consensus: preferring longer '%s' over '%s' "
+                "(dropped-edge-char recovery, conf %.2f vs %.2f)",
+                cand.normalized, wn, cand.confidence, winner.confidence,
+            )
+            return cand
+        return winner
 
     def _consensus_by_character(
         self, valid: list[Reading]

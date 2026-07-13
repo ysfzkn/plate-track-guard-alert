@@ -76,20 +76,30 @@ class FastALPRDetector(BasePlateDetector):
     trained on 220K+ global license plates. Best accuracy for Turkish plates.
     """
 
-    def __init__(self, confidence_threshold: float = 0.25):
+    def __init__(
+        self,
+        confidence_threshold: float = 0.25,
+        detector_model: str = "yolo-v9-t-512-license-plate-end2end",
+        ocr_model: str = "cct-s-v2-global-model",
+    ):
         self.confidence_threshold = confidence_threshold
+        self.detector_model = detector_model
+        self.ocr_model = ocr_model
         self._alpr = None
         self._loaded = False
 
     def _ensure_loaded(self):
         if self._loaded:
             return
-        logger.info("Loading fast-alpr models (detector + OCR)...")
+        logger.info(
+            "Loading fast-alpr models (detector=%s, ocr=%s)...",
+            self.detector_model, self.ocr_model,
+        )
         try:
             from fast_alpr import ALPR
             self._alpr = ALPR(
-                detector_model="yolo-v9-t-384-license-plate-end2end",
-                ocr_model="cct-s-v2-global-model",
+                detector_model=self.detector_model,
+                ocr_model=self.ocr_model,
             )
             self._loaded = True
             logger.info("fast-alpr ready — detector + OCR pipeline loaded")

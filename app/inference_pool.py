@@ -37,11 +37,12 @@ logger = logging.getLogger("gateguard.app")
 
 _inference_pool: Optional[ThreadPoolExecutor] = None
 _io_pool: Optional[ThreadPoolExecutor] = None
+_plate_pool: Optional[ThreadPoolExecutor] = None
 
 
 def init_pools(inference_workers: int = 1, io_workers: int = 2) -> None:
     """Create the shared pools. Idempotent — safe to call once at startup."""
-    global _inference_pool, _io_pool
+    global _inference_pool, _io_pool, _plate_pool
     if _inference_pool is None:
         _inference_pool = ThreadPoolExecutor(
             max_workers=max(1, inference_workers),
@@ -52,8 +53,18 @@ def init_pools(inference_workers: int = 1, io_workers: int = 2) -> None:
             max_workers=max(1, io_workers),
             thread_name_prefix="io",
         )
+    # Dedicated single worker for the PLATE/barrier ALPR. The plate read is
+    # time-critical (a car is waiting at the gate) but a car only appears
+    # occasionally, and the motion gate skips static frames — so it is idle
+    # almost all the time. Giving it its own worker means a plate read never
+    # queues behind the 7 always-on intrusion cameras on the shared inference
+    # pool (which would add up to a second of latency). The brief 2-inference
+    # overlap while a car passes is rare and short → no sustained
+    # oversubscription of the weak CPU.
+    if _plate_pool is None:
+        _plate_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plate")
     logger.info(
-        "Inference pools ready: inference_workers=%d io_workers=%d",
+        "Inference pools ready: inference_workers=%d io_workers=%d plate_workers=1",
         max(1, inference_workers), max(1, io_workers),
     )
 
@@ -65,6 +76,14 @@ def get_inference_pool() -> ThreadPoolExecutor:
     return _inference_pool
 
 
+def get_plate_pool() -> ThreadPoolExecutor:
+    """Dedicated single-worker pool for the barrier plate ALPR so it never
+    queues behind the intrusion cameras. Lazily inits with defaults."""
+    if _plate_pool is None:
+        init_pools()
+    return _plate_pool
+
+
 def get_io_pool() -> ThreadPoolExecutor:
     """Bounded pool for disk/IO work (screenshots, clips, DB lookups)."""
     if _io_pool is None:
@@ -73,9 +92,9 @@ def get_io_pool() -> ThreadPoolExecutor:
 
 
 def shutdown_pools() -> None:
-    """Stop both pools — called on app shutdown."""
-    global _inference_pool, _io_pool
-    for pool in (_inference_pool, _io_pool):
+    """Stop all pools — called on app shutdown."""
+    global _inference_pool, _io_pool, _plate_pool
+    for pool in (_inference_pool, _io_pool, _plate_pool):
         if pool is not None:
             try:
                 pool.shutdown(wait=False, cancel_futures=True)
@@ -83,3 +102,4 @@ def shutdown_pools() -> None:
                 logger.exception("Error shutting down a thread pool")
     _inference_pool = None
     _io_pool = None
+    _plate_pool = None
