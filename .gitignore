@@ -17,7 +17,7 @@ dist/
 build/
 .pytest_cache/
 /moonwel_db
-
+.zip
 # Trained model weights (too large for git)
 models/*.pt
 models/*.onnx
