@@ -16,6 +16,12 @@
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
         .ev-card { transition: transform .12s ease, border-color .12s ease; }
         .ev-card:hover { transform: translateY(-2px); }
+        /* Zoom kontrolleri — her temada okunur (light-theme override etmez) */
+        .fz-ctrl{background:rgba(0,0,0,.78)}
+        .fz-btn{display:inline-flex;align-items:center;justify-content:center;background:#334155;color:#fff !important;border:none;border-radius:6px;cursor:pointer;transition:background .12s;font-weight:700}
+        .fz-btn:hover{background:#475569}
+        .fz-lbl{color:#f8fafc !important;font-variant-numeric:tabular-nums}
+        .fz-hint{color:rgba(255,255,255,.85) !important;background:rgba(0,0,0,.55)}
     </style>
     <link rel="stylesheet" href="/static/gg-light.css">
 </head>
@@ -117,9 +123,20 @@
     </div>
 </div>
 
-<!-- Lightbox for full-size burst frame -->
-<div id="lightbox" class="hidden fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
-    <img id="lightbox-img" class="max-w-full max-h-full rounded-lg" alt="">
+<!-- Lightbox (zoom + pan) — kanıt fotoğrafı ve yakalama kareleri -->
+<div id="lightbox" class="hidden fixed inset-0 z-[60] bg-black/90" onclick="lightboxKapat()">
+    <div id="lb-viewport" class="relative w-full h-full overflow-hidden select-none" style="touch-action:none; cursor:zoom-in" onclick="event.stopPropagation()">
+        <img id="lightbox-img" class="absolute left-1/2 top-1/2 max-w-none max-h-[94vh]"
+             style="transform:translate(-50%,-50%); transform-origin:center; will-change:transform" alt="" draggable="false">
+        <div class="fz-ctrl absolute bottom-3 right-3 flex items-center gap-1 rounded-lg p-1">
+            <button onclick="lbZoom(-1)" title="Uzaklaştır" class="fz-btn w-9 h-9 text-xl leading-none">−</button>
+            <span id="lb-zoom-lbl" class="fz-lbl text-xs w-12 text-center font-semibold">%100</span>
+            <button onclick="lbZoom(1)" title="Yakınlaştır" class="fz-btn w-9 h-9 text-xl leading-none">+</button>
+            <button onclick="lbReset()" title="Sıfırla" class="fz-btn px-2 h-9 text-xs">Sıfırla</button>
+        </div>
+        <div id="lb-hint" class="fz-hint absolute top-3 left-3 text-[11px] rounded px-2 py-1 pointer-events-none">🔍 Tekerlek / çift tık ile yakınlaştır · sürükle</div>
+        <button onclick="lightboxKapat()" title="Kapat" class="fz-btn absolute top-3 right-3 w-9 h-9 text-lg leading-none">✕</button>
+    </div>
 </div>
 
 <!-- Styled note prompt (replaces window.prompt) -->
@@ -286,8 +303,11 @@ function detay(ev) {
 
     // Screenshot (proof frame)
     const ss = document.getElementById('m-screenshot');
-    if (ev.screenshot_path) { ss.src = ev.screenshot_path; ss.classList.remove('hidden'); }
-    else ss.classList.add('hidden');
+    if (ev.screenshot_path) {
+        ss.src = ev.screenshot_path; ss.classList.remove('hidden');
+        ss.style.cursor = 'zoom-in'; ss.title = 'Yakınlaştırmak için tıkla';
+        ss.onclick = () => buyut(ss.src);
+    } else ss.classList.add('hidden');
 
     // Video clip
     const vid = document.getElementById('m-video');
@@ -306,8 +326,8 @@ function detay(ev) {
     paths = (paths || []).filter(Boolean);
     if (paths.length) {
         burst.innerHTML = paths.map(p =>
-            `<img src="${p}" class="w-full aspect-video object-cover rounded border border-gray-700 cursor-zoom-in"
-                  loading="lazy" onclick="event.stopPropagation(); buyut('${p}')" alt="">`).join('');
+            `<img src="${p}" class="w-full aspect-video object-cover rounded border border-gray-700 cursor-zoom-in transition hover:ring-2 hover:ring-cyan-500 hover:brightness-110"
+                  loading="lazy" title="🔍 Yakınlaştırmak için tıkla" onclick="event.stopPropagation(); buyut('${p}')" alt="">`).join('');
         burstWrap.classList.remove('hidden');
     } else {
         burstWrap.classList.add('hidden');
@@ -354,8 +374,46 @@ function kapatModal() {
 
 function buyut(src) {
     document.getElementById('lightbox-img').src = src;
+    lbReset();
     document.getElementById('lightbox').classList.remove('hidden');
 }
+
+// --- Lightbox zoom + pan ---
+let _lb = { s: 1, tx: 0, ty: 0, drag: false, x0: 0, y0: 0 };
+function _lbApply() {
+    const img = document.getElementById('lightbox-img');
+    if (img) img.style.transform = `translate(calc(-50% + ${_lb.tx}px), calc(-50% + ${_lb.ty}px)) scale(${_lb.s})`;
+    const l = document.getElementById('lb-zoom-lbl'); if (l) l.textContent = '%' + Math.round(_lb.s * 100);
+    const vp = document.getElementById('lb-viewport'); if (vp) vp.style.cursor = _lb.s > 1 ? (_lb.drag ? 'grabbing' : 'grab') : 'zoom-in';
+    const h = document.getElementById('lb-hint'); if (h) h.style.opacity = _lb.s > 1 ? '0' : '1';
+}
+function _lbSet(s) { _lb.s = Math.max(1, Math.min(6, s)); if (_lb.s === 1) { _lb.tx = 0; _lb.ty = 0; } _lbApply(); }
+function lbZoom(d) { _lbSet(_lb.s + d * 0.5); }
+function lbReset() { _lb.s = 1; _lb.tx = 0; _lb.ty = 0; _lb.drag = false; _lbApply(); }
+function lightboxKapat() { document.getElementById('lightbox').classList.add('hidden'); lbReset(); }
+(function initLb() {
+    const vp = document.getElementById('lb-viewport'); if (!vp) return;
+    const ptrs = new Map(); let pd = 0, ps = 1;
+    vp.addEventListener('wheel', e => { e.preventDefault(); _lbSet(_lb.s + (e.deltaY < 0 ? 0.4 : -0.4)); }, { passive: false });
+    vp.addEventListener('dblclick', () => _lbSet(_lb.s > 1 ? 1 : 2.5));
+    vp.addEventListener('pointerdown', e => {
+        // Kontrol butonlarina (kapat/+/-/sifirla) tiklamayi surukleme sayma;
+        // yoksa setPointerCapture butonun click'ini yutar.
+        if (e.target.closest('button')) return;
+        try { vp.setPointerCapture(e.pointerId); } catch (x) {}
+        ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (ptrs.size === 2) { const p = [...ptrs.values()]; pd = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); ps = _lb.s; }
+        else { _lb.drag = true; _lb.x0 = e.clientX - _lb.tx; _lb.y0 = e.clientY - _lb.ty; _lbApply(); }
+    });
+    vp.addEventListener('pointermove', e => {
+        if (!ptrs.has(e.pointerId)) return;
+        ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (ptrs.size === 2) { const p = [...ptrs.values()]; const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); if (pd > 0) _lbSet(ps * d / pd); }
+        else if (_lb.drag && _lb.s > 1) { _lb.tx = e.clientX - _lb.x0; _lb.ty = e.clientY - _lb.y0; _lbApply(); }
+    });
+    const up = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pd = 0; if (ptrs.size === 0) { _lb.drag = false; _lbApply(); } };
+    vp.addEventListener('pointerup', up); vp.addEventListener('pointercancel', up);
+})();
 
 // --- Styled note prompt (Promise-based, replaces window.prompt) ---
 let _noteResolve = null;
@@ -400,7 +458,7 @@ async function onayla(eventId) {
 document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (!document.getElementById('note-modal').classList.contains('hidden')) { noteCancel(); return; }
-    if (!document.getElementById('lightbox').classList.contains('hidden')) { document.getElementById('lightbox').classList.add('hidden'); return; }
+    if (!document.getElementById('lightbox').classList.contains('hidden')) { lightboxKapat(); return; }
     if (!document.getElementById('modal').classList.contains('hidden')) kapatModal();
 });
 

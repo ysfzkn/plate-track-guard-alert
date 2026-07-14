@@ -524,6 +524,163 @@ async def export_passages_csv(
     )
 
 
+@router.get("/api/passages/export.xlsx")
+async def export_passages_xlsx(
+    start: str | None = None,
+    end: str | None = None,
+    direction: str | None = None,
+    authorized: str | None = None,
+    plate: str | None = None,
+    photos: str = "true",
+):
+    """Profesyonel Excel raporu: site logosu + renkli tasarım + gömülü fotoğraflar.
+    Seçilen tarih aralığındaki araç geçişleri (Geçmiş filtreleriyle aynı)."""
+    if not _db:
+        raise HTTPException(503, "Database not ready")
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.drawing.image import Image as XLImage
+        from openpyxl.utils import get_column_letter
+        from PIL import Image as PILImage
+    except ImportError:
+        raise HTTPException(500, "openpyxl/Pillow gerekli")
+
+    import io as _io
+    import os as _os
+    from pathlib import Path as _Path
+    from datetime import datetime as _dt
+    from config import BASE_DIR
+
+    auth_bool = True if authorized == "true" else False if authorized == "false" else None
+    rows, _ = _db.get_passages_filtered(
+        start_date=start, end_date=end, direction=direction,
+        authorized=auth_bool, plate_search=plate, limit=5000, offset=0,
+    )
+    embed_photos = (photos != "false")
+
+    # ── Renk paleti ──
+    NAVY = "0B1220"; SLATE = "1F2937"; HEAD = "334155"
+    GREEN = "DCFCE7"; GREEN_TX = "166534"
+    RED = "FEE2E2"; RED_TX = "991B1B"
+    ZEBRA = "F1F5F9"; WHITE = "FFFFFF"
+    thin = Side(style="thin", color="E2E8F0")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Araç Geçişleri"
+    ws.sheet_view.showGridLines = False
+
+    headers = ["#", "Tarih / Saat", "Plaka", "Yön", "Durum", "Sahip", "Daire", "Güven", "Fotoğraf"]
+    widths = [5, 20, 16, 10, 12, 24, 8, 9, 26]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    last_col = get_column_letter(len(headers))
+
+    # ── Banner (logo A:B, başlık C:H) rows 1-2 ──
+    for r_ in (1, 2):
+        for c_ in range(1, len(headers) + 1):
+            ws.cell(row=r_, column=c_).fill = PatternFill("solid", fgColor=NAVY)
+    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[2].height = 24
+    # Logo (beyaz/şeffaf → koyu banner üzerinde görünür)
+    logo_p = BASE_DIR / "static" / "logo.png"
+    if logo_p.exists():
+        try:
+            lim = PILImage.open(logo_p); lim.thumbnail((190, 48))
+            lb = _io.BytesIO(); lim.save(lb, format="PNG"); lb.seek(0)
+            xlogo = XLImage(lb); xlogo.width, xlogo.height = lim.size
+            ws.add_image(xlogo, "A1")
+        except Exception:
+            pass
+    # Başlık (C:H merge → C hücresine yazılır)
+    ws.merge_cells(f"C1:{last_col}1")
+    title = ws.cell(row=1, column=3)
+    title.value = "Araç Geçiş Raporu"
+    title.font = Font(name="Calibri", size=15, bold=True, color=WHITE)
+    title.alignment = Alignment(horizontal="right", vertical="center")
+    ws.merge_cells(f"C2:{last_col}2")
+    aralik = f"{start or '…'}  →  {end or '…'}"
+    sub = ws.cell(row=2, column=3)
+    sub.value = f"Tarih aralığı: {aralik}   ·   {len(rows)} kayıt   ·   {_dt.now().strftime('%d.%m.%Y %H:%M')}"
+    sub.font = Font(name="Calibri", size=9, color="CBD5E1")
+    sub.alignment = Alignment(horizontal="right", vertical="center")
+
+    # ── Başlık satırı (row 4) ──
+    HROW = 4
+    ws.row_dimensions[3].height = 6
+    for i, h in enumerate(headers, 1):
+        c = ws.cell(row=HROW, column=i, value=h)
+        c.fill = PatternFill("solid", fgColor=HEAD)
+        c.font = Font(bold=True, color=WHITE, size=11)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border = border
+    ws.row_dimensions[HROW].height = 22
+    ws.freeze_panes = f"A{HROW + 1}"
+
+    # ── Veri satırları ──
+    dir_map = {"entry": "▲ Giriş", "exit": "▼ Çıkış"}
+    row = HROW + 1
+    for idx, r in enumerate(rows, 1):
+        is_auth = bool(r.get("is_authorized"))
+        zebra = PatternFill("solid", fgColor=ZEBRA) if idx % 2 == 0 else None
+        vals = [
+            idx,
+            str(r.get("detected_at", ""))[:19].replace("T", " "),
+            r.get("plate", ""),
+            dir_map.get(r.get("direction", ""), "—"),
+            "Kayıtlı" if is_auth else "Kayıtsız",
+            r.get("owner_name", ""),
+            r.get("apartment", ""),
+            f"%{(r.get('confidence') or 0) * 100:.0f}",
+            "",
+        ]
+        for i, v in enumerate(vals, 1):
+            c = ws.cell(row=row, column=i, value=v)
+            c.border = border
+            c.alignment = Alignment(horizontal="center", vertical="center",
+                                    wrap_text=(i == 6))
+            if zebra and i != 5:
+                c.fill = zebra
+            if i == 3:
+                c.font = Font(bold=True, name="Consolas", size=11)
+            if i == 5:  # Durum — renkli
+                c.fill = PatternFill("solid", fgColor=(GREEN if is_auth else RED))
+                c.font = Font(bold=True, color=(GREEN_TX if is_auth else RED_TX))
+        # Fotoğraf göm
+        rh = 20
+        if embed_photos:
+            sp = r.get("screenshot_path") or ""
+            if sp:
+                p = _Path(sp) if _os.path.isabs(sp) else (BASE_DIR / sp)
+                try:
+                    if p.exists():
+                        pim = PILImage.open(p); pim.thumbnail((170, 120))
+                        bio = _io.BytesIO(); pim.convert("RGB").save(bio, format="PNG"); bio.seek(0)
+                        xim = XLImage(bio); xim.width, xim.height = pim.size
+                        ws.add_image(xim, f"{get_column_letter(9)}{row}")
+                        rh = max(rh, pim.size[1] * 0.75 + 4)
+                except Exception:
+                    pass
+        ws.row_dimensions[row].height = rh
+        row += 1
+
+    if not rows:
+        ws.cell(row=HROW + 1, column=1, value="Bu tarih aralığında kayıt yok.")
+        ws.merge_cells(start_row=HROW + 1, start_column=1, end_row=HROW + 1, end_column=len(headers))
+
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"arac_gecisleri_{_dt.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return Response(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
 @router.get("/api/stats")
 async def get_stats(start: str | None = None, end: str | None = None):
     """Get detection statistics, optionally filtered by date range."""
@@ -1290,7 +1447,8 @@ async def dashboard_summary():
         },
         "module2": {
             "enabled": settings.ENABLE_INTRUSION_MODULE,
-            "shadow_mode": settings.INTRUSION_SHADOW_MODE,
+            "shadow_mode": (_intrusion_orchestrator.shadow_mode
+                            if _intrusion_orchestrator else settings.INTRUSION_SHADOW_MODE),
             "night_mode_active": is_night_mode_active(
                 settings.NIGHT_MODE_START, settings.NIGHT_MODE_END,
             ),
@@ -1405,7 +1563,8 @@ async def intrusion_status():
     )
     return JSONResponse({
         "enabled": settings.ENABLE_INTRUSION_MODULE,
-        "shadow_mode": settings.INTRUSION_SHADOW_MODE,
+        "shadow_mode": (_intrusion_orchestrator.shadow_mode
+                        if _intrusion_orchestrator else settings.INTRUSION_SHADOW_MODE),
         "alarm_enabled": alarm_enabled,
         "night_mode_active": is_night,
         "night_window": f"{settings.NIGHT_MODE_START} - {settings.NIGHT_MODE_END}",
@@ -1437,6 +1596,60 @@ async def intrusion_alarm_toggle_set(payload: dict):
     camera_id = int(raw_cam) if raw_cam is not None else None
     await _intrusion_orchestrator.set_alarm_enabled(enabled, camera_id)
     return JSONResponse(_intrusion_orchestrator.get_alarm_states())
+
+
+# ── UI'dan degistirilebilen ayarlar ─────────────────────────
+
+@router.get("/api/settings")
+async def get_app_settings():
+    """Runtime ayarlari (foto silme suresi + hirsizlik alarm modu)."""
+    from config import settings
+    retention = settings.INTRUSION_RETENTION_DAYS
+    shadow = settings.INTRUSION_SHADOW_MODE
+    alarm_enabled = True
+    if _db:
+        try:
+            v = _db.get_setting("retention_days")
+            if v is not None:
+                retention = int(v)
+        except Exception:
+            pass
+    if _intrusion_orchestrator:
+        shadow = bool(_intrusion_orchestrator.shadow_mode)
+        alarm_enabled = _intrusion_orchestrator.get_alarm_enabled()
+    return JSONResponse({
+        "retention_days": retention,
+        "intrusion_enabled": settings.ENABLE_INTRUSION_MODULE,
+        "intrusion_shadow_mode": shadow,
+        "intrusion_alarm_enabled": alarm_enabled,
+        "night_window": f"{settings.NIGHT_MODE_START} - {settings.NIGHT_MODE_END}",
+    })
+
+
+@router.post("/api/settings/retention")
+async def set_retention_days(payload: dict):
+    """Yakalanan foto/klip otomatik silme suresi (gun). Sonraki temizlikte gecerli."""
+    if not _db:
+        raise HTTPException(503, "Database not ready")
+    try:
+        days = int(payload.get("days"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "days tam sayi olmali")
+    days = max(1, min(3650, days))
+    _db.set_setting("retention_days", days)
+    return JSONResponse({"status": "ok", "retention_days": days})
+
+
+@router.post("/api/intrusion/shadow-mode")
+async def set_intrusion_shadow_mode(payload: dict):
+    """Hirsizlik alarm modu: shadow=true (sadece kayit, siren yok) / false (alarm calar)."""
+    if not _intrusion_orchestrator:
+        raise HTTPException(503, "Intrusion module not running")
+    shadow = bool(payload.get("shadow_mode", True))
+    _intrusion_orchestrator.set_shadow_mode(shadow)
+    if _db:
+        _db.set_setting("intrusion_shadow_mode", "1" if shadow else "0")
+    return JSONResponse({"status": "ok", "shadow_mode": shadow})
 
 
 @router.get("/api/intrusion/events/{event_id}/clip")

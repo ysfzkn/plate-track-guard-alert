@@ -25,6 +25,22 @@ for _pkg in ('ultralytics', 'torch', 'torchvision', 'lap'):
     except Exception:
         pass
 
+# ── Native pencere modu: pywebview + pythonnet (Windows EdgeChromium backend) ──
+# pywebview platform backend'ini dinamik yukler; PyInstaller kacirmasin diye
+# collect_all + acik hiddenimports. pythonnet contrib hook'lariyla gelir.
+hiddenimports += [
+    'webview', 'webview.platforms.winforms', 'webview.platforms.edgechromium',
+    'clr', 'proxy_tools', 'bottle',
+    # Sistem tepsisi (tray) — X ile kapatinca app tepside kalir
+    'pystray', 'pystray._win32', 'PIL.Image',
+]
+for _pkg in ('webview', 'clr_loader', 'pystray'):
+    try:
+        _r = collect_all(_pkg)
+        datas += _r[0]; binaries += _r[1]; hiddenimports += _r[2]
+    except Exception:
+        pass
+
 
 a = Analysis(
     ['C:\\Users\\asus\\Desktop\\code\\Out of work\\plate-track-guard-alert\\main.py'],
@@ -51,7 +67,10 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    # console=False → Electron benzeri: yaninda siyah terminal ACILMAZ, sadece
+    # native pencere gelir. Loglar logs/app.log'a yazilir; baslatma hatasinda
+    # main.py native bir MessageBox gosterir (print/input pencereli modda calismaz).
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

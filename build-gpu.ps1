@@ -68,16 +68,19 @@ $c = Run-Cmd { uv pip install --python $Py ultralytics lap pyinstaller 2>&1 | Ou
 if ($c -ne 0) { throw "ultralytics/lap/pyinstaller kurulamadi (exit $c)" }
 Ok "Temel paketler kuruldu"
 
-# --- 3. CUDA'li torch (CPU torch'un uzerine yaz) ---
-Step "CUDA torch kuruluyor ($Cuda) - buyuk indirme, sabir"
-$c = Run-Cmd { uv pip install --python $Py --index-url $TorchIndex torch torchvision 2>&1 | Out-Host }
-if ($c -ne 0) { throw "CUDA torch kurulamadi (exit $c). Farkli CUDA icin -Cuda cu118 dene." }
-# Dogrula: torch CUDA derlemesi mi?
+# --- 3. CUDA'li torch (CPU torch'un uzerine ZORLA yaz) ---
+# --reinstall-package SART: requirements adimi ultralytics ile CPU torch'u
+# kurar; onsuz uv "zaten kurulu" deyip CUDA surumunu ATLAR (build +cpu cikar).
+# torch/torchvision bagimliliklari (numpy vb.) zaten kurulu oldugu icin
+# cu index'i sadece bu iki paketi getirir, cakisma olmaz.
+Step "CUDA torch kuruluyor ($Cuda) - CPU torch uzerine zorla, buyuk indirme"
+$c = Run-Cmd { uv pip install --python $Py --reinstall-package torch --reinstall-package torchvision --index-url $TorchIndex torch torchvision 2>&1 | Out-Host }
+if ($c -ne 0) { throw "CUDA torch kurulamadi (exit $c). Baska CUDA icin -Cuda cu121 dene." }
+# Dogrula: GERCEKTEN CUDA derlemesi mi? Degilse DUR (CPU build'i GPU sanip gondermeyelim).
 $torchInfo = & $Py -c "import torch,sys; sys.stdout.write(torch.__version__)" 2>&1
 Ok "torch: $torchInfo"
 if ($torchInfo -notmatch "\+cu") {
-    Warn "torch surumunde '+cuXXX' etiketi yok - CPU derlemesi kurulmus olabilir!"
-    Warn "Internet/index sorununu kontrol et; GPU calismayabilir."
+    throw "torch CPU derlemesi kuruldu ($torchInfo) - GPU CALISMAZ. CUDA index'inden kurulum atlandi/basarisiz. Internet baglantisini ve -Cuda surumunu ($Cuda) kontrol edip tekrar calistir."
 }
 
 # --- 4. Eski ciktilari temizle ---
@@ -127,9 +130,19 @@ Write-Host "    CUDA  : $Cuda | torch $torchInfo" -ForegroundColor Green
 if (-not $NoZip) {
     Step "ZIP paketleniyor"
     $zip = "$AppName-gpu-prod.zip"
-    Remove-Item -Force $zip -ErrorAction SilentlyContinue
-    Compress-Archive -Path "$DistDir\*" -DestinationPath $zip
-    Ok "$zip olusturuldu"
+    $zipAbs = Join-Path (Get-Location).Path $zip
+    Remove-Item -Force $zipAbs -ErrorAction SilentlyContinue
+    try {
+        # .NET ZipFile: Compress-Archive'den daha hizli/saglam (2+ GB dist icin).
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::CreateFromDirectory((Resolve-Path $DistDir).Path, $zipAbs)
+        Ok "$zip olusturuldu"
+    } catch {
+        Warn "ZIP olusturulamadi: $($_.Exception.Message)"
+        Warn "Sebep genelde: CALISAN bir GateGuard.exe VEYA antivirus _internal DLL'lerini kilitliyor."
+        Warn "ZIP SART DEGIL -> '$DistDir' klasorunu OLDUGU GIBI flash'a kopyalayabilirsin."
+        Warn "Ya da: calisan GateGuard'i kapat + antivirusu duraklat, sonra tekrar dene."
+    }
 }
 
 Write-Host "`nBitti. Hedef PC'de GUNCEL Nvidia surucusu olmali. GPU kullanimini" -ForegroundColor Cyan

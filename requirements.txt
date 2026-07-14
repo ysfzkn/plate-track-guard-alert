@@ -22,6 +22,13 @@ fast-alpr[onnx]>=0.1.0    # pulls onnxruntime (CPU)
 ultralytics>=8.0.0        # YOLOv8 person detector + ByteTrack
 lap>=0.4.0                # ByteTrack association
 
+# ── Native Windows pencere modu (opsiyonel) ─────────────────
+# Uygulamayi Chrome yerine kendi penceresinde acar (WebView2/Edge motoru).
+# Windows'ta pythonnet backend'ini otomatik ceker.
+pywebview>=5.0
+# Sistem tepsisi (tray) ikonu — X ile kapatinca app tepside kalir (opsiyonel).
+pystray>=0.19.0
+
 # ── Optional fallback OCR engine (LPR_ENGINE=easyocr) ───────
 # Uncomment only if you use the EasyOCR engine instead of fast-alpr:
 # easyocr>=1.7.0

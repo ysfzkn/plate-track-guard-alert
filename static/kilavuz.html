@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateGuard — Kullanım Kılavuzu</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="/static/tailwind.js"></script>
+    <link rel="stylesheet" href="/static/gg-light.css">
+    <style>
+        html { scroll-behavior: smooth; }
+        body { -webkit-font-smoothing: antialiased; }
+        ::-webkit-scrollbar { width:8px; height:8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+
+        .gg-brand-mark{background:linear-gradient(135deg,#22d3ee 0%,#3b82f6 60%,#8b5cf6 100%);box-shadow:0 0 0 1px rgba(34,211,238,.25),0 4px 14px -2px rgba(34,211,238,.35)}
+        .kb-card{scroll-margin-top:80px}
+        /* İçindekiler bağlantıları */
+        .toc-link{display:block;padding:6px 12px;border-radius:8px;color:#94a3b8;font-size:13px;font-weight:600;text-decoration:none;border-left:2px solid transparent;transition:all .12s}
+        .toc-link:hover{background:rgba(51,65,85,.5);color:#e2e8f0}
+        .toc-link.active{color:#22d3ee;border-left-color:#22d3ee;background:rgba(34,211,238,.08)}
+        /* Numaralı adım rozetleri */
+        .step-num{flex:0 0 auto;width:28px;height:28px;border-radius:999px;background:linear-gradient(135deg,#0891b2,#3b82f6);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px -2px rgba(59,130,246,.6)}
+        /* Callout kutuları */
+        .callout{border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.55;display:flex;gap:12px;align-items:flex-start}
+        .callout .ico{font-size:20px;flex:0 0 auto;line-height:1.3}
+        .callout-tip{background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.30);color:#a7f3d0}
+        .callout-warn{background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35);color:#fde68a}
+        .callout-info{background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.30);color:#bfdbfe}
+        /* Anatomi mockup pin */
+        .pin{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#0ea5e9;color:#fff;font-weight:800;font-size:12px;box-shadow:0 0 0 2px rgba(255,255,255,.15)}
+        /* Sahte navbar (birebir görünüm) */
+        .mk-nav{background:linear-gradient(180deg,#0b1220,#0a0f1c);border:1px solid rgba(148,163,184,.12);border-radius:12px}
+        .mk-tab{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border-radius:8px;font-size:12px;font-weight:700;color:#cbd5e1}
+        .mk-tab.on{color:#fff;background:linear-gradient(135deg,rgba(34,211,238,.20),rgba(59,130,246,.20));box-shadow:inset 0 0 0 1px rgba(34,211,238,.4)}
+        .mk-pill{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 9px;border-radius:8px;font-size:11.5px;font-weight:700;background:rgba(30,41,59,.6);border:1px solid rgba(148,163,184,.12);color:#cbd5e1}
+        .mk-ico{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:rgba(30,41,59,.6);border:1px solid rgba(148,163,184,.12);font-size:14px}
+
+        /* Light-theme küçük düzeltmeler */
+        body.light-theme .toc-link{color:#475569}
+        body.light-theme .toc-link:hover{background:#e2e8f0;color:#0f172a}
+        body.light-theme .toc-link.active{color:#0891b2;background:rgba(8,145,178,.08)}
+        body.light-theme [class*="bg-gray-950"]{background:#f3f4f6 !important;color:#0f172a !important}
+        body.light-theme [class*="bg-gray-900"]{background:#ffffff !important;color:#0f172a !important}
+        body.light-theme [class*="bg-gray-800"]{background:#f1f5f9 !important}
+        body.light-theme [class*="text-gray-400"],body.light-theme [class*="text-gray-500"]{color:#475569 !important}
+        body.light-theme [class*="text-gray-300"]{color:#1f2937 !important}
+        body.light-theme [class*="text-gray-600"]{color:#64748b !important}
+        body.light-theme [class*="border-gray-800"],body.light-theme [class*="border-gray-700"]{border-color:#e2e8f0 !important}
+        /* Açık temada aksan yazı renklerini koyulaştır — beyaz üstünde net okunsun */
+        body.light-theme .text-green-400{color:#15803d !important}
+        body.light-theme .text-red-400{color:#dc2626 !important}
+        body.light-theme .text-cyan-400{color:#0e7490 !important}
+        body.light-theme .text-orange-400{color:#c2410c !important}
+        body.light-theme .text-amber-400{color:#b45309 !important}
+        /* Callout kutuları — koyu arkaplan için tasarlanmıştı; açık temada koyu/net yazı */
+        body.light-theme .callout-tip{background:#ecfdf5 !important;border-color:#6ee7b7 !important;color:#065f46 !important}
+        body.light-theme .callout-warn{background:#fffbeb !important;border-color:#f59e0b !important;color:#92400e !important}
+        body.light-theme .callout-info{background:#eff6ff !important;border-color:#93c5fd !important;color:#1e3a8a !important}
+        body.light-theme .callout b{color:inherit !important}
+
+        /* Yazdırma — guardhouse için kağıt kopya */
+        @media print {
+            .no-print{display:none !important}
+            body{background:#fff !important;color:#000 !important}
+            .kb-card{break-inside:avoid;box-shadow:none !important;border:1px solid #ccc !important}
+            a[href]{color:#000 !important;text-decoration:none}
+            .callout{border:1px solid #999 !important;color:#000 !important;background:#f7f7f7 !important}
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen light-theme">
+
+<!-- ÜST BAR -->
+<header class="no-print sticky top-0 z-30 mk-nav rounded-none border-x-0 border-t-0 px-4 py-2.5 flex items-center justify-between backdrop-blur">
+    <div class="flex items-center gap-3 min-w-0">
+        <a href="/" class="text-sm text-gray-400 hover:text-white flex items-center gap-1.5 shrink-0">← <span class="hidden sm:inline">Ana Panel</span></a>
+        <div class="w-px h-5 bg-gray-700"></div>
+        <div class="w-8 h-8 gg-brand-mark rounded-lg flex items-center justify-center text-white font-black shrink-0">G</div>
+        <h1 class="text-base sm:text-lg font-bold truncate">Kullanım Kılavuzu</h1>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+        <button onclick="window.print()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition flex items-center gap-1.5" title="Kağıda yazdır / PDF olarak kaydet">🖨️ <span class="hidden sm:inline">Yazdır</span></button>
+        <button onclick="temaToggle()" id="tema-btn" class="text-sm bg-gray-800 hover:bg-gray-700 w-9 h-9 rounded-lg border border-gray-700 transition" title="Aydınlık / Karanlık tema">🌙</button>
+    </div>
+</header>
+
+<div class="max-w-7xl mx-auto px-4 py-6 lg:grid lg:grid-cols-[240px_1fr] lg:gap-8">
+
+    <!-- İÇİNDEKİLER (sticky) -->
+    <aside class="no-print hidden lg:block">
+        <div class="sticky top-20">
+            <div class="text-[11px] uppercase tracking-wider text-gray-500 font-bold px-3 mb-2">İçindekiler</div>
+            <nav id="toc" class="space-y-0.5">
+                <a class="toc-link" href="#giris">Sistem nedir?</a>
+                <a class="toc-link" href="#hizli">Hızlı başlangıç</a>
+                <a class="toc-link" href="#menu">Üst menü tanıtımı</a>
+                <a class="toc-link" href="#canli">Canlı ekran</a>
+                <a class="toc-link" href="#kayitsiz">Kayıtsız araç alarmı</a>
+                <a class="toc-link" href="#hirsizlik">Hırsızlık / kaçak alarmı</a>
+                <a class="toc-link" href="#gecmis">Geçmiş & Excel raporu</a>
+                <a class="toc-link" href="#galeri">Galeri</a>
+                <a class="toc-link" href="#araclar">Araç yönetimi</a>
+                <a class="toc-link" href="#ayarlar">Ayarlar & sesler</a>
+                <a class="toc-link" href="#sync">Plaka senkronizasyonu</a>
+                <a class="toc-link" href="#kisayol">Klavye kısayolları</a>
+                <a class="toc-link" href="#sorun">Sorun giderme (SSS)</a>
+                <a class="toc-link" href="#kapat">Açma / kapatma</a>
+            </nav>
+        </div>
+    </aside>
+
+    <main class="space-y-5 min-w-0">
+
+        <!-- HERO -->
+        <section class="kb-card bg-gradient-to-br from-cyan-950/40 to-blue-950/30 border border-cyan-800/40 rounded-2xl p-6">
+            <div class="flex items-start gap-4">
+                <div class="text-5xl">🛡️</div>
+                <div>
+                    <h2 class="text-2xl font-black mb-1">GateGuard'a Hoş Geldiniz</h2>
+                    <p class="text-gray-300 leading-relaxed">Bu kılavuz, sistemi <b>hiç bilgisayar deneyimi olmadan</b> bile rahatça kullanabilmeniz için hazırlandı. Her bölüm, ne göreceğinizi ve ne yapmanız gerektiğini adım adım anlatır. Aşağıdaki başlıklardan istediğinize tıklayabilir ya da baştan sona okuyabilirsiniz.</p>
+                    <div class="mt-3 flex flex-wrap gap-2 text-xs">
+                        <span class="bg-gray-800/70 border border-gray-700 rounded-full px-3 py-1">📷 Plaka okuma</span>
+                        <span class="bg-gray-800/70 border border-gray-700 rounded-full px-3 py-1">🚨 Hırsızlık tespiti</span>
+                        <span class="bg-gray-800/70 border border-gray-700 rounded-full px-3 py-1">🔔 Otomatik alarm</span>
+                        <span class="bg-gray-800/70 border border-gray-700 rounded-full px-3 py-1">📋 Kayıt & rapor</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 1. GİRİŞ -->
+        <section id="giris" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">ℹ️ Sistem ne işe yarar?</h2>
+            <p class="text-gray-300 leading-relaxed mb-4">GateGuard, sitenin giriş kapısındaki ve çevresindeki kameraları <b>7/24 kendisi izler</b>. İki ana görevi vardır:</p>
+            <div class="grid sm:grid-cols-2 gap-3">
+                <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/60">
+                    <div class="text-3xl mb-2">🚗</div>
+                    <h3 class="font-bold mb-1">1. Plaka Kontrolü</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">Bariyere yaklaşan her aracın plakasını okur ve <b>siteye kayıtlı mı</b> diye kontrol eder. Kayıtsız bir araç görürse sizi <b>sesli uyarır</b>.</p>
+                </div>
+                <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/60">
+                    <div class="text-3xl mb-2">🚨</div>
+                    <h3 class="font-bold mb-1">2. Hırsızlık / Kaçak Tespiti</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">Duvar, bahçe, kapı gibi <b>izinsiz girilmemesi gereken bölgelerde</b> bir insan hareketi görürse alarm çalar ve olayın <b>fotoğrafı + videosunu</b> kaydeder.</p>
+                </div>
+            </div>
+            <div class="callout callout-info mt-4">
+                <span class="ico">👤</span>
+                <div><b>Sizin göreviniz basit:</b> Ekranı takip edin. Bir alarm çaldığında ne olduğunu ekranda görürsünüz; kontrol edip sesi susturursunuz. Sistem gerisini kendi halleder.</div>
+            </div>
+        </section>
+
+        <!-- 2. HIZLI BAŞLANGIÇ -->
+        <section id="hizli" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">⚡ Hızlı Başlangıç (3 adım)</h2>
+            <div class="space-y-3">
+                <div class="flex gap-3 items-start">
+                    <div class="step-num">1</div>
+                    <div><b>Uygulamayı açın.</b> Masaüstündeki <b>GateGuard</b> simgesine çift tıklayın. Kısa bir "Başlatılıyor…" ekranından sonra ana panel gelir. (Zaten açıksa ekranın altındaki saat yanındaki simgeye tıklayın.)</div>
+                </div>
+                <div class="flex gap-3 items-start">
+                    <div class="step-num">2</div>
+                    <div><b>Canlı ekranı izleyin.</b> Açılışta <b>📡 Canlı</b> sekmesi gelir. Geçen araçların plakaları buraya düşer: <span class="text-green-400 font-semibold">yeşil = kayıtlı</span>, <span class="text-red-400 font-semibold">kırmızı = kayıtsız</span>.</div>
+                </div>
+                <div class="flex gap-3 items-start">
+                    <div class="step-num">3</div>
+                    <div><b>Alarm çalınca kontrol edin.</b> Ekranda kırmızı bir uyarı ve ses gelir. Durumu görün; gerekliyse müdahale edin, sonra <b>Boşluk</b> tuşuna (veya ekrandaki <b>Sesi Sustur</b> düğmesine) basıp susturun.</div>
+                </div>
+            </div>
+            <div class="callout callout-tip mt-4">
+                <span class="ico">💡</span>
+                <div>Alarmı susturmanın en kolay yolu: klavyede <b>Boşluk</b> ya da <b>Enter</b> tuşuna basmak. Ekrana bakmadan, göz kapalı bile yapabilirsiniz.</div>
+            </div>
+        </section>
+
+        <!-- 3. ÜST MENÜ -->
+        <section id="menu" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">🧭 Üst Menüyü Tanıyalım</h2>
+            <p class="text-gray-400 text-sm mb-4">Ekranın en üstündeki şerit, her yerden erişebileceğiniz ana menüdür. Aşağıda görünümü ve her düğmenin ne yaptığı var:</p>
+
+            <!-- Sahte navbar görseli -->
+            <div class="mk-nav p-2.5 flex items-center gap-2 flex-wrap mb-4 overflow-x-auto">
+                <div class="w-7 h-7 gg-brand-mark rounded-lg flex items-center justify-center text-white font-black text-sm">G</div>
+                <div class="flex gap-1">
+                    <span class="mk-tab">📊 Özet</span>
+                    <span class="mk-tab on">📡 Canlı</span>
+                    <span class="mk-tab">📋 Geçmiş</span>
+                    <span class="mk-tab">📸 Galeri</span>
+                    <span class="mk-tab">⚙️ Yönetim</span>
+                </div>
+                <div class="w-px h-6 bg-gray-700 mx-1"></div>
+                <span class="mk-pill">🚗 Araçlar</span>
+                <span class="mk-pill" style="background:rgba(99,102,241,.2);border-color:rgba(129,140,248,.35);color:#c7d2fe">🌃 Gece İzleme</span>
+                <span class="mk-pill">🗂️ Kayıtlar</span>
+                <div class="w-px h-6 bg-gray-700 mx-1"></div>
+                <span class="mk-ico">🧪</span>
+                <span class="mk-ico">🔄</span>
+                <span class="mk-ico">🌙</span>
+                <span class="mk-ico">👤</span>
+                <span class="mk-ico" style="color:#f87171">⏻</span>
+            </div>
+
+            <div class="grid sm:grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
+                <div class="flex gap-2.5"><span class="text-lg">📊</span><div><b>Özet</b> — Günün özeti, modül durumları, hızlı sayılar.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">📡</span><div><b>Canlı</b> — Anlık araç geçişleri (varsayılan ekran).</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">📋</span><div><b>Geçmiş</b> — Eski geçişler, tarih filtresi, Excel raporu.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">📸</span><div><b>Galeri</b> — Geçişlerin fotoğraflı görünümü.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">⚙️</span><div><b>Yönetim</b> — Kamera/sistem yönetim kısayolları.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">🚗</span><div><b>Araçlar</b> — Kayıtlı araçlar ve plaka ekleme.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">🌃</span><div><b>Gece İzleme</b> — Çok kameralı canlı hırsızlık takibi.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">🗂️</span><div><b>Kayıtlar</b> — Kaçak olaylarının kanıt foto+videoları.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">🔄</span><div><b>Senkronize et</b> — Plaka listesini günceller.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">🌙</span><div><b>Tema</b> — Aydınlık/karanlık görünüm.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">👤</span><div><b>Kullanıcı menüsü</b> — Ayarlar, parola, çıkış.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg text-red-400">⏻</span><div><b>Kapat</b> — Uygulamayı tamamen kapatır.</div></div>
+            </div>
+            <div class="callout callout-info mt-4">
+                <span class="ico">🔗</span>
+                <div>Ekran dar olduğunda bazı yazılar gizlenip sadece simge kalabilir — işlev aynıdır. Simgenin üzerine gelirseniz adı belirir.</div>
+            </div>
+        </section>
+
+        <!-- 4. CANLI EKRAN -->
+        <section id="canli" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">📡 Canlı Ekran</h2>
+            <p class="text-gray-400 text-sm mb-4">En çok bakacağınız ekran. Solda geçen araçlar, sağda günün sayıları ve durum bilgisi bulunur. Yeni bir araç geçtiğinde en üste düşer.</p>
+
+            <!-- Örnek kartlar -->
+            <div class="space-y-2 mb-4">
+                <div class="flex items-center gap-3 p-3 rounded-xl border bg-gray-800/40 border-gray-700/50">
+                    <div class="w-24 h-16 bg-gray-700/60 rounded-lg flex items-center justify-center text-2xl border-2 border-green-500">🚗</div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-mono font-black text-xl">34 ABC 123</span>
+                            <span class="text-green-400 text-xs font-semibold">✓ Kayıtlı</span>
+                            <span class="text-green-400 text-xs font-semibold">▼ Giriş</span>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1"><span class="text-cyan-400 font-semibold">az önce</span> · 🕐 14:32 · Ahmet Yılmaz · %98</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 rounded-xl border bg-red-950/25 border-red-900/40">
+                    <div class="w-24 h-16 bg-gray-700/60 rounded-lg flex items-center justify-center text-2xl border-2 border-red-500">🚨</div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-mono font-black text-xl">06 XYZ 789</span>
+                            <span class="text-red-400 text-xs font-bold">✗ KAYITSIZ</span>
+                            <span class="text-orange-400 text-xs font-semibold">▲ Çıkış</span>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1"><span class="text-cyan-400 font-semibold">2 dk önce</span> · 🕐 14:30 · %91</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid sm:grid-cols-2 gap-3 text-sm">
+                <div class="bg-green-950/20 border border-green-900/40 rounded-xl p-3"><b class="text-green-400">✓ Yeşil kart = Kayıtlı</b><br><span class="text-gray-400">Araç siteye tanımlı. Sorun yok, bariyer normal açılır.</span></div>
+                <div class="bg-red-950/20 border border-red-900/40 rounded-xl p-3"><b class="text-red-400">✗ Kırmızı kart = Kayıtsız</b><br><span class="text-gray-400">Araç tanımlı değil. Kontrol edin; siren çalabilir.</span></div>
+            </div>
+            <div class="callout callout-tip mt-4">
+                <span class="ico">🕐</span>
+                <div>Her kartta <b>"az önce / 3 dk önce"</b> yazar — geçişin ne kadar taze olduğunu bir bakışta anlarsınız. Fotoğrafa tıklayınca büyür.</div>
+            </div>
+            <p class="text-sm text-gray-400 mt-4"><b>Sağ paneldeki sayılar:</b> Bugün toplam / Kayıtlı / Kayıtsız geçiş sayısı, Giriş–Çıkış adedi, kamera durumu ve son senkronizasyon zamanı.</p>
+        </section>
+
+        <!-- 5. KAYITSIZ ARAÇ ALARMI -->
+        <section id="kayitsiz" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">🚗 Kayıtsız Araç Alarmı</h2>
+            <p class="text-gray-400 text-sm mb-4">Bariyerde <b>kayıtsız</b> bir plaka görülünce ekranın üstünde kırmızı bir uyarı belirir ve siren çalar:</p>
+
+            <!-- Sahte alarm banner -->
+            <div class="rounded-xl border-2 border-red-500 bg-gradient-to-r from-red-900/60 to-red-950/60 p-4 flex items-center justify-between gap-4 mb-4 flex-wrap">
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl animate-pulse">🚨</span>
+                    <div>
+                        <div class="text-xs text-red-300 font-bold uppercase tracking-wide">Kayıtsız Geçiş</div>
+                        <div class="font-mono font-black text-2xl text-white">06 XYZ 789</div>
+                    </div>
+                </div>
+                <span class="bg-red-600 text-white font-black py-2.5 px-6 rounded-xl uppercase tracking-wider text-sm">🔇 Sesi Sustur</span>
+            </div>
+
+            <h3 class="font-bold mb-2">Ne yapmalısınız?</h3>
+            <div class="space-y-2.5">
+                <div class="flex gap-3 items-start"><div class="step-num">1</div><div>Aracı ve sürücüyü <b>gözle kontrol edin</b> (misafir mi, kargo mu, şüpheli mi?).</div></div>
+                <div class="flex gap-3 items-start"><div class="step-num">2</div><div>Gerekiyorsa prosedürünüze göre <b>müdahale edin</b> (kapıyı açmayın / yetkiliyi arayın vb.).</div></div>
+                <div class="flex gap-3 items-start"><div class="step-num">3</div><div>Sesi susturun: <b>Boşluk</b>/<b>Enter</b>/<b>S</b> tuşu ya da <b>Sesi Sustur</b> düğmesi.</div></div>
+            </div>
+            <div class="callout callout-info mt-4">
+                <span class="ico">⏱️</span>
+                <div>Siren, ayarladığınız süre dolunca <b>kendiliğinden</b> de susar. Süreyi Ayarlar'dan değiştirebilirsiniz.</div>
+            </div>
+        </section>
+
+        <!-- 6. HIRSIZLIK -->
+        <section id="hirsizlik" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">🚨 Hırsızlık / Kaçak Alarmı</h2>
+            <p class="text-gray-400 text-sm mb-4">İzinsiz girilmemesi gereken bir bölgede (duvar, bahçe, kapı) insan hareketi görülürse tüm ekranı kaplayan bir uyarı açılır. İçinde <b>canlı görüntü</b> ve <b>tespit anının fotoğrafı</b> (kanıt) yan yana gösterilir.</p>
+
+            <div class="grid sm:grid-cols-2 gap-3 mb-4">
+                <div class="bg-black rounded-lg aspect-video flex items-center justify-center text-gray-600 text-sm border border-gray-700"><span>🔴 CANLI görüntü</span></div>
+                <div class="bg-black rounded-lg aspect-video flex items-center justify-center text-gray-600 text-sm border border-gray-700"><span>📸 Kanıt fotoğrafı</span></div>
+            </div>
+
+            <div class="space-y-2.5">
+                <div class="flex gap-3 items-start"><div class="step-num">1</div><div><b>Canlı görüntüye bakın</b> — gerçek bir tehdit mi, yoksa yanlış alarm mı (kedi, dal vb.)?</div></div>
+                <div class="flex gap-3 items-start"><div class="step-num">2</div><div>Gerçekse prosedürünüzü uygulayın. <b>🖥️ Büyük İzle</b> ile kamerayı tam ekran açabilirsiniz.</div></div>
+                <div class="flex gap-3 items-start"><div class="step-num">3</div><div><b>🔇 Sesi Sustur</b> (veya Boşluk/Enter). Olay <b>otomatik kaydedilir</b>; sonra <b>🗂️ Kayıtlar</b>'dan foto+videoyu izleyebilirsiniz.</div></div>
+            </div>
+            <div class="callout callout-warn mt-4">
+                <span class="ico">⚠️</span>
+                <div>Sesi susturmak <b>olayı silmez</b>. Her kaçak, kanıtıyla birlikte "Kayıtlar" bölümünde saklanır (yaklaşık 1 dakikalık video dâhil).</div>
+            </div>
+            <div class="callout callout-info mt-3">
+                <span class="ico">🌃</span>
+                <div><b>Gece İzleme</b> menüsünden tüm kameraları aynı anda canlı izleyebilirsiniz — gece nöbetinde çok işe yarar.</div>
+            </div>
+        </section>
+
+        <!-- 7. GEÇMİŞ & EXCEL -->
+        <section id="gecmis" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">📋 Geçmiş & Excel Raporu</h2>
+            <p class="text-gray-400 text-sm mb-4"><b>📋 Geçmiş</b> sekmesi eski araç geçişlerini gösterir. Varsayılan olarak <b>bugün</b> gelir; üstteki tarihlerden istediğiniz günü seçebilirsiniz.</p>
+            <div class="space-y-2.5">
+                <div class="flex gap-3 items-start"><div class="step-num">1</div><div>Tarih aralığını seçin (örn. sadece dün, ya da son hafta).</div></div>
+                <div class="flex gap-3 items-start"><div class="step-num">2</div><div><b>📊 Excel indir</b> düğmesine basın.</div></div>
+                <div class="flex gap-3 items-start"><div class="step-num">3</div><div>Fotoğraflar, logo ve renkli durumlarla dolu profesyonel bir Excel dosyası bilgisayarınıza iner. Yönetime rapor için birebir.</div></div>
+            </div>
+            <div class="callout callout-tip mt-4">
+                <span class="ico">📎</span>
+                <div>Excel dosyasının içinde her geçişin <b>fotoğrafı gömülüdür</b> — ayrıca resim aramanıza gerek kalmaz.</div>
+            </div>
+        </section>
+
+        <!-- 8. GALERİ -->
+        <section id="galeri" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">📸 Galeri</h2>
+            <p class="text-gray-400 text-sm">Geçişleri <b>fotoğraf ağırlıklı</b> gösteren ekran. Bir plakayı gözle doğrulamak istediğinizde en pratik yer burasıdır. Fotoğrafa tıklayınca büyür, yakınlaştırıp inceleyebilirsiniz.</p>
+        </section>
+
+        <!-- 9. ARAÇLAR -->
+        <section id="araclar" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">🚗 Araç Yönetimi</h2>
+            <p class="text-gray-400 text-sm mb-4">Üst menüdeki <b>🚗 Araçlar</b> ile kayıtlı araçları görür, gerektiğinde <b>elle plaka ekleyebilirsiniz</b>. Eklediğiniz plaka bundan sonra "kayıtlı" sayılır ve alarm çalmaz.</p>
+            <div class="space-y-2.5">
+                <div class="flex gap-3 items-start"><div class="step-num">1</div><div><b>🚗 Araçlar</b> sayfasını açın.</div></div>
+                <div class="flex gap-3 items-start"><div class="step-num">2</div><div>İlgili kişiyi/aracı bulun ve <b>ek plaka</b> girin (örn. ikinci arabası).</div></div>
+                <div class="flex gap-3 items-start"><div class="step-num">3</div><div>Kaydedin. Sistem bu plakayı anında tanımaya başlar.</div></div>
+            </div>
+            <div class="callout callout-warn mt-4">
+                <span class="ico">🔒</span>
+                <div>Bir plakayı listeden çıkarmadan önce emin olun — çıkarılan plaka artık "kayıtsız" sayılır ve geçtiğinde alarm çalar.</div>
+            </div>
+        </section>
+
+        <!-- 10. AYARLAR -->
+        <section id="ayarlar" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">⚙️ Ayarlar & Sesler</h2>
+            <p class="text-gray-400 text-sm mb-4">Sağ üstteki <b>👤 kullanıcı menüsü → ⚙️ Ayarlar</b> ile açılır. En çok kullanacaklarınız:</p>
+            <div class="space-y-2.5 text-sm">
+                <div class="flex gap-2.5"><span class="text-lg">🔊</span><div><b>Kayıtlı Geçiş Sesi</b> — Tanıdık bir araç geçince çalan kısa, olumlu bip. Aç/kapat, tür ve ses seviyesi ayarlanır. <b>▶ Dinle</b> ile önizleyin.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">🚨</span><div><b>Hırsızlık Alarm Sesi</b> — Kaçak tespitinde çalan güçlü siren. Birkaç ses seçeneği var.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">🚗</span><div><b>Kayıtsız Araç Sireni</b> — Bariyerde kayıtsız araç görülünce çalar.</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">🗑️</span><div><b>Fotoğraf Saklama Süresi</b> — Kaç günden eski fotoğraf/videoların otomatik silineceği (disk dolmasın diye).</div></div>
+                <div class="flex gap-2.5"><span class="text-lg">🚨</span><div><b>Deneme (shadow) Modu</b> — Açıkken olaylar <b>kaydedilir ama siren çalmaz</b> (test için). Normal kullanımda <b>kapalı</b> olmalı ki alarm çalsın.</div></div>
+            </div>
+            <div class="callout callout-warn mt-4">
+                <span class="ico">🔔</span>
+                <div><b>Önemli:</b> Gerçek nöbette <b>Deneme modu kapalı</b> olmalı. Açık kalırsa hırsızlık tespit edilse bile <b>siren çalmaz</b> (ekranda "TEST MODU · siren çalmaz" uyarısı görünür).</div>
+            </div>
+        </section>
+
+        <!-- 11. SYNC -->
+        <section id="sync" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">🔄 Plaka Senkronizasyonu</h2>
+            <p class="text-gray-400 text-sm">Kayıtlı araç listesi, site yönetim programından (MDB) beslenir. Yönetim yeni bir araç eklediğinde, üstteki <b>🔄</b> düğmesine (veya <b>R</b> tuşuna) basarak listeyi güncelleyebilirsiniz. Sistem bunu düzenli olarak <b>kendisi de yapar</b>; elle senkron sadece "hemen görsün" istediğinizde gerekir.</p>
+        </section>
+
+        <!-- 12. KISAYOLLAR -->
+        <section id="kisayol" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">⌨️ Klavye Kısayolları</h2>
+            <p class="text-gray-400 text-sm mb-4">Fare kullanmadan hızlıca iş görmek için:</p>
+            <div class="grid sm:grid-cols-2 gap-2 text-sm">
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">Boşluk</kbd><span class="text-gray-300">Alarmı sustur</span></div>
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">Enter</kbd><span class="text-gray-300">Alarmı sustur</span></div>
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">S</kbd><span class="text-gray-300">Alarmı sustur</span></div>
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">1</kbd><span class="text-gray-300">📊 Özet sekmesi</span></div>
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">2</kbd><span class="text-gray-300">📡 Canlı sekmesi</span></div>
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">3</kbd><span class="text-gray-300">📋 Geçmiş sekmesi</span></div>
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">4</kbd><span class="text-gray-300">📸 Galeri sekmesi</span></div>
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">R</kbd><span class="text-gray-300">🔄 Senkronize et</span></div>
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">T</kbd><span class="text-gray-300">🌙 Tema değiştir</span></div>
+                <div class="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"><kbd class="px-2 py-0.5 rounded bg-gray-700 font-mono text-xs">?</kbd><span class="text-gray-300">Kısayol listesini göster</span></div>
+            </div>
+        </section>
+
+        <!-- 13. SORUN GİDERME -->
+        <section id="sorun" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">🔧 Sorun Giderme (Sık Sorulanlar)</h2>
+            <div class="space-y-3">
+                <details class="bg-gray-800/40 rounded-xl border border-gray-700/60 p-4">
+                    <summary class="font-semibold cursor-pointer">🟡 Üstte sarı "Bağlantı koptu" bandı çıktı, ne yapmalıyım?</summary>
+                    <p class="text-sm text-gray-400 mt-2 leading-relaxed">Sistem sunucusuyla bağlantı kesildi; ekrandaki canlı görüntü <b>duraklamış</b> olabilir. Genelde kendi kendine yeniden bağlanır ve bant kaybolur. Kaybolmuyorsa: uygulamayı kapatıp masaüstü simgesinden tekrar açın. Sürerse yetkiliyi/teknik desteği arayın.</p>
+                </details>
+                <details class="bg-gray-800/40 rounded-xl border border-gray-700/60 p-4">
+                    <summary class="font-semibold cursor-pointer">📷 Sağ panelde "Kamera" kırmızı/kopuk görünüyor.</summary>
+                    <p class="text-sm text-gray-400 mt-2 leading-relaxed">Kamera bağlantısı geçici kopmuş olabilir. Birkaç dakika bekleyin; düzelmezse uygulamayı yeniden başlatın. Yine olmuyorsa kameranın elektrik/ağ kablosunu ve teknik desteği kontrol ettirin.</p>
+                </details>
+                <details class="bg-gray-800/40 rounded-xl border border-gray-700/60 p-4">
+                    <summary class="font-semibold cursor-pointer">🔇 Alarm hiç çalmıyor.</summary>
+                    <p class="text-sm text-gray-400 mt-2 leading-relaxed">Ayarlar'da <b>Deneme (shadow) modu</b> açık olabilir — kapatın. Ayrıca ses seviyelerinin 0 olmadığından ve bilgisayarın sesinin açık olduğundan emin olun. <b>▶ Dinle</b> ile sesi test edin.</p>
+                </details>
+                <details class="bg-gray-800/40 rounded-xl border border-gray-700/60 p-4">
+                    <summary class="font-semibold cursor-pointer">🚗 Tanıdık bir araç "kayıtsız" çıktı.</summary>
+                    <p class="text-sm text-gray-400 mt-2 leading-relaxed">Plaka listede olmayabilir ya da yeni eklenmiştir. <b>🔄</b> ile senkronize edin. Hâlâ kayıtsızsa <b>🚗 Araçlar</b> sayfasından plakayı elle ekleyebilirsiniz.</p>
+                </details>
+                <details class="bg-gray-800/40 rounded-xl border border-gray-700/60 p-4">
+                    <summary class="font-semibold cursor-pointer">🔑 Parolamı unuttum / değiştirmek istiyorum.</summary>
+                    <p class="text-sm text-gray-400 mt-2 leading-relaxed">👤 kullanıcı menüsü → <b>Parolayı Değiştir</b>. Tamamen unuttuysanız yönetici hesabından sıfırlatın.</p>
+                </details>
+            </div>
+        </section>
+
+        <!-- 14. KAPAT -->
+        <section id="kapat" class="kb-card bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <h2 class="text-xl font-bold mb-3 flex items-center gap-2">⏻ Açma / Kapatma</h2>
+            <div class="grid sm:grid-cols-2 gap-3 text-sm">
+                <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/60">
+                    <h3 class="font-bold mb-1">▶ Açmak</h3>
+                    <p class="text-gray-400">Masaüstündeki <b>GateGuard</b> simgesine çift tıklayın. Kısa "Başlatılıyor…" ekranından sonra panel gelir.</p>
+                </div>
+                <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/60">
+                    <h3 class="font-bold mb-1">⏻ Kapatmak</h3>
+                    <p class="text-gray-400">Sağ üstteki kırmızı <b>⏻</b> düğmesi → <b>Evet, Kapat</b>. Pencerenin <b>X</b>'ine basarsanız uygulama kapanmaz, <b>saat yanındaki sistem tepsisine küçülür</b> ve çalışmaya devam eder.</p>
+                </div>
+            </div>
+            <div class="callout callout-tip mt-4">
+                <span class="ico">💡</span>
+                <div>Sistemi genelde <b>hep açık</b> tutun — kapatınca izleme durur. Sadece bilgisayarı yeniden başlatmak gibi bir gereklilik olduğunda kapatın.</div>
+            </div>
+        </section>
+
+        <div class="text-center text-xs text-gray-600 py-6">
+            GateGuard Kullanım Kılavuzu · Güvenli nöbetler dileriz 🛡️
+        </div>
+    </main>
+</div>
+
+<script>
+// Tema (index.html ile aynı localStorage anahtarı: gg-theme, varsayılan light)
+function temaUygula(theme){
+    const b=document.body, btn=document.getElementById('tema-btn');
+    if(theme==='light'){ b.classList.add('light-theme'); if(btn) btn.textContent='☀'; }
+    else { b.classList.remove('light-theme'); if(btn) btn.textContent='🌙'; }
+    try{ localStorage.setItem('gg-theme', theme); }catch(e){}
+}
+function temaToggle(){
+    const cur=document.body.classList.contains('light-theme')?'light':'dark';
+    temaUygula(cur==='light'?'dark':'light');
+}
+(function(){ let s='light'; try{ s=localStorage.getItem('gg-theme')||'light'; }catch(e){} temaUygula(s); })();
+
+// İçindekiler — okunan bölümü vurgula
+(function(){
+    const links=[...document.querySelectorAll('#toc .toc-link')];
+    const map={}; links.forEach(l=>{ const id=l.getAttribute('href').slice(1); const el=document.getElementById(id); if(el) map[id]=l; });
+    const obs=new IntersectionObserver(entries=>{
+        entries.forEach(e=>{ if(e.isIntersecting){ links.forEach(l=>l.classList.remove('active')); const l=map[e.target.id]; if(l) l.classList.add('active'); } });
+    },{rootMargin:'-40% 0px -55% 0px'});
+    Object.keys(map).forEach(id=>{ const el=document.getElementById(id); if(el) obs.observe(el); });
+})();
+</script>
+</body>
+</html>

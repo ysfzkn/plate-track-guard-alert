@@ -91,8 +91,8 @@ echo [*] Servis kuruluyor...
 %NSSM% set %SERVICE_NAME% AppRotateFiles 1
 %NSSM% set %SERVICE_NAME% AppRotateBytes 10485760
 
-:: Ensure unbuffered Python output for real-time logging
-%NSSM% set %SERVICE_NAME% AppEnvironmentExtra PYTHONUNBUFFERED=1
+:: Unbuffered Python output + SUNUCU modu (servis GUI oturumu goremez, pencere ACMA)
+%NSSM% set %SERVICE_NAME% AppEnvironmentExtra PYTHONUNBUFFERED=1 GG_WINDOW=0
 
 :: Create logs directory
 if not exist "%APP_DIR%\logs" mkdir "%APP_DIR%\logs"

@@ -53,6 +53,7 @@ PUBLIC_PATHS: set[str] = {
     "/", "/alpr-test", "/camera-test", "/night-watch",
     "/zone-editor", "/admin", "/intrusion-test", "/test-history",
     "/intrusion-history", "/zone-playground", "/cameras", "/vehicles",
+    "/kilavuz",
 }
 PUBLIC_PREFIXES: tuple[str, ...] = ("/static/",)
 

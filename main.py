@@ -7,8 +7,20 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Frozen + console=False (pencereli exe) => sys.stdout/stderr None olur. isatty()
+# cagiran kutuphaneler (uvicorn'un renkli log formatter'i gibi) burada patlar:
+#   AttributeError: 'NoneType' object has no attribute 'isatty'
+# None akislari zararsiz bir cop hedefe yonlendir ki her sey nazikce calissin.
+if sys.stdout is None or sys.stderr is None:
+    _devnull = open(os.devnull, "w", encoding="utf-8")
+    if sys.stdout is None:
+        sys.stdout = _devnull
+    if sys.stderr is None:
+        sys.stderr = _devnull
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -78,13 +90,16 @@ _app_handler.setFormatter(logging.Formatter(
     "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s"
 ))
 
+# console=False (pencereli exe) ile sys.stderr None olur → StreamHandler her
+# log'da sessizce handleError'a duser. Konsol varsa ekle, yoksa sadece dosya.
+_log_handlers = [_app_handler]
+if sys.stderr is not None:
+    _log_handlers.insert(0, logging.StreamHandler())
+
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
     format="[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        _app_handler,
-    ],
+    handlers=_log_handlers,
 )
 
 # Separate (also rotating) loggers for passages, alarms, sync
@@ -373,6 +388,15 @@ async def lifespan(app: FastAPI):
                 min_consecutive_frames=settings.INTRUSION_MIN_CONSECUTIVE_FRAMES,
                 frame_gap_reset_sec=settings.INTRUSION_FRAME_GAP_RESET_SEC,
             )
+            # Shadow modu UI'dan degistirilmis olabilir → DB'deki degeri kullan
+            # (yoksa .env). Boylece UI'daki secim restart'ta korunur.
+            _shadow = settings.INTRUSION_SHADOW_MODE
+            try:
+                _sv = db.get_setting("intrusion_shadow_mode")
+                if _sv is not None:
+                    _shadow = (_sv == "1")
+            except Exception:
+                pass
             intrusion_orchestrator = MultiCameraOrchestrator(
                 db=db,
                 alarm=alarm,
@@ -381,7 +405,7 @@ async def lifespan(app: FastAPI):
                 classifier=intrusion_classifier,
                 zone_manager=zone_manager,
                 process_fps=settings.INTRUSION_PROCESS_FPS,
-                shadow_mode=settings.INTRUSION_SHADOW_MODE,
+                shadow_mode=_shadow,
                 screenshot_dir=settings.SCREENSHOT_DIR,
                 clip_enabled=settings.INTRUSION_CLIP_ENABLED,
                 clip_pre_sec=settings.INTRUSION_CLIP_PRE_SEC,
@@ -418,12 +442,15 @@ async def lifespan(app: FastAPI):
 
     logger.info("All systems online. Detection active.")
 
-    # Auto-open browser (works in both script and frozen exe)
+    # Auto-open browser (works in both script and frozen exe).
+    # Native pencere modunda ATLA — pencere zaten localhost'u gösteriyor.
     import threading
     import webbrowser
     def _open():
         import time
         time.sleep(2)
+        if os.environ.get("GG_WINDOW_MODE") == "1":
+            return
         webbrowser.open("http://localhost:8000")
     threading.Thread(target=_open, daemon=True).start()
 
@@ -474,6 +501,21 @@ app = FastAPI(
 # first request can hit a protected route.
 from app.auth import auth_middleware
 app.middleware("http")(auth_middleware)
+
+
+# HTML sayfalarını ÖNBELLEĞE ALMA — arayüz güncellemeleri (tüm inline JS dahil)
+# tarayıcıda anında görünsün. Aksi halde tarayıcı eski index.html'i cache'ler ve
+# yeni özellikler (ses seçenekleri vb.) hard-refresh olmadan gelmez.
+@app.middleware("http")
+async def _no_cache_html(request, call_next):
+    resp = await call_next(request)
+    ct = resp.headers.get("content-type", "")
+    if ct.startswith("text/html"):
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
+
 
 # Mount static files (public — login page needs its own assets)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -529,6 +571,12 @@ async def vehicles_page():
     return FileResponse(str(BASE_DIR / "static" / "vehicles.html"))
 
 
+@app.get("/kilavuz")
+async def kilavuz_page():
+    # Kullanım kılavuzu — nöbetçiler için sade, resimli rehber (public, statik)
+    return FileResponse(str(BASE_DIR / "static" / "kilavuz.html"))
+
+
 @app.get("/cameras")
 async def cameras_page():
     # Camera management lives in admin.html; /cameras is the link used in the UI.
@@ -550,10 +598,248 @@ async def zone_playground_page():
     return FileResponse(str(BASE_DIR / "static" / "zone-playground.html"))
 
 
+def _want_window() -> bool:
+    """Native pencere modu mu? frozen exe'de VARSAYILAN AÇIK.
+    Kapatmak icin: GG_WINDOW=0  ya da  --server  (servis / headless / oturumsuz
+    otomatik baslatma). Zorla acmak icin: GG_WINDOW=1 / --window."""
+    import sys as _sys
+    if "--server" in _sys.argv or os.environ.get("GG_WINDOW") == "0":
+        return False
+    if "--window" in _sys.argv or os.environ.get("GG_WINDOW") == "1":
+        return True
+    return bool(getattr(_sys, "frozen", False))
+
+
+def _splash_html() -> str:
+    """Aninda gosterilen splash. Paketlenmis logo (static/logo.png) varsa base64
+    gomulur (sunucu daha ayakta olmadigi icin /static'ten cekilemez)."""
+    logo_tag = '<div class="t">GateGuard</div>'
+    try:
+        from config import BASE_DIR as _BD
+        import base64
+        _p = _BD / "static" / "logo.png"
+        if _p.exists():
+            b64 = base64.b64encode(_p.read_bytes()).decode("ascii")
+            logo_tag = (f'<img src="data:image/png;base64,{b64}" '
+                        f'style="max-width:260px;max-height:80px;object-fit:contain">')
+    except Exception:
+        pass
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+ html,body{{margin:0;height:100%;background:#0b1220;color:#e2e8f0;
+   font-family:'Segoe UI',Arial,sans-serif;display:flex;align-items:center;
+   justify-content:center;flex-direction:column;gap:22px;overflow:hidden}}
+ .sp{{width:54px;height:54px;border:5px solid #1e293b;border-top-color:#22d3ee;
+   border-radius:50%;animation:s .9s linear infinite}}
+ @keyframes s{{to{{transform:rotate(360deg)}}}}
+ .s{{font-size:13px;color:#94a3b8}}
+</style></head><body>
+ {logo_tag}
+ <div class="sp"></div>
+ <div class="s">Başlatılıyor, lütfen bekleyin…</div>
+</body></html>"""
+
+
+def _wait_server_up(timeout_steps: int = 120) -> None:
+    import time as _time
+    import urllib.request
+    for _ in range(timeout_steps):
+        try:
+            urllib.request.urlopen("http://127.0.0.1:8000/login", timeout=1)
+            return
+        except Exception:
+            _time.sleep(0.5)
+
+
+def _window_state_path():
+    from config import BASE_DIR as _BD
+    return _BD / "data" / "window_state.json"
+
+
+def _load_window_state():
+    """Kayitli pencere boyut/konumunu dondur (yoksa makul varsayilan)."""
+    import json
+    default = {"width": 1360, "height": 860, "x": None, "y": None, "maximized": False}
+    try:
+        p = _window_state_path()
+        if p.exists():
+            saved = json.loads(p.read_text(encoding="utf-8"))
+            for k in default:
+                if k in saved:
+                    default[k] = saved[k]
+            # Bozuk/absürt degerleri temizle
+            if not (600 <= (default["width"] or 0) <= 8000):
+                default["width"] = 1360
+            if not (400 <= (default["height"] or 0) <= 8000):
+                default["height"] = 860
+    except Exception:
+        pass
+    return default
+
+
+def _save_window_state(state: dict) -> None:
+    import json
+    try:
+        p = _window_state_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(state), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _start_tray(window, on_quit):
+    """Sistem tepsisi (tray) ikonu — kapatinca uygulama tepside kalir (7/24 guard
+    PC icin ideal). pystray yoksa None doner ve X = tam cikis olur (regresyon yok).
+    Dondugu icon nesnesi uzerinden .stop() ile kapatilir."""
+    try:
+        import pystray
+        from PIL import Image
+        from config import BASE_DIR as _BD
+    except Exception as e:
+        logger.info("Tray devre disi (pystray/PIL yok: %s) - X = tam cikis", e)
+        return None
+
+    try:
+        ico = _BD / "static" / "favicon.ico"
+        image = Image.open(str(ico)) if ico.exists() else Image.new("RGB", (64, 64), "#0b1220")
+    except Exception:
+        image = Image.new("RGB", (64, 64), "#0b1220")
+
+    def _show(icon, item):
+        try:
+            window.show()
+            window.restore()
+        except Exception:
+            pass
+
+    def _quit(icon, item):
+        try:
+            icon.stop()
+        except Exception:
+            pass
+        on_quit()
+
+    menu = pystray.Menu(
+        pystray.MenuItem("GateGuard'ı Göster", _show, default=True),
+        pystray.MenuItem("Çıkış", _quit),
+    )
+    icon = pystray.Icon("GateGuard", image, "GateGuard", menu)
+    import threading
+    threading.Thread(target=icon.run, daemon=True).start()
+    return icon
+
+
+def _run_window_mode():
+    """Sunucuyu arka plan thread'inde calistir; ana thread'de ANINDA bir splash
+    penceresi ac, sunucu hazir olunca uygulamaya gec (Electron benzeri deneyim).
+    Pencere boyutu hatirlanir; X ile kapatinca sistem tepsisine kucululur.
+    Pencere acilamazsa (webview yok / GUI oturumu yok) sunucu moduna duser."""
+    import threading
+    import time as _time
+    import uvicorn
+    os.environ["GG_WINDOW_MODE"] = "1"   # lifespan tarayici acmasin
+
+    # uvicorn.Server — sinyal isleyicileri KAPALI (non-main thread'de patlar).
+    # log_config=None: uvicorn kendi renkli formatter'ini KURMASIN (console=False
+    # exe'de stdout/stderr yok -> isatty patlar). Loglar bizim dosya handler'imiza
+    # (logs/app.log) propagate olur.
+    _config = uvicorn.Config(app, host="0.0.0.0", port=8000,
+                             log_level="info", log_config=None)
+    _server = uvicorn.Server(_config)
+    _server.install_signal_handlers = lambda: None
+    threading.Thread(target=_server.run, daemon=True).start()
+
+    def _fallback_browser():
+        os.environ.pop("GG_WINDOW_MODE", None)
+        _wait_server_up()
+        try:
+            import webbrowser
+            webbrowser.open("http://localhost:8000")
+        except Exception:
+            pass
+        while True:
+            _time.sleep(3600)
+
+    try:
+        import webview
+    except Exception as e:
+        logger.warning("pywebview yok (%s) - sunucu modu + tarayici", e)
+        _fallback_browser()
+        return
+
+    st = _load_window_state()
+    _geom = {"width": st["width"], "height": st["height"], "x": st["x"], "y": st["y"]}
+    _quitting = {"v": False}
+
+    try:
+        window = webview.create_window(
+            "GateGuard", html=_splash_html(),
+            width=st["width"], height=st["height"],
+            x=st["x"], y=st["y"], min_size=(1024, 640),
+        )
+
+        # Boyut/konum degisikliklerini izle (kapaninca kaydetmek icin)
+        def _on_resized(w, h):
+            _geom["width"], _geom["height"] = int(w), int(h)
+
+        def _on_moved(x, y):
+            _geom["x"], _geom["y"] = int(x), int(y)
+
+        try:
+            window.events.resized += _on_resized
+            window.events.moved += _on_moved
+        except Exception:
+            pass  # bazi backend'lerde event yoksa sorun degil
+
+        def _real_quit():
+            _quitting["v"] = True
+            _save_window_state(_geom)
+            try:
+                window.destroy()
+            except Exception:
+                pass
+
+        tray = _start_tray(window, _real_quit)
+
+        def _on_closing():
+            # Tray varsa X = tepsiye kucult (kapatma). Yoksa normal cikis.
+            if tray is not None and not _quitting["v"]:
+                _save_window_state(_geom)
+                try:
+                    window.hide()
+                except Exception:
+                    pass
+                return False   # kapatmayi iptal et
+            _save_window_state(_geom)
+            return True
+
+        try:
+            window.events.closing += _on_closing
+        except Exception:
+            pass
+
+        def _loader():
+            # Splash gorunurken sunucuyu bekle, hazir olunca uygulamaya gec.
+            _wait_server_up()
+            try:
+                window.load_url("http://localhost:8000")
+            except Exception:
+                pass
+
+        webview.start(_loader)   # bloklar; splash aninda gelir, sonra app yuklenir
+        _save_window_state(_geom)
+        os._exit(0)              # pencere tamamen kapandi -> uygulamayi kapat
+    except Exception as e:
+        logger.warning("Native pencere acilamadi (%s) - sunucu modu + tarayici", e)
+        _fallback_browser()
+
+
 if __name__ == "__main__":
     import sys
     import uvicorn
     try:
+        if _want_window():
+            _run_window_mode()
+            sys.exit(0)
         # NOTE: --reload is OFF by default. uvicorn's reload supervisor spawns
         # the worker via multiprocessing-spawn on Windows, and that worker can't
         # open OpenCV/FFmpeg RTSP streams (VideoCapture.isOpened() returns False
@@ -576,14 +862,31 @@ if __name__ == "__main__":
                 ],
             )
         elif getattr(sys, "frozen", False):
-            # Frozen exe: pass the app object directly (string import won't work)
-            uvicorn.run(app, host="0.0.0.0", port=8000)
+            # Frozen exe: pass the app object directly (string import won't work).
+            # log_config=None: console=False'ta uvicorn'un renkli formatter'i
+            # stdout/stderr'e (None) dokunmasin; loglar app.log'a propagate olur.
+            uvicorn.run(app, host="0.0.0.0", port=8000, log_config=None)
         else:
             # Dev mode WITH working cameras: single process, no reload.
             uvicorn.run(app, host="0.0.0.0", port=8000)
     except Exception as e:
-        print(f"\n\n[HATA] {e}\n")
         import traceback
-        traceback.print_exc()
+        _err = f"{e}\n\n{traceback.format_exc()}"
+        try:
+            logger.exception("Baslatma hatasi")
+        except Exception:
+            pass
+        # console=False (pencereli) exe'de print/input calismaz → native hata kutusu.
         if getattr(sys, "frozen", False):
-            input("\nDevam etmek icin Enter'a basin...")
+            try:
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(
+                    0, _err[:1200], "GateGuard - Baslatma Hatasi", 0x10)
+            except Exception:
+                try:
+                    print(f"\n\n[HATA] {_err}\n")
+                    input("\nDevam etmek icin Enter'a basin...")
+                except Exception:
+                    pass
+        else:
+            print(f"\n\n[HATA] {_err}\n")

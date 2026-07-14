@@ -66,6 +66,13 @@
         .gg-version{font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748b;text-transform:uppercase;padding:2px 6px;border-radius:4px;background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.1)}
 
         .dir-entry{color:#4ade80} .dir-exit{color:#f97316} .dir-unknown{color:#6b7280}
+        /* Foto zoom kontrolleri — siyah zemin uzerinde HER TEMADA okunur kalir.
+           Sinif adlari bilerek text-white/bg-gray icermez ki light-theme override etmesin. */
+        .fz-ctrl{background:rgba(0,0,0,.78)}
+        .fz-btn{display:inline-flex;align-items:center;justify-content:center;background:#334155;color:#fff !important;border:none;border-radius:6px;cursor:pointer;transition:background .12s;font-weight:700}
+        .fz-btn:hover{background:#475569}
+        .fz-lbl{color:#f8fafc !important;font-variant-numeric:tabular-nums}
+        .fz-hint{color:rgba(255,255,255,.85) !important;background:rgba(0,0,0,.55)}
 
         /* ── Light theme overrides — applied when body has class "light-theme" ── */
         body.light-theme{background:#f3f4f6 !important;color:#0f172a !important}
@@ -108,6 +115,16 @@
         body.light-theme [class*="text-red-400"],body.light-theme [class*="text-red-300"]{color:#dc2626 !important}
         body.light-theme [class*="text-amber-400"],body.light-theme [class*="text-amber-300"],body.light-theme [class*="text-yellow-400"]{color:#b45309 !important}
         body.light-theme [class*="text-blue-400"],body.light-theme [class*="text-blue-300"]{color:#2563eb !important}
+        /* Yön renkleri (dir-*) ozel siniflar — light-theme'de koyulastir (soluk yesil/turuncu okunmuyor) */
+        body.light-theme .dir-entry{color:#15803d !important}
+        body.light-theme .dir-exit{color:#c2410c !important}
+        body.light-theme .dir-unknown{color:#475569 !important}
+        /* Kullanici avatari: cyan zemin uzerinde HER temada beyaz metin */
+        #user-avatar{color:#fff !important}
+        /* Site logosu seffaf zeminde. Koyu temada beyaz logo direkt gorunur;
+           ACIK temada beyaz navbar'da kaybolmasin diye koyuya cevrilir (seffaflik korunur).
+           RENKLI bir logo koyacaksaniz bu satiri kaldirin (ya da koyu logo kullanin). */
+        body.light-theme #site-logo{filter:brightness(0) opacity(0.85)}
         /* ── Cards & tiles: dark gradients / deep tints → clean light surfaces ── */
         body.light-theme [class*="from-gray-900"]{background-image:none !important;background-color:#ffffff !important;border-color:#e2e8f0 !important}
         body.light-theme [class*="bg-green-950"],body.light-theme [class*="bg-emerald-950"]{background:#dcfce7 !important}
@@ -137,7 +154,7 @@
             <div class="text-5xl md:text-6xl alarm-pulse">🚨</div>
             <div>
                 <div class="text-red-300 text-base md:text-xl font-black uppercase tracking-widest">KAÇAK GEÇİŞ</div>
-                <div class="text-gray-300 text-xs md:text-sm">Yetkisiz araç tespit edildi</div>
+                <div class="text-gray-300 text-xs md:text-sm">Kayıtsız araç tespit edildi</div>
             </div>
         </div>
 
@@ -188,23 +205,28 @@
 <header class="gg-nav sticky top-0 z-30 px-3 h-14 flex items-center justify-between gap-2 flex-nowrap">
     <!-- Brand -->
     <div class="flex items-center gap-2.5 shrink-0">
-        <div class="gg-brand-mark w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0">🛡️</div>
-        <div class="leading-tight">
-            <div class="flex items-center gap-2">
-                <h1 class="text-[15px] font-bold tracking-tight text-white whitespace-nowrap">GateGuard</h1>
-                <span class="gg-version shrink-0 hidden sm:inline">v1.0</span>
-            </div>
-            <div class="flex items-center gap-1.5 text-xs font-semibold text-gray-300">
-                <span id="status-dot" class="status-led shrink-0" title="Sistem aktif"></span>
-                <span id="status-text" class="truncate hidden 2xl:inline max-w-[150px]">Sistem aktif</span>
-            </div>
+        <!-- SİTE LOGOSU: her kuruluma özel için  static/logo.png  dosyasını değiştirin.
+             Beyaz/şeffaf logolar da görünsün diye koyu zemin üzerinde gösterilir.
+             logo.png yoksa/yüklenemezse otomatik olarak varsayılan GateGuard markası çıkar. -->
+        <a href="/" class="flex items-center gap-2 shrink-0" title="Ana sayfa">
+            <img id="site-logo" src="/static/logo.png?v=2" alt="Logo"
+                 class="h-11 w-auto max-w-[240px] object-contain shrink-0"
+                 onerror="this.style.display='none';document.getElementById('brand-fallback').style.display='inline-flex';">
+            <span id="brand-fallback" class="items-center gap-2" style="display:none">
+                <span class="gg-brand-mark w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0">🛡️</span>
+                <span class="text-[15px] font-bold tracking-tight text-white whitespace-nowrap">GateGuard</span>
+            </span>
+        </a>
+        <div class="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-gray-300">
+            <span id="status-dot" class="status-led shrink-0" title="Sistem aktif"></span>
+            <span id="status-text" class="truncate hidden 2xl:inline max-w-[150px]">Sistem aktif</span>
         </div>
     </div>
 
     <!-- Tabs -->
     <nav class="gg-tabs flex gap-0.5 shrink-0" aria-label="Ana menü">
-        <button class="tab-btn active" onclick="tabDegistir('ozet')"><span class="tab-ico">📊</span><span>Özet</span></button>
-        <button class="tab-btn" onclick="tabDegistir('canli')"><span class="tab-ico">📡</span><span>Canlı</span></button>
+        <button class="tab-btn" onclick="tabDegistir('ozet')"><span class="tab-ico">📊</span><span>Özet</span></button>
+        <button class="tab-btn active" onclick="tabDegistir('canli')"><span class="tab-ico">📡</span><span>Canlı</span></button>
         <button class="tab-btn" onclick="tabDegistir('gecmis')"><span class="tab-ico">📋</span><span>Geçmiş</span></button>
         <button class="tab-btn" onclick="tabDegistir('galeri')"><span class="tab-ico">📸</span><span>Galeri</span></button>
         <button class="tab-btn" onclick="tabDegistir('yonetim')"><span class="tab-ico">⚙️</span><span>Yönetim</span></button>
@@ -241,6 +263,7 @@
 
         <!-- Küçük yardımcılar -->
         <button onclick="senkronizeEt()" title="MDB senkronize et (R)" class="nav-icon">🔄</button>
+        <a href="/kilavuz" title="Kullanım Kılavuzu (nasıl kullanılır?)" class="nav-icon">❓</a>
         <button onclick="temaDegistir()" title="Aydınlık / Karanlık tema" class="nav-icon" id="tema-btn">🌙</button>
         <div class="nav-divider"></div>
         <!-- User menu -->
@@ -256,6 +279,8 @@
                     <div id="menu-name" class="text-sm font-semibold">—</div>
                     <div id="menu-role" class="text-[10px] text-gray-500">—</div>
                 </div>
+                <a href="/kilavuz" class="w-full text-left px-3 py-2 text-sm hover:bg-gray-800 flex items-center gap-2">📖 Kullanım Kılavuzu</a>
+                <button onclick="ayarlarAc()" class="w-full text-left px-3 py-2 text-sm hover:bg-gray-800 flex items-center gap-2">⚙️ Ayarlar</button>
                 <button onclick="parolaDegistirAc()" class="w-full text-left px-3 py-2 text-sm hover:bg-gray-800 flex items-center gap-2">🔑 Parolayı Değiştir</button>
                 <button id="menu-users-btn" onclick="kullaniciYonetimAc()" class="w-full text-left px-3 py-2 text-sm hover:bg-gray-800 flex items-center gap-2 hidden">👥 Kullanıcı Yönetimi</button>
                 <div class="border-t border-gray-800"></div>
@@ -371,7 +396,7 @@
 </div>
 
 <!-- ====== TAB: ÖZET (default) ====== -->
-<div id="tab-ozet" class="h-[calc(100vh-48px)] overflow-y-auto bg-gray-950">
+<div id="tab-ozet" class="hidden h-[calc(100vh-48px)] overflow-y-auto bg-gray-950">
     <div class="max-w-7xl mx-auto p-5 space-y-5">
 
         <!-- ── Live camera wall (en üstte, belirgin) ── -->
@@ -402,7 +427,7 @@
                     <div class="flex items-center gap-3">
                         <div class="text-3xl">🚗</div>
                         <div>
-                            <h2 class="font-bold text-base">Kaçak Araç Tespiti <span class="text-[10px] font-mono text-gray-500 font-normal align-middle">Modül 1</span></h2>
+                            <h2 class="font-bold text-base">Kayıtsız Araç Tespiti <span class="text-[10px] font-mono text-gray-500 font-normal align-middle">Modül 1</span></h2>
                             <p class="text-xs text-gray-500">Plaka tanıma · Bariyer kamerası</p>
                         </div>
                     </div>
@@ -416,11 +441,11 @@
                     </div>
                     <div class="bg-green-950/40 border border-green-900/40 rounded-lg p-3 text-center">
                         <div class="text-3xl font-black text-green-400" id="m1-auth">0</div>
-                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Yetkili</div>
+                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Kayıtlı</div>
                     </div>
                     <div class="bg-red-950/40 border border-red-900/40 rounded-lg p-3 text-center">
                         <div class="text-3xl font-black text-red-400" id="m1-unauth">0</div>
-                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Kaçak</div>
+                        <div class="text-[10px] text-gray-500 uppercase tracking-wide">Kayıtsız</div>
                     </div>
                 </div>
 
@@ -541,8 +566,8 @@
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="text-sm font-bold">📈 Son 7 Gün Trendi</h3>
                     <div class="flex gap-3 text-[10px] text-gray-500">
-                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-green-500 rounded-sm"></span> Yetkili</span>
-                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-red-500 rounded-sm"></span> Kaçak</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-green-500 rounded-sm"></span> Kayıtlı</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-red-500 rounded-sm"></span> Kayıtsız</span>
                         <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-amber-500 rounded-sm"></span> İnsan Olayı</span>
                     </div>
                 </div>
@@ -573,7 +598,7 @@
                     </button>
                     <button onclick="tabDegistir('galeri')" class="bg-gray-800 hover:bg-red-900/40 hover:border-red-700 border border-gray-700 p-4 rounded-xl text-sm transition group">
                         <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">📸</div>
-                        <div class="font-semibold">Kaçak Galerisi</div>
+                        <div class="font-semibold">Kayıtsız Galerisi</div>
                         <div class="text-[10px] text-gray-500">Foto kanıtlar</div>
                     </button>
                     <button onclick="tabDegistir('gecmis')" class="bg-gray-800 hover:bg-blue-900/40 hover:border-blue-700 border border-gray-700 p-4 rounded-xl text-sm transition group">
@@ -643,7 +668,7 @@
                 <p class="text-gray-400 font-semibold">Henüz geçiş yok</p>
                 <p class="text-xs text-gray-600 mt-2 max-w-xs mx-auto">
                     Sistem aktif. Bir araç bariyere yaklaştığında plaka burada görünecek
-                    ve yetkili olup olmadığı kontrol edilecek.
+                    ve kayıtlı olup olmadığı kontrol edilecek.
                 </p>
                 <div class="mt-4 inline-flex items-center gap-1.5 text-[11px] text-green-400">
                     <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
@@ -660,7 +685,7 @@
                 <span id="alarm-status-text" class="font-semibold text-sm text-green-400">Normal</span>
             </div>
             <div id="last-alarm-info" class="hidden bg-red-950/30 rounded-lg p-2 border border-red-900/40">
-                <p class="text-xs text-gray-500">Son Kaçak:</p>
+                <p class="text-xs text-gray-500">Son Kayıtsız:</p>
                 <p id="last-alarm-plate-text" class="text-xl font-mono font-bold text-red-400"></p>
                 <p id="last-alarm-time-text" class="text-xs text-gray-500"></p>
             </div>
@@ -669,8 +694,8 @@
             <h3 class="text-xs text-gray-500 uppercase tracking-wider mb-2 font-semibold">📊 Bugün</h3>
             <div class="grid grid-cols-3 gap-2 text-center">
                 <div class="bg-gray-800/50 rounded-lg p-2"><div class="text-xl font-bold" id="stat-total">0</div><div class="text-[10px] text-gray-500">Toplam</div></div>
-                <div class="bg-gray-800/50 rounded-lg p-2"><div class="text-xl font-bold text-green-400" id="stat-authorized">0</div><div class="text-[10px] text-gray-500">Yetkili</div></div>
-                <div class="bg-gray-800/50 rounded-lg p-2"><div class="text-xl font-bold text-red-400" id="stat-unauthorized">0</div><div class="text-[10px] text-gray-500">Kaçak</div></div>
+                <div class="bg-gray-800/50 rounded-lg p-2"><div class="text-xl font-bold text-green-400" id="stat-authorized">0</div><div class="text-[10px] text-gray-500">Kayıtlı</div></div>
+                <div class="bg-gray-800/50 rounded-lg p-2"><div class="text-xl font-bold text-red-400" id="stat-unauthorized">0</div><div class="text-[10px] text-gray-500">Kayıtsız</div></div>
             </div>
             <div class="grid grid-cols-2 gap-2 mt-2 text-center">
                 <div class="bg-gray-800/50 rounded-lg p-2"><div class="text-xl font-bold dir-entry" id="stat-entries">0</div><div class="text-[10px] text-gray-500">Giriş</div></div>
@@ -710,8 +735,8 @@
             <label class="text-xs text-gray-500 block mb-1">Durum</label>
             <select id="f-auth" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
                 <option value="">Tümü</option>
-                <option value="true">Yetkili</option>
-                <option value="false">Kaçak</option>
+                <option value="true">Kayıtlı</option>
+                <option value="false">Kayıtsız</option>
             </select>
         </div>
         <div class="relative">
@@ -722,7 +747,7 @@
             <div id="plate-suggest" class="hidden absolute top-full left-0 mt-1 z-30 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl min-w-[260px] max-h-72 overflow-y-auto"></div>
         </div>
         <button onclick="gecmisAra()" class="bg-cyan-700 hover:bg-cyan-600 text-white text-sm px-4 py-1.5 rounded-lg transition">Filtrele</button>
-        <button onclick="gecmisCSV()" class="bg-gray-800 hover:bg-gray-700 text-white text-sm px-3 py-1.5 rounded-lg transition border border-gray-700" title="Görünen sonuçları CSV olarak indir">⬇ CSV</button>
+        <button onclick="gecmisExcel()" class="bg-emerald-700 hover:bg-emerald-600 text-white text-sm px-3 py-1.5 rounded-lg transition font-semibold" title="Seçili tarih aralığını fotoğraflı, profesyonel Excel olarak indir">📊 Excel İndir</button>
         <span id="gecmis-count" class="text-xs text-gray-500 ml-auto"></span>
     </div>
 
@@ -862,14 +887,14 @@
         <div id="foto-viewport" class="relative bg-black overflow-hidden select-none" style="height:70vh; cursor:zoom-in; touch-action:none">
             <img id="modal-img" class="absolute left-1/2 top-1/2 max-w-none max-h-[70vh]"
                  style="transform:translate(-50%,-50%); transform-origin:center; will-change:transform" alt="" draggable="false">
-            <!-- Zoom kontrolleri -->
-            <div class="absolute bottom-2 right-2 flex items-center gap-1 bg-black/75 rounded-lg p-1" onclick="event.stopPropagation()">
-                <button onclick="fotoZoomBtn(-1)" title="Uzaklaştır" class="w-9 h-9 rounded bg-gray-800 hover:bg-gray-700 text-white text-xl leading-none">−</button>
-                <span id="foto-zoom-lbl" class="text-xs text-gray-100 w-12 text-center font-semibold">%100</span>
-                <button onclick="fotoZoomBtn(1)" title="Yakınlaştır" class="w-9 h-9 rounded bg-gray-800 hover:bg-gray-700 text-white text-xl leading-none">+</button>
-                <button onclick="fotoZoomReset()" title="Sıfırla" class="px-2 h-9 rounded bg-gray-800 hover:bg-gray-700 text-white text-xs">Sıfırla</button>
+            <!-- Zoom kontrolleri (her temada okunur) -->
+            <div class="fz-ctrl absolute bottom-2 right-2 flex items-center gap-1 rounded-lg p-1" onclick="event.stopPropagation()">
+                <button onclick="fotoZoomBtn(-1)" title="Uzaklaştır" class="fz-btn w-9 h-9 text-xl leading-none">−</button>
+                <span id="foto-zoom-lbl" class="fz-lbl text-xs w-12 text-center font-semibold">%100</span>
+                <button onclick="fotoZoomBtn(1)" title="Yakınlaştır" class="fz-btn w-9 h-9 text-xl leading-none">+</button>
+                <button onclick="fotoZoomReset()" title="Sıfırla" class="fz-btn px-2 h-9 text-xs">Sıfırla</button>
             </div>
-            <div id="foto-hint" class="absolute top-2 left-2 text-[11px] text-white/80 bg-black/55 rounded px-2 py-1 pointer-events-none">
+            <div id="foto-hint" class="fz-hint absolute top-2 left-2 text-[11px] rounded px-2 py-1 pointer-events-none">
                 🔍 Fare tekeri / çift tık ile yakınlaştır · sürükleyerek gez
             </div>
         </div>
@@ -884,6 +909,82 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Ayarlar Modal -->
+<div id="ayarlar-modal" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div class="p-4 border-b border-gray-800 flex items-center justify-between sticky top-0 bg-gray-900 z-10">
+      <h3 class="text-lg font-bold flex items-center gap-2">⚙️ Ayarlar</h3>
+      <button onclick="document.getElementById('ayarlar-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-xl px-2">✕</button>
+    </div>
+    <div class="p-4 space-y-6">
+
+      <!-- SES -->
+      <section>
+        <h4 class="text-sm font-bold text-cyan-400 mb-2 flex items-center gap-2">🔊 Kayıtlı Geçiş Sesi</h4>
+        <label class="flex items-center justify-between mb-3">
+          <span class="text-sm">Ses açık</span>
+          <input id="set-beep-on" type="checkbox" onchange="ayarSesKaydet()" class="w-5 h-5 accent-cyan-500">
+        </label>
+        <label class="block text-[11px] text-gray-500 mb-1">Ses türü</label>
+        <select id="set-beep-snd" onchange="ayarSesKaydet(); sesOnizle()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm mb-3"></select>
+        <label class="block text-[11px] text-gray-500 mb-1">Ses seviyesi: <span id="set-beep-vol-lbl">%28</span></label>
+        <input id="set-beep-vol" type="range" min="0" max="100" value="28" oninput="ayarSesSeviyeGoster()" onchange="ayarSesKaydet()" class="w-full accent-cyan-500 mb-3">
+        <button onclick="sesOnizle()" class="text-sm bg-cyan-700 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg">▶ Dinle</button>
+      </section>
+
+      <!-- HIRSIZLIK ALARM SESİ -->
+      <section class="border-t border-gray-800 pt-4">
+        <h4 class="text-sm font-bold text-amber-400 mb-2 flex items-center gap-2">🚨 Hırsızlık Alarm Sesi</h4>
+        <p class="text-[11px] text-gray-500 mb-2">Kaçak/hırsızlık tespitinde çalar. Güçlü, dikkat çekici sesler.</p>
+        <label class="block text-[11px] text-gray-500 mb-1">Ses türü</label>
+        <select id="set-alarm-snd" onchange="ayarAlarmKaydet(); alarmSesOnizle()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm mb-3"></select>
+        <label class="block text-[11px] text-gray-500 mb-1">Ses seviyesi: <span id="set-alarm-vol-lbl">%90</span></label>
+        <input id="set-alarm-vol" type="range" min="0" max="100" value="90" oninput="ayarAlarmSeviyeGoster()" onchange="ayarAlarmKaydet()" class="w-full accent-amber-500 mb-3">
+        <button onclick="alarmSesOnizle()" class="text-sm bg-amber-700 hover:bg-amber-600 text-white px-4 py-2 rounded-lg">▶ Dinle</button>
+      </section>
+
+      <!-- KAYITSIZ ARAÇ SİRENİ -->
+      <section class="border-t border-gray-800 pt-4">
+        <h4 class="text-sm font-bold text-red-400 mb-2 flex items-center gap-2">🚗 Kayıtsız Araç Sireni</h4>
+        <p class="text-[11px] text-gray-500 mb-2">Bariyerde kayıtsız araç görülünce çalar (susturana/süre bitene kadar).</p>
+        <label class="block text-[11px] text-gray-500 mb-1">Ses türü</label>
+        <select id="set-veh-snd" onchange="ayarVehKaydet(); vehSesOnizle()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm mb-3"></select>
+        <label class="block text-[11px] text-gray-500 mb-1">Ses seviyesi: <span id="set-veh-vol-lbl">%90</span></label>
+        <input id="set-veh-vol" type="range" min="0" max="100" value="90" oninput="ayarVehSeviyeGoster()" onchange="ayarVehKaydet()" class="w-full accent-red-500 mb-3">
+        <button onclick="vehSesOnizle()" class="text-sm bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg">▶ Dinle (1.5 sn)</button>
+      </section>
+
+      <!-- FOTO SAKLAMA -->
+      <section class="border-t border-gray-800 pt-4">
+        <h4 class="text-sm font-bold text-emerald-400 mb-2 flex items-center gap-2">🗑️ Yakalanan Fotoğrafları Otomatik Silme</h4>
+        <p class="text-[11px] text-gray-500 mb-2">Bu süreden eski plaka ekran görüntüleri ve hırsızlık klipleri otomatik silinir.</p>
+        <div class="flex items-center gap-2 flex-wrap">
+          <input id="set-retention" type="number" min="1" max="3650" class="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+          <span class="text-sm text-gray-400">gün</span>
+          <button onclick="ayarRetentionKaydet()" class="text-sm bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg">Kaydet</button>
+          <span id="set-retention-msg" class="text-xs"></span>
+        </div>
+      </section>
+
+      <!-- HIRSIZLIK ALARM MODU -->
+      <section id="set-shadow-wrap" class="border-t border-gray-800 pt-4">
+        <h4 class="text-sm font-bold text-amber-400 mb-2 flex items-center gap-2">🚨 Hırsızlık Alarm Modu</h4>
+        <div class="flex items-center justify-between mb-2 gap-3">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold">Deneme (shadow) modu</div>
+            <p class="text-[11px] text-gray-500 mt-0.5">Açık: olaylar kaydedilir ama <b>siren/alarm çalmaz</b>. Kapalı: tespit anında <b>alarm çalar</b>.</p>
+          </div>
+          <label class="inline-flex items-center cursor-pointer shrink-0">
+            <input id="set-shadow" type="checkbox" onchange="ayarShadowKaydet(this.checked)" class="sr-only peer">
+            <div class="relative w-12 h-6 bg-gray-700 rounded-full peer-checked:bg-amber-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-6"></div>
+          </label>
+        </div>
+        <div id="set-shadow-state" class="text-xs px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700">—</div>
+      </section>
+    </div>
+  </div>
 </div>
 
 <!-- Prominent intrusion alarm overlay (live intruder detection) -->
@@ -990,13 +1091,19 @@ function tabDegistir(tab) {
     if (tab === 'ozet' && typeof ozetYukle === 'function') ozetYukle();
     if (tab === 'canli' && !gecisler.length) sonGecisleriYukle();
     if (tab === 'gecmis' && !document.getElementById('f-start').value) {
-        document.getElementById('f-start').value = new Date().toISOString().slice(0,10);
-        document.getElementById('f-end').value = new Date().toISOString().slice(0,10);
+        // Açılışta varsayılan: BUGÜN (yerel tarih).
+        const _fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const _t = _fmt(new Date());
+        document.getElementById('f-start').value = _t;
+        document.getElementById('f-end').value = _t;
         gecmisAra();
     }
     if (tab === 'galeri' && !document.getElementById('g-start').value) {
-        document.getElementById('g-start').value = new Date().toISOString().slice(0,10);
-        document.getElementById('g-end').value = new Date().toISOString().slice(0,10);
+        // Açılışta varsayılan: BUGÜN (yerel tarih).
+        const _fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const _t = _fmt(new Date());
+        document.getElementById('g-start').value = _t;
+        document.getElementById('g-end').value = _t;
         galeriYukle();
     }
     if (tab === 'yonetim') yonetimYukle();
@@ -1019,10 +1126,35 @@ function baglan() {
     ws.onclose = () => { wsDurum('kopuk'); reconn++; setTimeout(baglan, Math.min(3000*reconn, 30000)); };
     ws.onerror = () => ws.close();
 }
+let _wsLostTimer = null;
 function wsDurum(d) {
     const dot = document.getElementById('ws-dot'), txt = document.getElementById('ws-status');
-    if (d === 'bagli') { dot.className = 'ws-dot ok'; txt.textContent = 'Bağlı'; }
-    else { dot.className = 'ws-dot err'; txt.textContent = 'Kopuk'; }
+    if (d === 'bagli') {
+        dot.className = 'ws-dot ok'; txt.textContent = 'Bağlı';
+        if (_wsLostTimer) { clearTimeout(_wsLostTimer); _wsLostTimer = null; }
+        _baglantiBanti(false);
+    } else {
+        dot.className = 'ws-dot err'; txt.textContent = 'Kopuk';
+        // 5 sn sürerse belirgin bant göster — normal reconnect blip'lerinde çıkmaz.
+        if (!_wsLostTimer) _wsLostTimer = setTimeout(() => _baglantiBanti(true), 5000);
+    }
+}
+// Sunucu bağlantısı uzun süre koptuysa nöbetçinin donmuş "canlı" ekrana
+// aldanmaması için tepede belirgin bir uyarı bandı göster.
+function _baglantiBanti(goster) {
+    let b = document.getElementById('conn-lost-banner');
+    if (goster) {
+        if (!b) {
+            b = document.createElement('div');
+            b.id = 'conn-lost-banner';
+            b.className = 'fixed top-0 inset-x-0 z-[70] bg-amber-600 text-white text-center py-2.5 px-4 text-sm font-bold shadow-lg';
+            b.innerHTML = '⚠ Sunucu bağlantısı koptu — yeniden bağlanılıyor… <span class="font-normal opacity-90">(canlı görüntü duraklamış olabilir)</span>';
+            document.body.appendChild(b);
+        }
+        b.style.display = 'block';
+    } else if (b) {
+        b.style.display = 'none';
+    }
 }
 
 function mesajIsle(m) {
@@ -1483,6 +1615,26 @@ async function sonGecisleriYukle() {
         gecisleriCiz();
     } catch (e) {}
 }
+// Nöbetçi güncelliği bir bakışta görsün: "az önce / 3 dk önce / 2 sa önce".
+function goreceliZaman(iso) {
+    const t = new Date(iso).getTime();
+    if (!t) return '';
+    const s = Math.max(0, (Date.now() - t) / 1000);
+    if (s < 45)    return 'az önce';
+    if (s < 90)    return '1 dk önce';
+    if (s < 3600)  return Math.round(s / 60) + ' dk önce';
+    if (s < 5400)  return '1 sa önce';
+    if (s < 86400) return Math.round(s / 3600) + ' sa önce';
+    return Math.round(s / 86400) + ' gün önce';
+}
+// Feed'i yeniden çizmeden yalnızca zaman etiketlerini tazele (animasyon/flicker yok).
+setInterval(() => {
+    document.querySelectorAll('#passages-list .rel-time').forEach(el => {
+        const ts = el.getAttribute('data-ts');
+        if (ts) el.textContent = goreceliZaman(ts);
+    });
+}, 30000);
+
 function gecisleriCiz() {
     const el = document.getElementById('passages-list');
     document.getElementById('passage-count').textContent = gecisler.length;
@@ -1491,7 +1643,7 @@ function gecisleriCiz() {
         const saat = new Date(g.detected_at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
         const y = g.is_authorized;
         const bg = y ? 'bg-gray-800/40 border-gray-700/50' : 'bg-red-950/25 border-red-900/40';
-        const st = y ? '<span class="text-green-400 text-xs font-semibold">✓ Yetkili</span>' : '<span class="text-red-400 text-xs font-bold">✗ KAÇAK</span>';
+        const st = y ? '<span class="text-green-400 text-xs font-semibold">✓ Kayıtlı</span>' : '<span class="text-red-400 text-xs font-bold">✗ KAYITSIZ</span>';
         const anim = i === 0 ? 'card-enter' : '';
         const photo = g.screenshot_url
             ? `<img src="${g.screenshot_url}" class="w-32 h-24 object-cover rounded-lg border-2 ${y?'border-green-500':'border-red-500'} flex-shrink-0 cursor-pointer" onclick="fotoAc('${g.screenshot_url}','${g.plate}','${saat}','${g.direction||''}')">`
@@ -1502,7 +1654,7 @@ function gecisleriCiz() {
                 <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-mono font-black text-2xl tracking-wide">${g.plate}</span>${st} ${dirBadge(g.direction)}
                 </div>
-                <div class="text-xs text-gray-500 mt-1">🕐 ${saat} ${g.owner_name?'· '+g.owner_name:''} · %${g.confidence?.toFixed(0)||'?'}</div>
+                <div class="text-xs text-gray-500 mt-1"><span class="rel-time text-cyan-400/90 font-semibold" data-ts="${g.detected_at}">${goreceliZaman(g.detected_at)}</span> · 🕐 ${saat} ${g.owner_name?'· '+g.owner_name:''} · %${g.confidence?.toFixed(0)||'?'}</div>
             </div>
         </div>`;
     }).join('');
@@ -1540,7 +1692,7 @@ function alarmGoster(v) {
     // Start looping siren + cross-tab attention helpers
     sirenBaslat();
     titleFlash(`🚨 KAÇAK: ${v.plate}`);
-    sistemBildirimi('Kaçak Geçiş!', `${v.plate} · ${dirText(v.direction)}`);
+    sistemBildirimi('Kayıtsız Geçiş!', `${v.plate} · ${dirText(v.direction)}`);
 
     // Ayarlanan alarm ötme süresi kadar çal, sonra otomatik sustur
     // (yeni alarm gelirse sayaç sıfırlanır).
@@ -1652,54 +1804,67 @@ function sesDurumKontrol() { sesOtomatikAc(); }
     }, { once: true, passive: true })
 );
 
-// --- Continuous siren (wail-style frequency sweep) ---
-function sirenBaslat() {
+// --- Kayıtsız araç sireni (Ayarlar'dan seçilebilir, GG_ALARM_SOUNDS listesi) ---
+// Seçili alarm sesini döngüyle çalar (susturulana kadar). Varsayılan: Siren.
+let sirenLoopTimer = null;
+function ggVehSnd() { try { return localStorage.getItem('gg-vehsiren-snd') || 'siren'; } catch (e) { return 'siren'; } }
+function ggVehVol() {
+    let v = 0.9; try { const s = localStorage.getItem('gg-vehsiren-vol'); if (s !== null) v = parseFloat(s); } catch (e) {}
+    return (isNaN(v) ? 0.9 : Math.max(0, Math.min(1, v)));
+}
+function sirenBaslat(sndKey, vol) {
     sirenDurdur(); // cleanup any previous
     try {
         sirenCtx = new (window.AudioContext || window.webkitAudioContext)();
-        // Some browsers suspend the context when the tab loses focus.
-        // Calling resume() on visibilitychange keeps the alarm audible.
         if (sirenCtx.state === 'suspended') sirenCtx.resume();
-
-        // Main tone oscillator
-        sirenOsc = sirenCtx.createOscillator();
-        sirenOsc.type = 'sawtooth';
-        sirenOsc.frequency.value = 600;
-
-        // Volume gain
-        sirenGain = sirenCtx.createGain();
-        sirenGain.gain.value = 0.15; // keep moderate, not deafening
-
-        // LFO for frequency modulation (classic police siren wail)
-        sirenLfo = sirenCtx.createOscillator();
-        sirenLfo.type = 'sine';
-        sirenLfo.frequency.value = 1.5; // 1.5 Hz wail speed
-
-        sirenLfoGain = sirenCtx.createGain();
-        sirenLfoGain.gain.value = 300; // frequency swing +/- 300 Hz
-
-        // Connect: LFO → LFO gain → oscillator frequency
-        sirenLfo.connect(sirenLfoGain);
-        sirenLfoGain.connect(sirenOsc.frequency);
-
-        // Connect: oscillator → gain → speakers
-        sirenOsc.connect(sirenGain);
-        sirenGain.connect(sirenCtx.destination);
-
-        sirenOsc.start();
-        sirenLfo.start();
+        const snd = GG_ALARM_SOUNDS[sndKey || ggVehSnd()] || GG_ALARM_SOUNDS.siren;
+        const v = (vol != null ? vol : ggVehVol());
+        if (snd.sweep) {
+            // Sürekli inip-çıkan siren (wail): tek osilatör + LFO, susturulana kadar.
+            const master = sirenCtx.createGain();
+            const gv = snd.gain * Math.max(0, Math.min(1, v));
+            master.gain.setValueAtTime(0.0001, sirenCtx.currentTime);
+            master.gain.exponentialRampToValueAtTime(gv, sirenCtx.currentTime + 0.04);
+            master.connect(sirenCtx.destination);
+            const sw = snd.sweep;
+            const osc = sirenCtx.createOscillator(); osc.type = sw.type; osc.frequency.value = sw.carrier;
+            const lfo = sirenCtx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = sw.lfoHz;
+            const lfoGain = sirenCtx.createGain(); lfoGain.gain.value = sw.depth;
+            lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+            osc.connect(master); osc.start(); lfo.start();
+            return;   // interval yok; sirenDurdur ctx'i kapatınca durur
+        }
+        const cikar = () => {
+            if (!sirenCtx) return;
+            const master = sirenCtx.createGain();
+            master.gain.value = snd.gain * Math.max(0, Math.min(1, v));
+            master.connect(sirenCtx.destination);
+            const t0 = sirenCtx.currentTime;
+            snd.cyc.forEach(([f, dt, nd]) => {
+                const osc = sirenCtx.createOscillator();
+                const g = sirenCtx.createGain();
+                osc.type = snd.type;
+                osc.frequency.value = f;
+                const s = t0 + dt;
+                g.gain.setValueAtTime(0.0001, s);
+                g.gain.exponentialRampToValueAtTime(1.0, s + 0.008);
+                g.gain.exponentialRampToValueAtTime(0.0001, s + nd);
+                osc.connect(g).connect(master);
+                osc.start(s);
+                osc.stop(s + nd + 0.05);
+            });
+        };
+        cikar();
+        sirenLoopTimer = setInterval(cikar, snd.period * 1000);
     } catch (e) {
         console.warn('Siren start failed:', e);
     }
 }
 
 function sirenDurdur() {
-    try { if (sirenOsc) { sirenOsc.stop(); sirenOsc.disconnect(); } } catch(e) {}
-    try { if (sirenLfo) { sirenLfo.stop(); sirenLfo.disconnect(); } } catch(e) {}
-    try { if (sirenGain) sirenGain.disconnect(); } catch(e) {}
-    try { if (sirenLfoGain) sirenLfoGain.disconnect(); } catch(e) {}
+    if (sirenLoopTimer) { clearInterval(sirenLoopTimer); sirenLoopTimer = null; }
     try { if (sirenCtx && sirenCtx.state !== 'closed') sirenCtx.close(); } catch(e) {}
-    sirenOsc = sirenLfo = sirenGain = sirenLfoGain = sirenCtx = null;
+    sirenCtx = sirenOsc = sirenLfo = sirenGain = sirenLfoGain = null;
     titleFlashStop();
 }
 
@@ -1708,33 +1873,71 @@ function sirenDurdur() {
 // pulse (triangle, high C6/E6) that repeats for the full duration so it's
 // unmistakably "kaçak insan" and lasts long enough to draw attention.
 let _intrCtx = null, _intrStopTimer = null;
-function intrusionAlarmTone(durationSec = 6) {
+// --- Hırsızlık alarm sesleri (GÜÇLÜ, seçilebilir) ---
+// Her ses bir "cyc" (nota döngüsü) + period ile tanımlı; süre boyunca tekrar eder.
+// gain yüksek (0.3-0.5) + sawtooth/square/triangle → net, dikkat çekici.
+const GG_ALARM_SOUNDS = {
+    bell:   { name: 'Zil (güçlü)',       type: 'triangle', gain: 0.50, period: 0.55, cyc: [[1568, 0, 0.5], [2093, 0, 0.5]] },
+    siren:  { name: 'Siren (wee-woo)',   type: 'sawtooth', gain: 0.42, period: 0.80, cyc: [[900, 0, 0.4], [680, 0.4, 0.4]] },
+    klaxon: { name: 'Klakson (sert)',    type: 'square',   gain: 0.38, period: 0.30, cyc: [[520, 0, 0.2]] },
+    warble: { name: 'Hızlı ötüş',        type: 'square',   gain: 0.40, period: 0.24, cyc: [[1047, 0, 0.11], [1319, 0.12, 0.11]] },
+    pulse:  { name: 'Klasik bi-bip (eski, güçlü)', type: 'triangle', gain: 0.42, period: 0.50, cyc: [[1047, 0, 0.16], [1319, 0.25, 0.16]] },
+    dingdong:{ name: 'Din-don (güçlü)',   type: 'triangle', gain: 0.46, period: 0.60, cyc: [[1319, 0, 0.28], [988, 0.28, 0.30]] },
+    // Sürekli inip-çıkan siren (sweep/wail) — eski orijinal alarm sesi + benzerleri
+    wail:    { name: 'Klasik siren (wail) — eski', gain: 0.30, sweep: { carrier: 600, type: 'sawtooth', lfoHz: 1.5, depth: 300 } },
+    yelp:    { name: 'Yelp (hızlı siren)',          gain: 0.30, sweep: { carrier: 800, type: 'sawtooth', lfoHz: 6.0, depth: 350 } },
+    airraid: { name: 'Hava saldırısı (yavaş wail)', gain: 0.32, sweep: { carrier: 480, type: 'sawtooth', lfoHz: 0.45, depth: 420 } },
+};
+function ggAlarmSnd() { try { return localStorage.getItem('gg-alarm-snd') || 'bell'; } catch (e) { return 'bell'; } }
+function ggAlarmVol() {
+    let v = 0.9; try { const s = localStorage.getItem('gg-alarm-vol'); if (s !== null) v = parseFloat(s); } catch (e) {}
+    return (isNaN(v) ? 0.9 : Math.max(0, Math.min(1, v)));
+}
+function intrusionAlarmTone(durationSec = 6, sndKey, vol) {
     intrusionAlarmDurdur();
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         if (ctx.state === 'suspended') ctx.resume();
         _intrCtx = ctx;
+        const snd = GG_ALARM_SOUNDS[sndKey || ggAlarmSnd()] || GG_ALARM_SOUNDS.bell;
+        const v = (vol != null ? vol : ggAlarmVol());
         const master = ctx.createGain();
-        master.gain.value = 0.16;               // moderate, not deafening
+        const gv = snd.gain * Math.max(0, Math.min(1, v));
         master.connect(ctx.destination);
         const t0 = ctx.currentTime;
-        const beep = 0.16, gap = 0.10;
-        const period = (beep + gap) * 2;        // one "bi-bip" cycle
-        const cycles = Math.max(1, Math.ceil(durationSec / period));
-        for (let i = 0; i < cycles; i++) {
-            [1047, 1319].forEach((freq, j) => {  // C6 ↔ E6
-                const start = t0 + i * period + j * (beep + gap);
-                const osc = ctx.createOscillator();
-                const g = ctx.createGain();
-                osc.type = 'triangle';           // thinner timbre than sawtooth
-                osc.frequency.value = freq;
-                g.gain.setValueAtTime(0.0001, start);
-                g.gain.exponentialRampToValueAtTime(1.0, start + 0.008);
-                g.gain.exponentialRampToValueAtTime(0.0001, start + beep);
-                osc.connect(g).connect(master);
-                osc.start(start);
-                osc.stop(start + beep + 0.03);
-            });
+        if (snd.sweep) {
+            // Sürekli inip-çıkan siren: taşıyıcı osc + LFO ile frekans modülasyonu
+            const sw = snd.sweep;
+            master.gain.setValueAtTime(0.0001, t0);
+            master.gain.exponentialRampToValueAtTime(gv, t0 + 0.03);
+            master.gain.setValueAtTime(gv, t0 + durationSec - 0.05);
+            master.gain.exponentialRampToValueAtTime(0.0001, t0 + durationSec);
+            const osc = ctx.createOscillator(); osc.type = sw.type; osc.frequency.value = sw.carrier;
+            const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = sw.lfoHz;
+            const lfoGain = ctx.createGain(); lfoGain.gain.value = sw.depth;
+            lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+            osc.connect(master);
+            osc.start(t0); lfo.start(t0);
+            osc.stop(t0 + durationSec); lfo.stop(t0 + durationSec);
+        } else {
+            master.gain.value = gv;
+            const cycles = Math.max(1, Math.ceil(durationSec / snd.period));
+            for (let i = 0; i < cycles; i++) {
+                const base = t0 + i * snd.period;
+                snd.cyc.forEach(([f, dt, nd]) => {
+                    const osc = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    osc.type = snd.type;
+                    osc.frequency.value = f;
+                    const s = base + dt;
+                    g.gain.setValueAtTime(0.0001, s);
+                    g.gain.exponentialRampToValueAtTime(1.0, s + 0.008);
+                    g.gain.exponentialRampToValueAtTime(0.0001, s + nd);
+                    osc.connect(g).connect(master);
+                    osc.start(s);
+                    osc.stop(s + nd + 0.03);
+                });
+            }
         }
         _intrStopTimer = setTimeout(intrusionAlarmDurdur, durationSec * 1000 + 300);
     } catch (e) { console.warn('intrusion tone failed', e); }
@@ -1745,34 +1948,192 @@ function intrusionAlarmDurdur() {
     _intrCtx = null;
 }
 
-// --- Yetkili araç geçişi: yumuşak, olumlu onay bipi ---
-// Alarm sireni ile KARIŞMAZ: yükselen iki nota (G5→C6), sine tını, kısa ve
-// alçak sesli — "geçiş onaylandı" hissi. Kalıcı prime context'i kullanır ki
-// anında çalsın (yeni AudioContext açmaz).
-function yetkiliBip() {
+// --- Kayıtlı araç geçişi: güçlü, olumlu onay sesi (ayarlanabilir) ---
+// Alarm sireni ile KARIŞMAZ. Ses türü + seviyesi Ayarlar'dan seçilir
+// (localStorage). Kalıcı prime context'i kullanır → anında çalar.
+const GG_SOUNDS = {
+    chime: { name: 'Yükselen çan (Do-Mi-Sol)', type: 'sine',
+             notes: [[523.25, 0.00], [659.25, 0.08], [783.99, 0.16]], dur: 0.17 },
+    ding:  { name: 'Çift ding (Sol-Do)',        type: 'sine',
+             notes: [[784.00, 0.00], [1046.50, 0.09]], dur: 0.15 },
+    bell:  { name: 'Zil',                        type: 'triangle',
+             notes: [[987.77, 0.00]], dur: 0.38 },
+    marimba:{ name: 'Marimba (arpej)',           type: 'triangle',
+             notes: [[523.25, 0.00], [659.25, 0.07], [783.99, 0.14], [1046.50, 0.21]], dur: 0.13 },
+    soft:  { name: 'Yumuşak (Mi-La)',            type: 'sine',
+             notes: [[659.25, 0.00], [880.00, 0.10]], dur: 0.16 },
+    // ── Güçlü / tok sesler (sawtooth/square = daha gür duyulur, dikkat çeker) ──
+    fanfare: { name: 'Fanfar (güçlü)',           type: 'sawtooth',
+             notes: [[392.00, 0.00], [523.25, 0.10], [659.25, 0.20], [783.99, 0.30]], dur: 0.24 },
+    beepbeep:{ name: 'Çift bip (güçlü)',          type: 'square',
+             notes: [[988.00, 0.00], [988.00, 0.15]], dur: 0.12 },
+    horn:  { name: 'Boru (güçlü)',                type: 'sawtooth',
+             notes: [[440.00, 0.00], [587.33, 0.13]], dur: 0.30 },
+    triad: { name: 'Akor (net, dolgun)',          type: 'square',
+             notes: [[523.25, 0.00], [659.25, 0.00], [783.99, 0.00], [1046.50, 0.02]], dur: 0.26 },
+    tada:  { name: 'Ta-daa (kutlama)',            type: 'sawtooth',
+             notes: [[523.25, 0.00], [783.99, 0.12], [1046.50, 0.12]], dur: 0.30 },
+};
+function ggBeepEnabled() { try { return localStorage.getItem('gg-beep-on') !== '0'; } catch (e) { return true; } }
+function ggBeepSnd() { try { return localStorage.getItem('gg-beep-snd') || 'chime'; } catch (e) { return 'chime'; } }
+function ggBeepVol() {
+    let v = 0.28; try { const s = localStorage.getItem('gg-beep-vol'); if (s !== null) v = parseFloat(s); } catch (e) {}
+    return (isNaN(v) ? 0.28 : Math.max(0, Math.min(1, v)));
+}
+function yetkiliBipCal(sndKey, vol) {
     try {
         const ctx = _ensurePrimeCtx();
         if (!ctx) return;
         if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+        const snd = GG_SOUNDS[sndKey] || GG_SOUNDS.chime;
         const master = ctx.createGain();
-        master.gain.value = 0.10;                 // yumuşak; rahatsız etmez
+        master.gain.value = Math.max(0, Math.min(1, vol));   // güçlü varsayılan (0.28)
         master.connect(ctx.destination);
         const t0 = ctx.currentTime;
-        const dur = 0.13;
-        [{ f: 784.0, t: 0.00 }, { f: 1046.5, t: 0.085 }].forEach(n => {  // G5 → C6 (yükselen)
+        snd.notes.forEach(([f, dt]) => {
             const osc = ctx.createOscillator();
             const g = ctx.createGain();
-            osc.type = 'sine';                    // en yumuşak tını, tık sesi yok
-            osc.frequency.value = n.f;
-            const s = t0 + n.t;
+            osc.type = snd.type;
+            osc.frequency.value = f;
+            const s = t0 + dt;
             g.gain.setValueAtTime(0.0001, s);
-            g.gain.exponentialRampToValueAtTime(1.0, s + 0.018);   // yumuşak giriş
-            g.gain.exponentialRampToValueAtTime(0.0001, s + dur);  // yumuşak sönüş
+            g.gain.exponentialRampToValueAtTime(1.0, s + 0.015);
+            g.gain.exponentialRampToValueAtTime(0.0001, s + snd.dur);
             osc.connect(g).connect(master);
             osc.start(s);
-            osc.stop(s + dur + 0.02);
+            osc.stop(s + snd.dur + 0.03);
         });
     } catch (e) {}
+}
+function yetkiliBip() { if (ggBeepEnabled()) yetkiliBipCal(ggBeepSnd(), ggBeepVol()); }
+
+// ============================================================
+//  AYARLAR (ses seçimi/seviye · foto silme süresi · alarm modu)
+// ============================================================
+function ayarlarAc() {
+    document.getElementById('user-menu')?.classList.add('hidden');
+    const sel = document.getElementById('set-beep-snd');
+    if (sel && !sel.dataset.filled) {
+        sel.innerHTML = Object.entries(GG_SOUNDS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
+        sel.dataset.filled = '1';
+    }
+    document.getElementById('set-beep-on').checked = ggBeepEnabled();
+    sel.value = ggBeepSnd();
+    const vol = Math.round(ggBeepVol() * 100);
+    document.getElementById('set-beep-vol').value = vol;
+    document.getElementById('set-beep-vol-lbl').textContent = '%' + vol;
+    // Hırsızlık alarm sesi seçicisi
+    const asel = document.getElementById('set-alarm-snd');
+    if (asel && !asel.dataset.filled) {
+        asel.innerHTML = Object.entries(GG_ALARM_SOUNDS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
+        asel.dataset.filled = '1';
+    }
+    asel.value = ggAlarmSnd();
+    const avol = Math.round(ggAlarmVol() * 100);
+    document.getElementById('set-alarm-vol').value = avol;
+    document.getElementById('set-alarm-vol-lbl').textContent = '%' + avol;
+    // Kayıtsız araç sireni seçicisi (aynı alarm listesi)
+    const vsel = document.getElementById('set-veh-snd');
+    if (vsel && !vsel.dataset.filled) {
+        vsel.innerHTML = Object.entries(GG_ALARM_SOUNDS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
+        vsel.dataset.filled = '1';
+    }
+    vsel.value = ggVehSnd();
+    const vvol = Math.round(ggVehVol() * 100);
+    document.getElementById('set-veh-vol').value = vvol;
+    document.getElementById('set-veh-vol-lbl').textContent = '%' + vvol;
+    ayarlarSunucuYukle();
+    document.getElementById('ayarlar-modal').classList.remove('hidden');
+}
+function ayarAlarmSeviyeGoster() {
+    document.getElementById('set-alarm-vol-lbl').textContent = '%' + document.getElementById('set-alarm-vol').value;
+}
+function ayarAlarmKaydet() {
+    try {
+        localStorage.setItem('gg-alarm-snd', document.getElementById('set-alarm-snd').value);
+        localStorage.setItem('gg-alarm-vol', (parseInt(document.getElementById('set-alarm-vol').value) / 100).toFixed(2));
+    } catch (e) {}
+}
+function alarmSesOnizle() {
+    intrusionAlarmTone(1.4, document.getElementById('set-alarm-snd').value,
+                       parseInt(document.getElementById('set-alarm-vol').value) / 100);
+}
+function ayarVehSeviyeGoster() {
+    document.getElementById('set-veh-vol-lbl').textContent = '%' + document.getElementById('set-veh-vol').value;
+}
+function ayarVehKaydet() {
+    try {
+        localStorage.setItem('gg-vehsiren-snd', document.getElementById('set-veh-snd').value);
+        localStorage.setItem('gg-vehsiren-vol', (parseInt(document.getElementById('set-veh-vol').value) / 100).toFixed(2));
+    } catch (e) {}
+}
+function vehSesOnizle() {
+    sirenBaslat(document.getElementById('set-veh-snd').value, parseInt(document.getElementById('set-veh-vol').value) / 100);
+    setTimeout(sirenDurdur, 1500);   // önizleme: 1.5 sn çal, sonra durdur
+}
+function ayarSesSeviyeGoster() {
+    document.getElementById('set-beep-vol-lbl').textContent = '%' + document.getElementById('set-beep-vol').value;
+}
+function ayarSesKaydet() {
+    try {
+        localStorage.setItem('gg-beep-on', document.getElementById('set-beep-on').checked ? '1' : '0');
+        localStorage.setItem('gg-beep-snd', document.getElementById('set-beep-snd').value);
+        localStorage.setItem('gg-beep-vol', (parseInt(document.getElementById('set-beep-vol').value) / 100).toFixed(2));
+    } catch (e) {}
+}
+function sesOnizle() {
+    yetkiliBipCal(document.getElementById('set-beep-snd').value,
+                  parseInt(document.getElementById('set-beep-vol').value) / 100);
+}
+async function ayarlarSunucuYukle() {
+    try {
+        const d = await (await fetch('/api/settings')).json();
+        document.getElementById('set-retention').value = d.retention_days ?? 14;
+        const wrap = document.getElementById('set-shadow-wrap');
+        if (d.intrusion_enabled) {
+            wrap.classList.remove('hidden');
+            document.getElementById('set-shadow').checked = !!d.intrusion_shadow_mode;
+            ayarShadowDurumGoster(d.intrusion_shadow_mode, d.intrusion_alarm_enabled);
+        } else {
+            wrap.classList.add('hidden');
+        }
+    } catch (e) {}
+}
+function ayarShadowDurumGoster(shadow, alarmEnabled) {
+    const el = document.getElementById('set-shadow-state');
+    if (shadow) {
+        el.innerHTML = '🟡 <b>Deneme modu AÇIK</b> — olaylar kaydedilir, alarm/siren çalmaz.';
+        el.className = 'text-xs px-3 py-2 rounded-lg bg-amber-950/40 border border-amber-900/50 text-amber-300';
+    } else if (!alarmEnabled) {
+        el.innerHTML = '🔇 Deneme kapalı ama <b>alarm anahtarı KAPALI</b>. Özet/Yönetim\'den "Hırsızlık Alarmı"nı aç.';
+        el.className = 'text-xs px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-300';
+    } else {
+        el.innerHTML = '🟢 <b>Canlı</b> — tespit anında alarm çalar.';
+        el.className = 'text-xs px-3 py-2 rounded-lg bg-green-950/40 border border-green-900/50 text-green-400';
+    }
+}
+async function ayarShadowKaydet(checked) {
+    try {
+        const r = await fetch('/api/intrusion/shadow-mode', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shadow_mode: checked }),
+        });
+        if (r.ok) { bildirim(checked ? 'Deneme modu açıldı (alarm çalmaz)' : 'Canlı mod: alarm çalacak', 'basari'); ayarlarSunucuYukle(); }
+        else bildirim('Mod değiştirilemedi', 'hata');
+    } catch (e) { bildirim('Ağ hatası', 'hata'); }
+}
+async function ayarRetentionKaydet() {
+    const days = parseInt(document.getElementById('set-retention').value);
+    const msg = document.getElementById('set-retention-msg');
+    try {
+        const r = await fetch('/api/settings/retention', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ days }),
+        });
+        if (r.ok) { msg.textContent = '✓ kaydedildi'; msg.className = 'text-xs text-green-400'; }
+        else { msg.textContent = 'hata'; msg.className = 'text-xs text-red-400'; }
+    } catch (e) { msg.textContent = 'ağ hatası'; msg.className = 'text-xs text-red-400'; }
+    setTimeout(() => { msg.textContent = ''; }, 3000);
 }
 
 // --- Prominent intrusion overlay: names the camera, shows it LIVE + the
@@ -1896,7 +2257,7 @@ async function gecmisAra(sayfa) {
             const t = new Date(r.detected_at).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
             const y = r.is_authorized;
             const bg = y ? '' : 'bg-red-950/20';
-            const st = y ? '<span class="text-green-400">✓ Yetkili</span>' : '<span class="text-red-400 font-bold">✗ Kaçak</span>';
+            const st = y ? '<span class="text-green-400">✓ Kayıtlı</span>' : '<span class="text-red-400 font-bold">✗ Kayıtsız</span>';
             const foto = r.screenshot_path ? `<img src="${r.screenshot_path}" class="w-12 h-8 object-cover rounded cursor-pointer border border-gray-700" onclick="fotoAc('${r.screenshot_path}','${r.plate}','${t}','${r.direction||''}')">` : '<span class="text-gray-600">—</span>';
             return `<tr class="${bg} border-b border-gray-800/50 hover:bg-gray-800/30">
                 <td class="px-3 py-2"><input type="checkbox" class="bulk-cb" data-id="${r.id}" onchange="bulkSecimGuncelle()"></td>
@@ -1998,8 +2359,7 @@ function plakaSec(plate) {
     gecmisAra(0);
 }
 
-async function gecmisCSV() {
-    // Export current filter as CSV
+function _gecmisFiltreParam() {
     const p = new URLSearchParams();
     const s = document.getElementById('f-start').value, e = document.getElementById('f-end').value;
     if (s) p.set('start', s);
@@ -2007,7 +2367,21 @@ async function gecmisCSV() {
     const d = document.getElementById('f-dir').value; if (d) p.set('direction', d);
     const a = document.getElementById('f-auth').value; if (a) p.set('authorized', a);
     const pl = document.getElementById('f-plate').value.trim(); if (pl) p.set('plate', pl);
-    window.location.href = '/api/passages/export.csv?' + p.toString();
+    return p.toString();
+}
+// İndirme navigasyonu Bearer header taşımaz → auth-client'ın ?token= ekleyen
+// yardımcısını kullan (aksi halde "Token eksik" hatası — CSV böyle patlıyordu).
+function _authedIndir(url) {
+    window.location.href = (window.ggAuthedUrl ? window.ggAuthedUrl(url) : url);
+}
+function gecmisCSV() {
+    const q = _gecmisFiltreParam();
+    _authedIndir('/api/passages/export.csv' + (q ? '?' + q : ''));
+}
+function gecmisExcel() {
+    const q = _gecmisFiltreParam();
+    bildirim('Excel hazırlanıyor (fotoğraflar gömülüyor)…', 'bilgi');
+    _authedIndir('/api/passages/export.xlsx' + (q ? '?' + q : ''));
 }
 
 // ============================================================
@@ -2022,14 +2396,14 @@ async function galeriYukle() {
     try {
         const r = await fetch('/api/passages?' + p); const data = await r.json();
         const rows = (data.passages || []).filter(r => r.screenshot_path);
-        document.getElementById('galeri-count').textContent = `${rows.length} kaçak geçiş`;
+        document.getElementById('galeri-count').textContent = `${rows.length} kayıtsız geçiş`;
 
         const grid = document.getElementById('galeri-grid');
         if (!rows.length) {
             grid.innerHTML = `<div class="col-span-full text-center py-20">
                 <div class="text-6xl mb-3 opacity-30">🎉</div>
-                <p class="text-gray-300 font-semibold">Bu tarihte kaçak geçiş yok</p>
-                <p class="text-xs text-gray-500 mt-2">Tüm araçlar yetkili. Sistem doğru çalışıyor.</p>
+                <p class="text-gray-300 font-semibold">Bu tarihte kayıtsız geçiş yok</p>
+                <p class="text-xs text-gray-500 mt-2">Tüm araçlar kayıtlı. Sistem doğru çalışıyor.</p>
             </div>`;
             return;
         }
@@ -2092,6 +2466,8 @@ function fotoKapat() { document.getElementById('foto-modal').classList.add('hidd
     vp.addEventListener('wheel', e => { e.preventDefault(); _fzSet(_fz.s + (e.deltaY < 0 ? 0.4 : -0.4)); }, { passive: false });
     vp.addEventListener('dblclick', () => _fzSet(_fz.s > 1 ? 1 : 2.5));
     vp.addEventListener('pointerdown', e => {
+        // Kontrol butonlarina tiklamayi surukleme sayma (setPointerCapture click'i yutuyor).
+        if (e.target.closest('button')) return;
         try { vp.setPointerCapture(e.pointerId); } catch (x) {}
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (pointers.size === 2) {
@@ -2555,7 +2931,7 @@ function kisayolGoster() {
 //  INIT
 // ============================================================
 baglan();
-tabDegistir('ozet');            // açılışta canlı kamera duvarı (Özet) gelsin
+tabDegistir('canli');           // açılışta canlı araç geçişleri gelsin (kameralar değil)
 sesOtomatikAc();                // auto-enable alarm sound (fallback bar only if blocked)
 saglikDurumuGuncelle();         // populate header health immediately
 setInterval(saglikDurumuGuncelle, 15000);  // keep header health fresh on every tab

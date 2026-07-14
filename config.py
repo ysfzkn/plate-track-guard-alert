@@ -113,8 +113,10 @@ class Settings:
     INTRUSION_CLIP_ENABLED: bool = os.getenv("INTRUSION_CLIP_ENABLED", "true").lower() == "true"
     # Pre/post buffer in seconds. Lower defaults on low-RAM boxes — the ring
     # buffer holds pre_sec*fps frames PER CAMERA (now JPEG-encoded, see below).
-    INTRUSION_CLIP_PRE_SEC: int = int(os.getenv("INTRUSION_CLIP_PRE_SEC", "6"))
-    INTRUSION_CLIP_POST_SEC: int = int(os.getenv("INTRUSION_CLIP_POST_SEC", "4"))
+    # ~1 dakikalık kanıt videosu: 15 sn ÖNCE (ring buffer/RAM) + 45 sn SONRA
+    # (canlı kayıt, RAM ucuz). Toplam ~60 sn.
+    INTRUSION_CLIP_PRE_SEC: int = int(os.getenv("INTRUSION_CLIP_PRE_SEC", "15"))
+    INTRUSION_CLIP_POST_SEC: int = int(os.getenv("INTRUSION_CLIP_POST_SEC", "45"))
     INTRUSION_CLIP_DIR: str = os.getenv("INTRUSION_CLIP_DIR", str(BASE_DIR / "static" / "intrusion_clips"))
     INTRUSION_BURST_SCREENSHOTS: int = int(os.getenv("INTRUSION_BURST_SCREENSHOTS", "5"))
     # Retention window for saved evidence — screenshots, intrusion clips, and

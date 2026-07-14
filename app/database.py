@@ -287,6 +287,14 @@ class Database:
                 ON test_runs(ran_at);
             CREATE INDEX IF NOT EXISTS idx_test_runs_module
                 ON test_runs(module, ran_at);
+
+            -- Kullanici tarafindan UI'dan degistirilebilen ayarlar (anahtar-deger).
+            -- Ornek: retention_days, intrusion_shadow_mode. Restart'a gerek kalmadan
+            -- .env'in uzerine binen calisma-zamani ayarlari.
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            );
         """)
         self.conn.commit()
         self._migrate()
@@ -585,6 +593,24 @@ class Database:
     def get_extra_plate_count(self) -> int:
         row = self.conn.execute("SELECT COUNT(*) AS c FROM extra_plates").fetchone()
         return row["c"] if row else 0
+
+    # --- Runtime settings (UI'dan degistirilebilen, .env'i ezen) ---
+
+    def get_setting(self, key: str, default=None):
+        """Return the stored value for `key` (str) or `default` if unset."""
+        row = self.conn.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value) -> None:
+        with self._lock:
+            self.conn.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, str(value)),
+            )
+            self.conn.commit()
 
     def get_all_extra_plates(self) -> list[dict]:
         """All manual plates with resolved owner info (linked person's when set)."""

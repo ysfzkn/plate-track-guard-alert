@@ -126,6 +126,12 @@ class MultiCameraOrchestrator:
             return self._alarm_enabled_cameras.get(camera_id, True)
         return True
 
+    def set_shadow_mode(self, shadow: bool) -> None:
+        """Runtime toggle. shadow=True: olaylari kaydeder ama SIREN CALMAZ
+        (deneme/gozlem). False: alarm gercekten calar. Sonraki olayda gecerli."""
+        self.shadow_mode = bool(shadow)
+        logger.info("Intrusion shadow_mode -> %s (runtime, UI)", self.shadow_mode)
+
     def get_alarm_states(self) -> dict:
         """Snapshot for the management UI: global master + per-camera state."""
         rows = {r["id"]: r for r in self.db.list_cameras()}

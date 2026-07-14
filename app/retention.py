@@ -124,6 +124,13 @@ class RetentionSweeper:
         return result
 
     def _sweep_blocking(self) -> dict:
+        # UI'dan degistirilmis olabilir — her taramada guncel degeri DB'den al.
+        try:
+            v = self.db.get_setting("retention_days")
+            if v is not None:
+                self.retention_days = max(1, int(v))
+        except Exception:
+            pass
         cutoff_ts = time.time() - self.retention_days * 86400
         cutoff_dt = datetime.now() - timedelta(days=self.retention_days)
         deleted_files = 0
