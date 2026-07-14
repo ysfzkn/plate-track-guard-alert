@@ -83,9 +83,27 @@ if ($torchInfo -notmatch "\+cu") {
     throw "torch CPU derlemesi kuruldu ($torchInfo) - GPU CALISMAZ. CUDA index'inden kurulum atlandi/basarisiz. Internet baglantisini ve -Cuda surumunu ($Cuda) kontrol edip tekrar calistir."
 }
 
+# --- 3b. Calisan GateGuard'i durdur ---
+# Onceki dist exe'si (ozellikle sistem tepsisine kuculmusse) calisiyor olabilir
+# ve dist\GateGuard\data\gateguard.db'yi KILITLI tutar. O zaman dist silinemez
+# (asagidaki temizlik sessizce basarisiz olur) ve PyInstaller COLLECT sert hata
+# verir: "PermissionError [WinError 32] ... gateguard.db in use". Once durdur.
+Step "Calisan GateGuard sureci durduruluyor (varsa)"
+$gg = Get-Process $AppName -ErrorAction SilentlyContinue
+if ($gg) {
+    $gg | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    Ok "$($gg.Count) surec kapatildi (DB kilidi birakildi)"
+} else {
+    Ok "Calisan surec yok"
+}
+
 # --- 4. Eski ciktilari temizle ---
 Step "Eski build temizleniyor"
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+if (Test-Path "dist\$AppName\data\gateguard.db") {
+    throw "dist icindeki DB silinemedi (hala kilitli). Calisan GateGuard.exe'yi kapat (sistem tepsisini kontrol et) ve tekrar dene."
+}
 Ok "build ve dist silindi"
 
 # --- 5. PyInstaller (GPU venv'inden) ---

@@ -48,9 +48,26 @@ if ($piCode -ne 0) {
     Ok "PyInstaller mevcut"
 }
 
+# --- 1b. Calisan GateGuard'i durdur ---
+# Onceki dist exe'si (ozellikle sistem tepsisine kuculmusse) calisiyor olabilir
+# ve dist\GateGuard\data\gateguard.db'yi KILITLI tutar -> dist silinemez, PyInstaller
+# "PermissionError [WinError 32] ... gateguard.db in use" verir. Once durdur.
+Step "Calisan GateGuard sureci durduruluyor (varsa)"
+$gg = Get-Process $AppName -ErrorAction SilentlyContinue
+if ($gg) {
+    $gg | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    Ok "$($gg.Count) surec kapatildi (DB kilidi birakildi)"
+} else {
+    Ok "Calisan surec yok"
+}
+
 # --- 2. Eski build'i temizle ---
 Step "Eski build temizleniyor"
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+if (Test-Path "dist\$AppName\data\gateguard.db") {
+    throw "dist icindeki DB silinemedi (hala kilitli). Calisan GateGuard.exe'yi kapat (sistem tepsisini kontrol et) ve tekrar dene."
+}
 Ok "build ve dist silindi"
 
 # --- 3. PyInstaller ile derle (spec hazir) ---
