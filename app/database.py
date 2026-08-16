@@ -119,6 +119,7 @@ class Database:
                 apartment TEXT DEFAULT '',
                 user_type INTEGER DEFAULT 0,
                 kart_id TEXT DEFAULT '',
+                make_model TEXT DEFAULT '',
                 synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -139,6 +140,7 @@ class Database:
                 owner_name TEXT DEFAULT '',
                 block_no TEXT DEFAULT '',
                 apartment TEXT DEFAULT '',
+                make_model TEXT DEFAULT '',
                 note TEXT DEFAULT '',
                 created_by TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -318,6 +320,22 @@ class Database:
         except sqlite3.OperationalError:
             self.conn.execute(
                 "ALTER TABLE intrusion_events ADD COLUMN burst_paths TEXT DEFAULT ''"
+            )
+            self.conn.commit()
+        try:
+            self.conn.execute("SELECT make_model FROM extra_plates LIMIT 1")
+        except sqlite3.OperationalError:
+            self.conn.execute(
+                "ALTER TABLE extra_plates ADD COLUMN make_model TEXT DEFAULT ''"
+            )
+            self.conn.commit()
+        # vehicles.make_model: kullanıcı girer; MDB senkronu bu kolona DOKUNMAZ
+        # (upsert_vehicles UPDATE'i listelemez) → senkronda korunur.
+        try:
+            self.conn.execute("SELECT make_model FROM vehicles LIMIT 1")
+        except sqlite3.OperationalError:
+            self.conn.execute(
+                "ALTER TABLE vehicles ADD COLUMN make_model TEXT DEFAULT ''"
             )
             self.conn.commit()
 
@@ -517,7 +535,7 @@ class Database:
 
     def add_extra_plate(self, plate: str, vehicle_moonwell_id: int | None = None,
                         owner_name: str = "", block_no: str = "", apartment: str = "",
-                        note: str = "", created_by: str = "") -> int:
+                        make_model: str = "", note: str = "", created_by: str = "") -> int:
         """Insert a manual plate. Returns the new row id.
         Raises ValueError if the plate is invalid or already registered."""
         raw = (plate or "").strip()
@@ -541,11 +559,11 @@ class Database:
             cur = self.conn.execute(
                 """INSERT INTO extra_plates
                    (plate, plate_normalized, vehicle_moonwell_id,
-                    owner_name, block_no, apartment, note, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    owner_name, block_no, apartment, make_model, note, created_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (raw, normalized, vehicle_moonwell_id,
                  owner_name.strip(), block_no.strip(), apartment.strip(),
-                 note.strip(), created_by),
+                 make_model.strip(), note.strip(), created_by),
             )
             self.conn.commit()
             return cur.lastrowid
@@ -554,7 +572,7 @@ class Database:
         """Update a manual plate (owner info / note / link). If the plate text
         changes it is re-normalized and re-checked for duplicates."""
         allowed = {"plate", "vehicle_moonwell_id", "owner_name",
-                   "block_no", "apartment", "note"}
+                   "block_no", "apartment", "make_model", "note"}
         filtered = {k: v for k, v in fields.items() if k in allowed}
         if not filtered:
             return False
@@ -633,11 +651,21 @@ class Database:
                 "owner_name": (r["v_owner"] if linked and r["v_owner"] else r["owner_name"]) or "",
                 "block_no": (r["v_block"] if linked and r["v_block"] else r["block_no"]) or "",
                 "apartment": (r["v_apt"] if linked and r["v_apt"] else r["apartment"]) or "",
+                "make_model": r["make_model"] or "",
                 "linked_plate": r["v_plate"] if linked else None,
                 "note": r["note"] or "",
                 "created_at": r["created_at"],
             })
         return out
+
+    def get_all_mdb_vehicles(self) -> list[dict]:
+        """Tüm MDB (Moonwell) araçları — export için (sayfalama yok)."""
+        rows = self.conn.execute(
+            """SELECT moonwell_id, plate, plate_normalized, owner_name,
+                      block_no, apartment, user_type, kart_id, make_model, synced_at
+               FROM vehicles ORDER BY owner_name, plate"""
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def get_vehicles_page(self, search: str | None = None,
                           limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
@@ -657,12 +685,22 @@ class Database:
         ).fetchone()["c"]
         rows = self.conn.execute(
             f"""SELECT moonwell_id, plate, plate_normalized, owner_name,
-                       block_no, apartment, user_type, kart_id, synced_at
+                       block_no, apartment, user_type, kart_id, make_model, synced_at
                 FROM vehicles {where}
                 ORDER BY owner_name, plate LIMIT ? OFFSET ?""",
             params + [limit, offset],
         ).fetchall()
         return [dict(r) for r in rows], total
+
+    def set_vehicle_make_model(self, moonwell_id: int, make_model: str) -> bool:
+        """MDB aracına marka/model yaz (senkronla silinmez)."""
+        with self._lock:
+            cur = self.conn.execute(
+                "UPDATE vehicles SET make_model=? WHERE moonwell_id=?",
+                ((make_model or "").strip(), moonwell_id),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
 
     # --- Passage operations ---
 

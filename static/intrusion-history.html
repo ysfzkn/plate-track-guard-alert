@@ -269,8 +269,12 @@ function render(rows) {
             : '<span class="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-semibold">BEKLİYOR</span>';
         const hasVid = ev.video_clip_path
             ? '<span class="absolute top-1.5 left-1.5 text-[10px] bg-black/75 text-white px-1.5 py-0.5 rounded">🎬 Video</span>' : '';
+        // Kart tiklamasi detayi acar; resmin uzerine ayrica dogrudan
+        // yakinlastirma dugmesi koyariz ki listede de zoom yapilabilsin.
         const thumb = ev.screenshot_path
-            ? `<img src="${ev.screenshot_path}" class="w-full h-full object-cover" loading="lazy" alt="">`
+            ? `<img src="${ev.screenshot_path}" class="w-full h-full object-cover" loading="lazy" alt="">
+               <button onclick="event.stopPropagation(); buyut('${ev.screenshot_path}')" title="🔍 Yakınlaştır"
+                       class="absolute bottom-1.5 left-1.5 bg-black/75 hover:bg-cyan-700 text-white text-[11px] px-2 py-0.5 rounded transition">🔍</button>`
             : '<div class="w-full h-full flex items-center justify-center text-gray-600 text-2xl">📷</div>';
         return `<div class="ev-card bg-gray-900 border border-gray-800 hover:border-cyan-600 rounded-xl overflow-hidden cursor-pointer card-enter"
                      onclick='detay(${JSON.stringify(ev)})'>

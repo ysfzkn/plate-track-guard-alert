@@ -8,6 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <script src="/static/tailwind.js"></script>
+    <script defer src="/static/gg-zoom.js"></script>
     <style>
         @keyframes cam-pulse {
             0%,100% { box-shadow: 0 0 0 2px rgba(220,38,38,0.7); }
@@ -79,7 +80,9 @@
             <button onclick="document.getElementById('event-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-xl px-2">✕</button>
         </div>
         <div class="p-4 space-y-3">
-            <img id="modal-screenshot" class="w-full rounded-lg bg-black" alt="screenshot">
+            <img id="modal-screenshot" class="w-full rounded-lg bg-black cursor-zoom-in hover:ring-2 hover:ring-cyan-500 transition"
+                 title="🔍 Yakınlaştırmak için tıkla"
+                 onclick="if(this.src) ggZoomAc(this.src, document.getElementById('modal-title').textContent, 'Tespit anı — kanıt')" alt="screenshot">
             <video id="modal-video" class="w-full rounded-lg bg-black hidden" controls></video>
             <div id="modal-info" class="text-sm space-y-1 text-gray-300"></div>
             <div class="flex gap-2">
@@ -99,12 +102,14 @@
             <span id="fs-conn" class="text-sm bg-black/50 text-gray-200 px-2 py-0.5 rounded font-mono flex-shrink-0">—</span>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
+            <button onclick="fsZoom()" class="text-base bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-lg transition">🔍 Yakınlaştır</button>
             <button onclick="fsNativeToggle()" class="text-base bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-lg transition">⛶ Tam Ekran</button>
             <button onclick="closeFullscreen()" class="text-base bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg transition font-semibold">✕ Kapat</button>
         </div>
     </div>
     <div class="flex-1 flex items-center justify-center overflow-hidden bg-black">
-        <img id="fs-img" class="max-w-full max-h-full object-contain" alt="canlı görüntü">
+        <img id="fs-img" class="max-w-full max-h-full object-contain cursor-zoom-in" title="🔍 Yakınlaştırmak için tıkla"
+             onclick="fsZoom()" alt="canlı görüntü">
     </div>
 </div>
 
@@ -230,6 +235,8 @@ function renderCams() {
                 <img id="snap-${c.id}" class="w-full h-full object-contain" alt="">
                 <div id="alarm-${c.id}" class="absolute top-2 left-2 hidden bg-red-600 text-white text-sm px-2 py-1 rounded font-bold">🚨 ALARM</div>
                 <div class="absolute top-2 right-2 text-[11px] bg-black/60 text-gray-200 px-2 py-1 rounded font-mono" id="conn-${c.id}">—</div>
+                <button onclick="event.stopPropagation(); camZoom(${c.id})" title="🔍 Yakınlaştır"
+                        class="absolute bottom-2 left-2 bg-black/70 hover:bg-cyan-700 text-white text-sm px-2.5 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition">🔍 Yakınlaştır</button>
                 <div class="absolute bottom-2 right-2 bg-black/70 text-white text-sm px-2.5 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition pointer-events-none">⛶ Tam ekran</div>
             </div>
             <div class="p-3">
@@ -282,6 +289,9 @@ async function loadEvents() {
     } catch {}
 }
 
+// Tek tirnakli HTML ozniteligi icine guvenli JS string degeri uretir.
+function attrJs(v) { return JSON.stringify(String(v ?? '')).replace(/'/g, '&#39;'); }
+
 function renderEvents() {
     const host = document.getElementById('events-list');
     if (!events.length) {
@@ -298,7 +308,7 @@ function renderEvents() {
             : '<span class="text-[10px] bg-amber-900/60 text-amber-300 px-1.5 py-0.5 rounded">BEKLİYOR</span>';
         return `<div class="bg-gray-900 border border-gray-800 rounded-lg p-3 flex items-center gap-3 cursor-pointer hover:bg-gray-800/60 card-enter"
                       onclick='openEventModal(${JSON.stringify(ev)})'>
-            ${ev.screenshot_path ? `<img src="${ev.screenshot_path}" class="w-20 h-14 object-cover rounded flex-shrink-0 border border-gray-700" alt="">` : '<div class="w-20 h-14 bg-gray-800 rounded flex items-center justify-center text-gray-600">📷</div>'}
+            ${ev.screenshot_path ? `<img src="${ev.screenshot_path}" class="w-20 h-14 object-cover rounded flex-shrink-0 border border-gray-700 cursor-zoom-in hover:ring-2 hover:ring-cyan-500 transition" title="🔍 Yakınlaştırmak için tıkla" onclick='event.stopPropagation(); ggZoomAc(${attrJs(ev.screenshot_path)}, ${attrJs(camName)}, "Tespit anı — kanıt")' alt="">` : '<div class="w-20 h-14 bg-gray-800 rounded flex items-center justify-center text-gray-600">📷</div>'}
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-semibold text-sm">${escapeHtml(camName)}</span>
@@ -464,6 +474,14 @@ function noteCancel() {
     document.getElementById('note-modal').classList.add('hidden');
     if (_noteResolve) { _noteResolve(null); _noteResolve = null; }
 }
+
+// --- Yakinlastirma: kamera goruntusu nerede gorunuyorsa orada buyutulebilir ---
+function camZoom(camId) {
+    const cam = cameras.find(c => c.id === camId);
+    ggZoomAc(`/api/cameras/${camId}/snapshot`,
+             cam ? cam.name : ('Kamera ' + camId), 'Canlı görüntü', { live: true });
+}
+function fsZoom() { if (_fsCamId != null) camZoom(_fsCamId); }
 
 // --- Fullscreen live camera viewer ---
 let _fsCamId = null, _fsTimer = null;

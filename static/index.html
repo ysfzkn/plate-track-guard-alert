@@ -8,9 +8,10 @@
     <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <script src="/static/tailwind.js"></script>
+    <script defer src="/static/gg-zoom.js"></script>
     <style>
         /* Accessibility: bigger base type for non-technical operators. Tailwind
-           text-*/spacing are rem-based, so raising the root scales the whole UI
+           text-* ve spacing rem tabanli, so raising the root scales the whole UI
            proportionally; arbitrary px sizes are floored to a legible minimum. */
         html { font-size: 17px; }
         [class*="text-[10px]"] { font-size: 12px !important; }
@@ -73,6 +74,58 @@
         .fz-btn:hover{background:#475569}
         .fz-lbl{color:#f8fafc !important;font-variant-numeric:tabular-nums}
         .fz-hint{color:rgba(255,255,255,.85) !important;background:rgba(0,0,0,.55)}
+
+        /* ── CANLI GEÇİŞ KARTI (Son Geçişler) ────────────────────────────────
+           Nöbetçi kulübesindeki ekran genelde parlama altında ve uzaktan
+           okunuyor. Bu yüzden: plaka + her iki satır AYNI punto (--pf), metin
+           beyaza yakın, kontrastlı çipler ve soldan renk şeridi.
+           Sınıf adları bilerek tailwind text-gray / bg-gray yardımcılarını içermez ki
+           gg-light.css'in genel kuralları bunları ezmesin; açık tema
+           karşılıkları hemen aşağıda ayrıca tanımlı. */
+        .pf-card{--pf:1.5rem;display:flex;align-items:center;gap:.85rem;
+                 padding:.65rem .8rem;border-radius:.9rem;border:1px solid;border-left-width:6px}
+        .pf-card.ok {background:rgba(30,41,59,.72);border-color:rgba(148,163,184,.24);border-left-color:#22c55e}
+        .pf-card.bad{background:rgba(76,10,10,.62);border-color:rgba(248,113,113,.45);border-left-color:#ef4444}
+        .pf-body{flex:1;min-width:0}
+        .pf-row{display:flex;align-items:center;flex-wrap:wrap;gap:.35em .5em}
+        .pf-plate{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+                  font-size:var(--pf);line-height:1.14;font-weight:900;letter-spacing:.045em;
+                  color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.85)}
+        .pf-chip{display:inline-flex;align-items:center;gap:.28em;font-size:var(--pf);line-height:1.14;
+                 font-weight:800;padding:.06em .5em;border-radius:.42em;white-space:nowrap;
+                 border:1.5px solid transparent}
+        .pf-ok  {background:#15803d;color:#fff;box-shadow:0 1px 0 rgba(0,0,0,.35)}
+        .pf-bad {background:#dc2626;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.18),0 1px 0 rgba(0,0,0,.35)}
+        .pf-dir {background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.24);color:#f1f5f9}
+        .pf-arw{font-size:1.05em;line-height:1}
+        .pf-arw.in{color:#4ade80} .pf-arw.out{color:#fb923c} .pf-arw.unk{color:#cbd5e1}
+        .pf-meta{display:flex;flex-wrap:wrap;align-items:baseline;gap:.1em .5em;margin-top:.32rem;
+                 font-size:var(--pf);line-height:1.2;font-weight:600;color:#e6edf8;
+                 text-shadow:0 1px 2px rgba(0,0,0,.8)}
+        .pf-rel  {color:#7dd3fc;font-weight:800}
+        .pf-time {color:#f8fafc;font-variant-numeric:tabular-nums}
+        .pf-owner{color:#fff;font-weight:800}
+        .pf-conf {color:#c3cfdd;font-variant-numeric:tabular-nums}
+        .pf-sep  {color:rgba(255,255,255,.32);font-weight:400}
+        .pf-photo{width:9rem;height:6.75rem;object-fit:cover;border-radius:.6rem;border:2px solid;flex-shrink:0;cursor:zoom-in}
+        .pf-photo.ok{border-color:#22c55e} .pf-photo.bad{border-color:#ef4444}
+        .pf-nophoto{width:9rem;height:6.75rem;border-radius:.6rem;flex-shrink:0;display:flex;
+                    align-items:center;justify-content:center;font-size:2rem;
+                    background:rgba(148,163,184,.12);border:2px dashed rgba(148,163,184,.28)}
+        /* Dar ekranda punto biraz insin ki satirlar tasmasin */
+        @media (max-width:1100px){ .pf-card{--pf:1.25rem} .pf-photo,.pf-nophoto{width:7.5rem;height:5.6rem} }
+        /* Açık tema karşılıkları */
+        body.light-theme .pf-card.ok {background:#ffffff;border-color:#e2e8f0;border-left-color:#16a34a}
+        body.light-theme .pf-card.bad{background:#fef2f2;border-color:#fca5a5;border-left-color:#dc2626}
+        body.light-theme .pf-plate{color:#0f172a;text-shadow:none}
+        body.light-theme .pf-meta{color:#1f2937;text-shadow:none}
+        body.light-theme .pf-rel{color:#0e7490}
+        body.light-theme .pf-time,body.light-theme .pf-owner{color:#0f172a}
+        body.light-theme .pf-conf{color:#475569}
+        body.light-theme .pf-sep{color:#94a3b8}
+        body.light-theme .pf-dir{background:#f1f5f9;border-color:#cbd5e1;color:#0f172a}
+        body.light-theme .pf-arw.in{color:#15803d} body.light-theme .pf-arw.out{color:#c2410c}
+        body.light-theme .pf-nophoto{background:#f1f5f9;border-color:#cbd5e1}
 
         /* ── Light theme overrides — applied when body has class "light-theme" ── */
         body.light-theme{background:#f3f4f6 !important;color:#0f172a !important}
@@ -662,7 +715,7 @@
             <span class="font-semibold text-sm">Son Geçişler</span>
             <span id="passage-count" class="text-xs text-gray-500 font-mono">0</span>
         </div>
-        <div id="passages-list" class="flex-1 overflow-y-auto p-2 space-y-1">
+        <div id="passages-list" class="flex-1 overflow-y-auto p-2 space-y-2">
             <div id="passages-empty" class="text-center py-16 px-4">
                 <div class="text-6xl mb-3 opacity-30">🚗</div>
                 <p class="text-gray-400 font-semibold">Henüz geçiş yok</p>
@@ -1005,12 +1058,14 @@
         <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
                 <div class="text-[11px] text-gray-400 mb-1 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> CANLI</div>
-                <img id="intr-live" class="w-full aspect-video object-cover rounded-lg bg-black" alt="canlı görüntü">
+                <img id="intr-live" class="w-full aspect-video object-cover rounded-lg bg-black cursor-zoom-in hover:ring-2 hover:ring-cyan-500 transition"
+                     title="🔍 Yakınlaştırmak için tıkla" onclick="intrZoomLive()" alt="canlı görüntü">
             </div>
             <div>
                 <div class="text-[11px] text-gray-400 mb-1">📸 TESPİT ANI (kanıt)</div>
-                <img id="intr-proof" class="w-full aspect-video object-cover rounded-lg bg-black cursor-zoom-in"
-                     onclick="if(this.src) window.open(this.src,'_blank')" alt="tespit görüntüsü">
+                <img id="intr-proof" class="w-full aspect-video object-cover rounded-lg bg-black cursor-zoom-in hover:ring-2 hover:ring-cyan-500 transition"
+                     title="🔍 Yakınlaştırmak için tıkla"
+                     onclick="if(this.src) ggZoomAc(this.src, document.getElementById('intr-cam').textContent, 'Tespit anı — kanıt')" alt="tespit görüntüsü">
             </div>
         </div>
         <div id="intr-meta" class="px-4 pb-1 text-sm text-gray-300 flex flex-wrap gap-x-4 gap-y-1"></div>
@@ -1089,7 +1144,10 @@ function tabDegistir(tab) {
         btn.classList.toggle('active', tabs[i] === tab);
     });
     if (tab === 'ozet' && typeof ozetYukle === 'function') ozetYukle();
-    if (tab === 'canli' && !gecisler.length) sonGecisleriYukle();
+    // Canlı sekmesi HER açılışta sunucudan tazelenir. Eski davranış listeyi
+    // yalnızca boşken çekiyordu; başka bir sayfadan (Ayarlar, Araçlar…) Geri
+    // ile dönen nöbetçi saatler öncesinin listesine bakıyordu.
+    if (tab === 'canli') sonGecisleriYukle();
     if (tab === 'gecmis' && !document.getElementById('f-start').value) {
         // Açılışta varsayılan: BUGÜN (yerel tarih).
         const _fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1462,8 +1520,10 @@ async function canliGridYukle() {
                         <span class="text-[11px] text-cyan-300 font-semibold whitespace-nowrap opacity-0 group-hover:opacity-100 transition">✏️ Düzenle</span>
                     </div>
                 </div>
+                <button onclick="event.stopPropagation(); camZoom(${c.id})" title="Yakınlaştır"
+                        class="absolute top-8 right-2 bg-black/75 hover:bg-cyan-700 px-2 py-0.5 rounded text-[10px] text-white opacity-0 group-hover:opacity-100 transition">🔍 Yakınlaştır</button>
                 <button onclick="event.stopPropagation(); window.location.href='/night-watch?cam=${c.id}'"
-                        class="absolute top-8 right-2 bg-black/75 hover:bg-cyan-700 px-2 py-0.5 rounded text-[10px] text-white opacity-0 group-hover:opacity-100 transition">⛶ Tam ekran</button>
+                        class="absolute top-[3.6rem] right-2 bg-black/75 hover:bg-cyan-700 px-2 py-0.5 rounded text-[10px] text-white opacity-0 group-hover:opacity-100 transition">⛶ Tam ekran</button>
             </div>`;
         }).join('');
         document.getElementById('grid-status').textContent = `${_gridCameras.length} kamera`;
@@ -1472,6 +1532,14 @@ async function canliGridYukle() {
     } catch (e) {
         console.warn('grid yukle:', e);
     }
+}
+// Kamera goruntusunu (arka/hirsizlik kameralari dahil) CANLI olarak buyutur.
+// Ozet gridinden, kamera duzenleme onizlemesinden ve kacak alarmindan cagrilir.
+function camZoom(cid) {
+    const c = _gridCameras.find(x => x.id === cid);
+    const isIntr = !c || c.role === 'intrusion' || c.role === 'both';
+    const url = isIntr ? `/api/camera/${cid}/snapshot` : '/api/camera/snapshot';
+    ggZoomAc(url, (c && c.name) || ('Kamera ' + cid), 'Canlı görüntü', { live: true });
 }
 function canliGridYenile(force = false) {
     const t = Date.now();
@@ -1601,7 +1669,9 @@ function gecisEkle(v) {
 // isn't empty until the next car). Maps the API shape -> feed shape.
 async function sonGecisleriYukle() {
     try {
-        const r = await fetch('/api/passages?limit=20');
+        // Liste her sekme donusunde tazelendigi icin MAX_GECIS kadar cekiyoruz;
+        // aksi halde nobetci geri geldiginde liste 20 kayda dusuyordu.
+        const r = await fetch('/api/passages?limit=' + MAX_GECIS);
         const data = await r.json();
         gecisler = (data.passages || []).map(p => ({
             plate: p.plate,
@@ -1635,29 +1705,72 @@ setInterval(() => {
     });
 }, 30000);
 
+// Metni HTML *ozniteligi* icindeki JS string'ine guvenle gomer:
+// plakada/isimde kesme isareti veya tirnak olsa bile onclick bozulmaz.
+function jsAttr(v) {
+    return "'" + String(v ?? '')
+        .replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;').replace(/</g, '\\u003c') + "'";
+}
+// Yon rozeti — cip formatinda (plaka ile ayni punto, kontrastli).
+function dirChip(d) {
+    if (d === 'entry') return '<span class="pf-chip pf-dir"><span class="pf-arw in">▼</span>Giriş</span>';
+    if (d === 'exit')  return '<span class="pf-chip pf-dir"><span class="pf-arw out">▲</span>Çıkış</span>';
+    return '<span class="pf-chip pf-dir"><span class="pf-arw unk">—</span>Yön belirsiz</span>';
+}
+
+// Liste artik periyodik olarak da tazeleniyor. Nobetci listede asagi kaymissa
+// yeri kaybolmasin ve her tazelemede giris animasyonu bastan oynamasin diye
+// kaydirma konumunu koruyup animasyonu yalnizca GERCEKTEN yeni kayda veriyoruz.
+let _sonUstKayit = null;
 function gecisleriCiz() {
     const el = document.getElementById('passages-list');
+    const kaydirma = el.scrollTop;
+    const ustKey = gecisler.length ? (gecisler[0].plate + '|' + gecisler[0].detected_at) : null;
+    const yeniUst = !!ustKey && ustKey !== _sonUstKayit;
+    _sonUstKayit = ustKey;
     document.getElementById('passage-count').textContent = gecisler.length;
-    if (!gecisler.length) { el.innerHTML = '<div class="text-center py-20 text-gray-600 text-sm">🚗 Bekleniyor</div>'; return; }
+    if (!gecisler.length) {
+        el.innerHTML = `<div class="text-center py-16 px-4">
+            <div class="text-6xl mb-3 opacity-30">🚗</div>
+            <p class="text-gray-300 font-semibold text-lg">Henüz geçiş yok</p>
+            <p class="text-sm text-gray-500 mt-2 max-w-xs mx-auto">Sistem aktif. Bir araç bariyere yaklaştığında plaka burada görünecek.</p>
+            <div class="mt-4 inline-flex items-center gap-1.5 text-sm text-green-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Bekleniyor…
+            </div>
+        </div>`;
+        return;
+    }
     el.innerHTML = gecisler.map((g, i) => {
         const saat = new Date(g.detected_at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
         const y = g.is_authorized;
-        const bg = y ? 'bg-gray-800/40 border-gray-700/50' : 'bg-red-950/25 border-red-900/40';
-        const st = y ? '<span class="text-green-400 text-xs font-semibold">✓ Kayıtlı</span>' : '<span class="text-red-400 text-xs font-bold">✗ KAYITSIZ</span>';
-        const anim = i === 0 ? 'card-enter' : '';
+        const k = y ? 'ok' : 'bad';
+        const st = y ? '<span class="pf-chip pf-ok">✓ Kayıtlı</span>'
+                     : '<span class="pf-chip pf-bad">✗ KAYITSIZ</span>';
+        const anim = (i === 0 && yeniUst) ? 'card-enter' : '';
         const photo = g.screenshot_url
-            ? `<img src="${g.screenshot_url}" class="w-32 h-24 object-cover rounded-lg border-2 ${y?'border-green-500':'border-red-500'} flex-shrink-0 cursor-pointer" onclick="fotoAc('${g.screenshot_url}','${g.plate}','${saat}','${g.direction||''}')">`
-            : `<div class="w-32 h-24 bg-gray-800/60 rounded-lg flex items-center justify-center text-gray-500 text-3xl flex-shrink-0">${y?'🚗':'🚨'}</div>`;
-        return `<div class="flex items-center gap-3 p-3 rounded-xl border ${bg} ${anim}">
+            ? `<img src="${escapeHtmlSafe(g.screenshot_url)}" class="pf-photo ${k}" alt="" title="🔍 Büyütmek için tıkla"
+                    onclick="fotoAc(${jsAttr(g.screenshot_url)},${jsAttr(g.plate)},${jsAttr(saat)},${jsAttr(g.direction||'')})">`
+            : `<div class="pf-nophoto">${y?'🚗':'🚨'}</div>`;
+        const conf = (g.confidence != null && !isNaN(g.confidence)) ? '%' + Number(g.confidence).toFixed(0) : '%?';
+        return `<div class="pf-card ${k} ${anim}">
             ${photo}
-            <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-mono font-black text-2xl tracking-wide">${g.plate}</span>${st} ${dirBadge(g.direction)}
+            <div class="pf-body">
+                <div class="pf-row">
+                    <span class="pf-plate">${escapeHtmlSafe(g.plate)}</span>${st}${dirChip(g.direction)}
                 </div>
-                <div class="text-xs text-gray-500 mt-1"><span class="rel-time text-cyan-400/90 font-semibold" data-ts="${g.detected_at}">${goreceliZaman(g.detected_at)}</span> · 🕐 ${saat} ${g.owner_name?'· '+g.owner_name:''} · %${g.confidence?.toFixed(0)||'?'}</div>
+                <div class="pf-meta">
+                    <span class="pf-rel rel-time" data-ts="${escapeHtmlSafe(g.detected_at)}">${goreceliZaman(g.detected_at)}</span>
+                    <span class="pf-sep">·</span>
+                    <span class="pf-time">🕐 ${saat}</span>
+                    ${g.owner_name ? `<span class="pf-sep">·</span><span class="pf-owner">${escapeHtmlSafe(g.owner_name)}</span>` : ''}
+                    <span class="pf-sep">·</span>
+                    <span class="pf-conf">${conf}</span>
+                </div>
             </div>
         </div>`;
     }).join('');
+    el.scrollTop = kaydirma;
 }
 
 // ============================================================
@@ -2180,6 +2293,12 @@ function intrusionAlertGoster(d) {
     clearTimeout(_intrAutoClose);
     _intrAutoClose = setTimeout(intrusionKapat, 25000);
 }
+// Alarm penceresindeki CANLI kareyi tam ekran buyutec'te ac (akmaya devam eder).
+function intrZoomLive() {
+    if (_intrCamId == null) return;
+    ggZoomAc(`/api/cameras/${_intrCamId}/snapshot`,
+             document.getElementById('intr-cam').textContent, 'Canlı görüntü', { live: true });
+}
 function intrusionSustur() {
     intrusionAlarmDurdur();
     titleFlashStop();
@@ -2380,8 +2499,160 @@ function gecmisCSV() {
 }
 function gecmisExcel() {
     const q = _gecmisFiltreParam();
-    bildirim('Excel hazırlanıyor (fotoğraflar gömülüyor)…', 'bilgi');
-    _authedIndir('/api/passages/export.xlsx' + (q ? '?' + q : ''));
+    _indirmeBaslat('/api/passages/export.xlsx' + (q ? '?' + q : ''), 'Excel raporu');
+}
+
+// ── İndirme kartı (ilerleme çubuğu + bitince kalıcı "Aç" butonu) ──────────
+let _indirCard = null;
+function _indirCardEnsure() {
+    if (_indirCard && document.body.contains(_indirCard)) return _indirCard;
+    const c = document.createElement('div');
+    c.id = 'indir-card';
+    c.className = 'fixed right-4 z-[75] w-80 max-w-[92vw] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-4';
+    c.style.bottom = '5rem';   // toast'ların üstünde dursun
+    document.body.appendChild(c);
+    _indirCard = c;
+    return c;
+}
+function _indirCardKapat() {
+    if (_indirCard) {
+        if (_indirCard._objUrl) { try { URL.revokeObjectURL(_indirCard._objUrl); } catch (e) {} }
+        _indirCard.remove(); _indirCard = null;
+    }
+}
+function _mb(b) { return (b / 1048576).toFixed(1) + ' MB'; }
+function _boyut(b) { return b < 1048576 ? Math.max(1, Math.round(b / 1024)) + ' KB' : (b / 1048576).toFixed(1) + ' MB'; }
+
+async function _indirmeBaslat(url, adAlt) {
+    const c = _indirCardEnsure();
+    c._objUrl = null;
+    c.innerHTML = `
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm font-semibold flex items-center gap-2">📊 ${adAlt} hazırlanıyor…</div>
+        <button onclick="_indirCardKapat()" class="text-gray-500 hover:text-white text-lg leading-none" title="Kapat">×</button>
+      </div>
+      <div class="text-xs text-gray-500 mb-2" id="indir-durum">Fotoğraflar gömülüyor, lütfen bekleyin…</div>
+      <div class="w-full h-2.5 bg-gray-800 rounded-full overflow-hidden">
+        <div id="indir-bar" class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-200" style="width:12%"></div>
+      </div>
+      <div class="text-[11px] text-gray-500 mt-1 text-right" id="indir-yuzde">Başlatılıyor…</div>`;
+    const $bar = () => document.getElementById('indir-bar');
+    const $durum = () => document.getElementById('indir-durum');
+    const $yuzde = () => document.getElementById('indir-yuzde');
+
+    // Sunucu dosyayı hazırlarken (fotoğraf gömme uzun sürebilir) belirsiz ilerleme:
+    // %85'e kadar yavaşça ilerle; asıl bayt indirmesi son %15'i doldurur.
+    // %12'den başla ki çok hızlı/küçük dosyalarda bile çubuk görünür hareket etsin.
+    let fake = 12;
+    const fakeTimer = setInterval(() => {
+        fake = Math.min(85, fake + Math.max(0.4, (85 - fake) * 0.05));
+        if ($bar()) $bar().style.width = fake + '%';
+        if ($yuzde()) $yuzde().textContent = 'Hazırlanıyor… %' + Math.round(fake);
+    }, 200);
+
+    try {
+        const resp = await fetch(url);   // auth-client Bearer token'ı otomatik ekler
+        clearInterval(fakeTimer);
+        if (!resp.ok) throw new Error('Sunucu hatası (HTTP ' + resp.status + ')');
+
+        const total = +resp.headers.get('Content-Length') || 0;
+        if ($durum()) $durum().textContent = 'İndiriliyor…';
+
+        let blob;
+        if (resp.body && resp.body.getReader) {
+            const reader = resp.body.getReader();
+            const chunks = []; let received = 0;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value); received += value.length;
+                const pct = total ? Math.round(received / total * 100) : 0;
+                if ($bar()) $bar().style.width = (total ? (85 + pct * 0.15) : 92) + '%';
+                if ($yuzde()) $yuzde().textContent = total
+                    ? ('%' + pct + ' · ' + _mb(received) + ' / ' + _mb(total))
+                    : (_mb(received) + ' indirildi');
+            }
+            blob = new Blob(chunks, { type: resp.headers.get('Content-Type') || 'application/octet-stream' });
+        } else {
+            blob = await resp.blob();   // stream desteklenmiyorsa düz indir
+        }
+
+        // Dosya adını Content-Disposition'dan al
+        let fname = 'arac_gecisleri.xlsx';
+        const cd = resp.headers.get('Content-Disposition') || '';
+        const m = cd.match(/filename\*?=(?:UTF-8''|")?([^";]+)"?/i);
+        if (m) fname = decodeURIComponent(m[1]);
+        // Sunucu dosyayı diske kaydetti mi? ("Aç" bunu Excel'de açar)
+        const savedFile = resp.headers.get('X-Export-File') || '';
+        const savedWhere = resp.headers.get('X-Export-Where') || '';
+
+        const objUrl = URL.createObjectURL(blob);
+        c._objUrl = objUrl;
+
+        // Sunucu kaydedemediyse (eski sürüm/hata) tarayıcı indirmesine düş.
+        if (!savedFile) {
+            const a = document.createElement('a');
+            a.href = objUrl; a.download = fname;
+            document.body.appendChild(a); a.click(); a.remove();
+        }
+
+        // Nereye kaydedildi mesajı (doğru olsun)
+        const yerMsg = savedWhere === 'indirilenler'
+            ? '💾 İndirilenler klasörüne kaydedildi.'
+            : (savedFile ? '💾 Uygulama klasörüne kaydedildi.'
+                         : '💾 Tarayıcı indirmesi denendi (İndirilenler).');
+
+        // Başarı — "Aç" butonu basılana/kapatılana kadar durur
+        c.innerHTML = `
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-sm font-semibold text-emerald-400 flex items-center gap-2">✅ Excel hazır</div>
+            <button onclick="_indirCardKapat()" class="text-gray-400 hover:text-white text-xl leading-none" title="Kapat">×</button>
+          </div>
+          <div class="text-xs text-gray-400 mb-1 truncate" title="${fname}">${fname} · ${_boyut(blob.size)}</div>
+          <div class="text-[11px] text-gray-500 mb-3">${yerMsg}</div>
+          <div class="w-full h-2.5 bg-gray-800 rounded-full overflow-hidden mb-3">
+            <div class="h-full bg-emerald-500 rounded-full" style="width:100%"></div>
+          </div>
+          <div id="indir-hint" class="text-[11px] text-red-400 mb-2 hidden"></div>
+          <div class="flex gap-2">
+            <button id="indir-ac" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-sm py-2.5 rounded-lg font-bold shadow">📂 Excel'de Aç</button>
+            <button onclick="_indirCardKapat()" class="bg-slate-600 hover:bg-slate-500 text-white text-sm py-2.5 px-5 rounded-lg font-semibold border border-slate-400">Kapat</button>
+          </div>`;
+        const acBtn = document.getElementById('indir-ac');
+        const hint = () => document.getElementById('indir-hint');
+        acBtn.onclick = async () => {
+            acBtn.disabled = true; const eski = acBtn.textContent; acBtn.textContent = '⏳ Açılıyor…';
+            if (savedFile) {
+                // Sunucu dosyayı aynı makinede Excel'de açsın (en güvenilir yol)
+                try {
+                    const r = await fetch('/api/open-export', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ file: savedFile }),
+                    });
+                    if (!r.ok) { let msg = 'HTTP ' + r.status; try { msg = (await r.json()).detail || msg; } catch (e) {} throw new Error(msg); }
+                    _indirCardKapat();   // Excel açıldı
+                } catch (e) {
+                    acBtn.disabled = false; acBtn.textContent = eski;
+                    if (hint()) { hint().textContent = 'Açılamadı: ' + ((e && e.message) || e); hint().classList.remove('hidden'); }
+                }
+            } else {
+                // Yedek: sunucu kaydetmediyse dosyayı tekrar indir
+                const a2 = document.createElement('a');
+                a2.href = objUrl; a2.download = fname;
+                document.body.appendChild(a2); a2.click(); a2.remove();
+                _indirCardKapat();
+            }
+        };
+    } catch (e) {
+        clearInterval(fakeTimer);
+        c.innerHTML = `
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-sm font-semibold text-red-400 flex items-center gap-2">❌ İndirme başarısız</div>
+            <button onclick="_indirCardKapat()" class="text-gray-500 hover:text-white text-lg leading-none" title="Kapat">×</button>
+          </div>
+          <div class="text-xs text-gray-400 mb-3">${(e && e.message) || e}</div>
+          <button onclick="_indirCardKapat()" class="w-full bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg">Kapat</button>`;
+    }
 }
 
 // ============================================================
@@ -2928,6 +3199,39 @@ function kisayolGoster() {
 }
 
 // ============================================================
+//  TAZELEME — panel her zaman "şu an"ı göstersin
+// ============================================================
+// Ayarlar/Araçlar/Gece İzleme gibi ayrı sayfalardan tarayıcı Geri tuşuyla
+// dönüldüğünde sayfa bfcache'ten donmuş haliyle geri gelir: WebSocket kopuk,
+// zamanlayıcılar durmuş, listede saatler öncesinin geçişleri durur. Aşağıdaki
+// üç kanca (geri dönüş / sekmeye geri gelme / periyodik emniyet) panelin her
+// koşulda güncel kalmasını garanti eder.
+function wsYenidenBagla() {
+    try {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+        if (ws) { ws.onclose = null; ws.onerror = null; ws.close(); }
+    } catch (e) {}
+    ws = null; reconn = 0; baglan();
+}
+function paneliTazele() {
+    wsYenidenBagla();
+    sonGecisleriYukle();          // canlı geçiş listesi = her zaman güncel
+    istatistikAl(); durumAl(); saglikDurumuGuncelle();
+    const ozet = document.getElementById('tab-ozet');
+    if (ozet && !ozet.classList.contains('hidden')) { ozetYukle(); canliGridYenile(true); }
+}
+// 1) Geri/İleri ile bfcache'ten dönüş
+window.addEventListener('pageshow', e => { if (e.persisted) paneliTazele(); });
+// 2) Sekme/pencere yeniden görünür oldu
+document.addEventListener('visibilitychange', () => { if (!document.hidden) paneliTazele(); });
+// 3) Emniyet ağı: WebSocket sessizce düşerse liste yine de tazelensin
+setInterval(() => {
+    if (document.hidden) return;
+    const canli = document.getElementById('tab-canli');
+    if (canli && !canli.classList.contains('hidden')) sonGecisleriYukle();
+}, 45000);
+
+// ============================================================
 //  INIT
 // ============================================================
 baglan();
@@ -2949,7 +3253,8 @@ setInterval(durumAl, 60000);
         </div>
         <div class="p-4 space-y-3">
             <!-- Canlı önizleme (üstte) -->
-            <img id="cam-edit-img" class="w-full rounded-lg bg-black aspect-video object-cover border border-gray-800" alt=""
+            <img id="cam-edit-img" class="w-full rounded-lg bg-black aspect-video object-cover border border-gray-800 cursor-zoom-in hover:ring-2 hover:ring-cyan-500 transition" alt=""
+                 title="🔍 Yakınlaştırmak için tıkla" onclick="if(_camEditId!=null) camZoom(_camEditId)"
                  onerror="this.style.opacity=.15;this.src='/static/icon.svg'">
             <!-- Ayarlar (aşağıda) -->
             <div class="space-y-2 pt-1">

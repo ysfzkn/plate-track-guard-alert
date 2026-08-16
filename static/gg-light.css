@@ -4,7 +4,7 @@
 
 /* ── Accessibility / readability (applies in BOTH themes) ──────────────
    Operators are often non-technical, so bump the base type size. Tailwind's
-   text-*/spacing use rem, so raising the root font-size scales the whole UI
+   text-* ve spacing rem tabanli; raising the root font-size scales the whole UI
    proportionally (layouts stay intact). Arbitrary px sizes (text-[10px]/[11px])
    don't scale with rem, so we floor those separately to a legible minimum. */
 html { font-size: 17px; }

@@ -365,6 +365,7 @@ class ExtraPlateCreateRequest(BaseModel):
     owner_name: str = ""
     block_no: str = ""
     apartment: str = ""
+    make_model: str = ""
     note: str = ""
 
 
@@ -374,6 +375,7 @@ class ExtraPlateUpdateRequest(BaseModel):
     owner_name: str | None = None
     block_no: str | None = None
     apartment: str | None = None
+    make_model: str | None = None
     note: str | None = None
 
 
@@ -432,7 +434,7 @@ async def add_extra_plate(req: ExtraPlateCreateRequest, request: Request):
             plate=req.plate,
             vehicle_moonwell_id=req.vehicle_moonwell_id,
             owner_name=req.owner_name, block_no=req.block_no,
-            apartment=req.apartment, note=req.note,
+            apartment=req.apartment, make_model=req.make_model, note=req.note,
             created_by=user.get("username", ""),
         )
     except ValueError as e:
@@ -463,6 +465,190 @@ async def remove_extra_plate(plate_id: int):
     if not _db.delete_extra_plate(plate_id):
         raise HTTPException(404, "Plaka bulunamadı")
     return JSONResponse({"status": "deleted"})
+
+
+class VehicleMetaRequest(BaseModel):
+    make_model: str = ""
+
+
+@router.put("/api/vehicles/{moonwell_id}/meta")
+async def set_vehicle_meta(moonwell_id: int, req: VehicleMetaRequest):
+    """MDB (Moonwell) aracına marka/model yaz — senkronla silinmez."""
+    if not _db:
+        raise HTTPException(503, "Database not ready")
+    if not _db.set_vehicle_make_model(moonwell_id, req.make_model):
+        raise HTTPException(404, "Araç bulunamadı")
+    return JSONResponse({"status": "updated"})
+
+
+@router.get("/api/vehicles/export.xlsx")
+async def export_vehicles_xlsx():
+    """Tüm tanımlı araçların profesyonel Excel raporu: MDB (Moonwell) kayıtlı
+    araçlar + elle eklenen plakalar, kaynak/eşleşme ayrımı ve marka/model ile."""
+    if not _db:
+        raise HTTPException(503, "Database not ready")
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.drawing.image import Image as XLImage
+        from openpyxl.utils import get_column_letter
+        from PIL import Image as PILImage
+    except ImportError:
+        raise HTTPException(500, "openpyxl/Pillow gerekli")
+
+    import io as _io
+    from datetime import datetime as _dt
+    from config import BASE_DIR
+
+    mdb = _db.get_all_mdb_vehicles()
+    extras = _db.get_all_extra_plates()
+    linked = [e for e in extras if e.get("vehicle_moonwell_id") is not None]
+    standalone = [e for e in extras if e.get("vehicle_moonwell_id") is None]
+
+    # Satırları oluştur: önce elle eklenenler (eşleşen + bağımsız), sonra MDB.
+    # (kaynak, durum_key, plate, sahip, blok, daire, marka, not, tarih)
+    data_rows = []
+    for e in linked:
+        data_rows.append(("Elle eklendi", "eslesen", e.get("plate", ""),
+                          e.get("owner_name", ""), e.get("block_no", ""),
+                          e.get("apartment", ""), e.get("make_model", ""),
+                          e.get("note", ""), str(e.get("created_at", ""))[:19].replace("T", " ")))
+    for e in standalone:
+        data_rows.append(("Elle eklendi", "bagimsiz", e.get("plate", ""),
+                          e.get("owner_name", ""), e.get("block_no", ""),
+                          e.get("apartment", ""), e.get("make_model", ""),
+                          e.get("note", ""), str(e.get("created_at", ""))[:19].replace("T", " ")))
+    for v in mdb:
+        data_rows.append(("Moonwell (MDB)", "mdb", v.get("plate", ""),
+                          v.get("owner_name", ""), v.get("block_no", ""),
+                          v.get("apartment", ""), v.get("make_model", ""), "",
+                          str(v.get("synced_at", ""))[:19].replace("T", " ")))
+
+    NAVY = "0B1220"; HEAD = "334155"; WHITE = "FFFFFF"; ZEBRA = "F8FAFC"
+    # Durum renkleri
+    C_MDB = "E0F2FE"; T_MDB = "075985"       # açık mavi
+    C_ESL = "DCFCE7"; T_ESL = "166534"       # yeşil (eşleşen)
+    C_BAG = "FEF3C7"; T_BAG = "92400E"       # amber (bağımsız)
+    durum_txt = {"mdb": "MDB kayıtlı", "eslesen": "Eşleşen (MDB kişisi)",
+                 "bagimsiz": "Bağımsız (MDB'de yok)"}
+    durum_fill = {"mdb": C_MDB, "eslesen": C_ESL, "bagimsiz": C_BAG}
+    durum_tx = {"mdb": T_MDB, "eslesen": T_ESL, "bagimsiz": T_BAG}
+
+    thin = Side(style="thin", color="E2E8F0")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Tanımlı Araçlar"
+    ws.sheet_view.showGridLines = False
+
+    headers = ["#", "Plaka", "Sahip / Kişi", "Blok", "Daire",
+               "Marka / Model", "Kaynak", "Durum", "Not", "Eklenme / Senkron"]
+    widths = [5, 15, 26, 8, 8, 22, 16, 22, 22, 20]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    last_col = get_column_letter(len(headers))
+
+    # ── Banner (logo + başlık) ──
+    for r_ in (1, 2):
+        for c_ in range(1, len(headers) + 1):
+            ws.cell(row=r_, column=c_).fill = PatternFill("solid", fgColor=NAVY)
+    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[2].height = 24
+    logo_p = BASE_DIR / "static" / "logo.png"
+    if logo_p.exists():
+        try:
+            lim = PILImage.open(logo_p); lim.thumbnail((190, 48))
+            lb = _io.BytesIO(); lim.save(lb, format="PNG"); lb.seek(0)
+            xlogo = XLImage(lb); xlogo.width, xlogo.height = lim.size
+            ws.add_image(xlogo, "A1")
+        except Exception:
+            pass
+    ws.merge_cells(f"C1:{last_col}1")
+    title = ws.cell(row=1, column=3)
+    title.value = "Tanımlı Araçlar Raporu"
+    title.font = Font(name="Calibri", size=15, bold=True, color=WHITE)
+    title.alignment = Alignment(horizontal="right", vertical="center")
+    ws.merge_cells(f"C2:{last_col}2")
+    sub = ws.cell(row=2, column=3)
+    sub.value = (f"{len(mdb)} MDB kayıtlı  ·  {len(extras)} elle eklenen "
+                 f"({len(linked)} eşleşen, {len(standalone)} bağımsız)  ·  "
+                 f"{_dt.now().strftime('%d.%m.%Y %H:%M')}")
+    sub.font = Font(name="Calibri", size=9, color="CBD5E1")
+    sub.alignment = Alignment(horizontal="right", vertical="center")
+
+    # ── Başlık satırı ──
+    HROW = 4
+    ws.row_dimensions[3].height = 6
+    for i, h in enumerate(headers, 1):
+        c = ws.cell(row=HROW, column=i, value=h)
+        c.fill = PatternFill("solid", fgColor=HEAD)
+        c.font = Font(bold=True, color=WHITE, size=11)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border = border
+    ws.row_dimensions[HROW].height = 22
+    ws.freeze_panes = f"A{HROW + 1}"
+
+    # ── Veri satırları ──
+    row = HROW + 1
+    for idx, (kaynak, dkey, plate, sahip, blok, daire, marka, not_, tarih) in enumerate(data_rows, 1):
+        zebra = PatternFill("solid", fgColor=ZEBRA) if idx % 2 == 0 else None
+        vals = [idx, plate, sahip, blok, daire, marka, kaynak, durum_txt[dkey], not_, tarih]
+        for i, v in enumerate(vals, 1):
+            c = ws.cell(row=row, column=i, value=v)
+            c.border = border
+            c.alignment = Alignment(horizontal="center", vertical="center",
+                                    wrap_text=(i in (3, 6, 9)))
+            if i == 2:   # plaka
+                c.font = Font(bold=True, name="Consolas", size=11)
+            if i == 8:   # Durum — renkli
+                c.fill = PatternFill("solid", fgColor=durum_fill[dkey])
+                c.font = Font(bold=True, color=durum_tx[dkey])
+            elif i == 7:  # Kaynak — hafif renkli
+                c.fill = PatternFill("solid", fgColor=(C_MDB if dkey == "mdb" else C_ESL))
+                c.font = Font(color=(T_MDB if dkey == "mdb" else T_ESL), size=10)
+            elif zebra:
+                c.fill = zebra
+        ws.row_dimensions[row].height = 18
+        row += 1
+
+    if not data_rows:
+        ws.cell(row=HROW + 1, column=1, value="Kayıtlı araç yok.")
+        ws.merge_cells(start_row=HROW + 1, start_column=1, end_row=HROW + 1, end_column=len(headers))
+
+    buf = _io.BytesIO()
+    wb.save(buf)
+    data = buf.getvalue()
+    fname = f"tanimli_araclar_{_dt.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    resp_headers = {"Content-Disposition": f'attachment; filename="{fname}"'}
+    saved_where = ""
+    for _tag, _dir in _export_dirs():
+        try:
+            _dir.mkdir(parents=True, exist_ok=True)
+            (_dir / fname).write_bytes(data)
+            saved_where = _tag
+            if _tag == "exports":
+                import time as _time
+                _cut = _time.time() - 86400
+                for _old in _dir.glob("tanimli_araclar_*.xlsx"):
+                    try:
+                        if _old.stat().st_mtime < _cut:
+                            _old.unlink()
+                    except Exception:
+                        pass
+            break
+        except Exception:
+            continue
+    if saved_where:
+        resp_headers["X-Export-File"] = fname
+        resp_headers["X-Export-Where"] = saved_where
+
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=resp_headers,
+    )
 
 
 @router.post("/api/passages/bulk-delete")
@@ -653,7 +839,16 @@ async def export_passages_xlsx(
         if embed_photos:
             sp = r.get("screenshot_path") or ""
             if sp:
-                p = _Path(sp) if _os.path.isabs(sp) else (BASE_DIR / sp)
+                # DB yollari web bicimindedir ("/static/screenshots/x.jpg"). Windows'ta
+                # os.path.isabs("/static/...") True doner -> yanlislikla C:\static\...'a
+                # bakilir ve dosya bulunamaz. Dogru cozum: surucu-harfli GERCEK mutlak
+                # yollari (C:\...) oldugu gibi kullan; digerlerini (bastaki / dahil)
+                # BASE_DIR'e gore coz.
+                sp_norm = sp.replace("\\", "/")
+                if len(sp_norm) >= 2 and sp_norm[1] == ":":
+                    p = _Path(sp_norm)                       # C:/... gercek mutlak
+                else:
+                    p = BASE_DIR / sp_norm.lstrip("/")       # /static/... veya static/...
                 try:
                     if p.exists():
                         pim = PILImage.open(p); pim.thumbnail((170, 120))
@@ -672,13 +867,91 @@ async def export_passages_xlsx(
 
     buf = _io.BytesIO()
     wb.save(buf)
-    buf.seek(0)
-    fname = f"arac_gecisleri_{_dt.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    data = buf.getvalue()
+    fname = f"arac_gecisleri_{_dt.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    # Uygulama kullanıcıyla AYNI makinede çalıştığı için dosyayı doğrudan diske
+    # yazıyoruz — tarayıcı (pywebview/WebView2) blob indirmesi çalışmayabilir.
+    # Öncelik: kullanıcının İndirilenler klasörü; olmazsa uygulama exports/ klasörü.
+    # "Aç" (os.startfile) bu kaydedilen dosyayı Excel'de açar.
+    resp_headers = {"Content-Disposition": f'attachment; filename="{fname}"'}
+    saved_where = ""
+    for _tag, _dir in _export_dirs():
+        try:
+            _dir.mkdir(parents=True, exist_ok=True)
+            (_dir / fname).write_bytes(data)
+            saved_where = _tag
+            if _tag == "exports":   # uygulama klasörü birikmesin: 1 günden eskiyi sil
+                import time as _time
+                _cut = _time.time() - 86400
+                for _old in _dir.glob("arac_gecisleri_*.xlsx"):
+                    try:
+                        if _old.stat().st_mtime < _cut:
+                            _old.unlink()
+                    except Exception:
+                        pass
+            break
+        except Exception:
+            continue
+    if saved_where:
+        resp_headers["X-Export-File"] = fname          # aynı origin: JS okuyabilir
+        resp_headers["X-Export-Where"] = saved_where    # 'indirilenler' | 'exports'
+    else:
+        logger.warning("Export diske yazılamadı; yalnızca tarayıcı indirmesi")
+
     return Response(
-        content=buf.read(),
+        content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        headers=resp_headers,
     )
+
+
+def _export_dirs():
+    """Excel'in kaydedileceği/aranacağı klasörler, öncelik sırasıyla."""
+    from pathlib import Path as _P
+    from config import BASE_DIR
+    dirs = []
+    try:
+        _dl = _P.home() / "Downloads"
+        dirs.append(("indirilenler", _dl))
+    except Exception:
+        pass
+    dirs.append(("exports", BASE_DIR / "exports"))
+    return dirs
+
+
+@router.post("/api/open-export")
+async def open_export(request: Request):
+    """İndirilen Excel'i AYNI makinede varsayılan uygulamada (Excel) aç.
+    Güvenlik: yalnızca bilinen export klasörlerindeki .xlsx (path traversal yok)."""
+    import os as _os
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    name = (payload or {}).get("file", "")
+    if (not name or "/" in name or "\\" in name or ".." in name
+            or not name.lower().endswith(".xlsx")):
+        raise HTTPException(400, "Geçersiz dosya adı")
+    p = None
+    for _tag, _dir in _export_dirs():
+        cand = _dir / name
+        try:
+            if cand.exists():
+                p = cand
+                break
+        except Exception:
+            continue
+    if p is None:
+        raise HTTPException(404, "Dosya bulunamadı (süresi dolmuş olabilir)")
+    if not hasattr(_os, "startfile"):
+        raise HTTPException(400, "Bu platformda dosya açma desteklenmiyor")
+    try:
+        await asyncio.to_thread(_os.startfile, str(p))   # Windows: Excel'de aç
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        logger.exception("open-export başarısız")
+        raise HTTPException(500, f"Açılamadı: {e}")
 
 
 @router.get("/api/stats")

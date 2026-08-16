@@ -8,6 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <script src="/static/tailwind.js"></script>
+    <script src="/static/gg-download.js"></script>
     <style>
         @keyframes slideDown { from {opacity:0;transform:translateY(-8px);} to {opacity:1;transform:translateY(0);} }
         @keyframes toastIn { from {opacity:0;transform:translateY(12px);} to {opacity:1;transform:translateY(0);} }
@@ -33,6 +34,8 @@
     <div class="flex items-center gap-2">
         <button onclick="senkronizeEt()" id="sync-btn" title="MDB'den plakaları güncelle"
                 class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg border border-gray-700 transition">🔄 MDB Güncelle</button>
+        <button onclick="araclarExcel()" title="Tüm tanımlı araçları profesyonel Excel olarak indir (MDB + elle eklenen, marka/model dahil)"
+                class="text-xs bg-emerald-700 hover:bg-emerald-600 text-white font-semibold px-3 py-1.5 rounded-lg border border-emerald-600 transition">📊 Excel İndir</button>
         <button onclick="plakaEkleAc()" class="text-sm bg-cyan-700 hover:bg-cyan-600 text-white font-semibold px-4 py-1.5 rounded-lg transition shadow">+ Plaka Ekle</button>
     </div>
 </header>
@@ -149,6 +152,13 @@
                 <div id="m-plate-hint" class="text-[11px] text-gray-500 mt-1">Türkçe plaka; boşluklar otomatik yok sayılır.</div>
             </div>
 
+            <!-- Marka / Model -->
+            <div>
+                <label class="block text-[11px] text-gray-500 mb-1">Araç Marka / Model (opsiyonel)</label>
+                <input id="m-make" type="text" placeholder="Örn. Renault Clio - Beyaz"
+                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-cyan-600 focus:outline-none">
+            </div>
+
             <!-- Not -->
             <div>
                 <label class="block text-[11px] text-gray-500 mb-1">Not (opsiyonel)</label>
@@ -161,6 +171,27 @@
             <div class="flex gap-2 pt-1">
                 <button id="m-save" onclick="plakaKaydet()" class="flex-1 bg-cyan-700 hover:bg-cyan-600 text-white py-2.5 rounded-lg transition font-semibold">Kaydet</button>
                 <button onclick="modalKapat()" class="bg-gray-700 hover:bg-gray-600 text-white py-2.5 px-4 rounded-lg transition">İptal</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MDB Marka/Model Modalı ══ -->
+<div id="mdb-meta-modal" class="hidden fixed inset-0 z-[55] bg-black/80 flex items-center justify-center p-4"
+     onclick="if(event.target===this) mdbMarkaKapat()">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl max-w-sm w-full card-enter">
+        <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+            <h3 class="font-bold">🚗 Araç Marka / Model</h3>
+            <button onclick="mdbMarkaKapat()" class="text-gray-400 hover:text-white text-xl px-2 leading-none">✕</button>
+        </div>
+        <div class="p-4 space-y-3">
+            <div id="mdb-meta-person" class="text-xs text-gray-400"></div>
+            <input id="mdb-meta-input" type="text" placeholder="Örn. Fiat Egea - Gri"
+                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-cyan-600 focus:outline-none">
+            <p class="text-[11px] text-gray-500">Bu bilgi MDB senkronizasyonunda silinmez.</p>
+            <div class="flex gap-2 pt-1">
+                <button id="mdb-meta-save" onclick="mdbMarkaKaydet()" class="flex-1 bg-cyan-700 hover:bg-cyan-600 text-white py-2.5 rounded-lg transition font-semibold">Kaydet</button>
+                <button onclick="mdbMarkaKapat()" class="bg-gray-700 hover:bg-gray-600 text-white py-2.5 px-4 rounded-lg transition">İptal</button>
             </div>
         </div>
     </div>
@@ -236,11 +267,20 @@ function kisileriCiz(people){
         const name = esc(p.owner_name) || '<span class="text-gray-500">İsimsiz</span>';
         const meta = [p.block_no?('Blok '+esc(p.block_no)):'', p.apartment?('Daire '+esc(p.apartment)):'', p.kart_id?('Kart '+esc(p.kart_id)):''].filter(Boolean).join(' · ');
         const pdata = JSON.stringify({moonwell_id:p.moonwell_id, owner_name:p.owner_name, plate:p.plate, block_no:p.block_no, apartment:p.apartment}).replace(/'/g,'&#39;');
+        const markaTxt = esc(p.make_model||'');
+        const markaShow = markaTxt
+            ? `<span class="text-[11px] text-gray-400">🚗 ${markaTxt}</span>`
+            : `<span class="text-[11px] text-gray-600 italic">🚗 marka/model yok</span>`;
         return `<div class="row-card bg-gray-900 border border-gray-800 rounded-xl p-3">
             <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                     <div class="font-semibold truncate flex items-center gap-2">${name} ${badge}</div>
                     <div class="text-[11px] text-gray-500 mt-0.5">${meta}</div>
+                    <div class="mt-0.5 flex items-center gap-1.5">
+                        ${markaShow}
+                        <button onclick="mdbMarkaAc(${p.moonwell_id}, '${(p.owner_name||'').replace(/'/g,"&#39;")}', '${markaTxt.replace(/'/g,"&#39;")}')"
+                                class="text-[11px] text-cyan-400 hover:text-cyan-300 underline decoration-dotted" title="Marka/Model düzenle">düzenle</button>
+                    </div>
                 </div>
                 <button onclick='kisiyeEkle(${pdata})'
                         class="shrink-0 text-xs bg-gray-800 hover:bg-emerald-800 border border-gray-700 hover:border-emerald-700 text-gray-300 hover:text-white px-2.5 py-1.5 rounded-lg transition">+ Ek Plaka</button>
@@ -263,7 +303,7 @@ function bagimsizCiz(list){
             <div class="flex items-center gap-3 min-w-0">
                 ${plakaChip(e.plate, {extraId:e.id, linked:false})}
                 <div class="min-w-0">
-                    <div class="text-sm truncate">${esc(e.owner_name)||'<span class="text-gray-500">Sahip belirtilmemiş</span>'}</div>
+                    <div class="text-sm truncate">${esc(e.owner_name)||'<span class="text-gray-500">Sahip belirtilmemiş</span>'}${e.make_model?(' <span class="text-[11px] text-gray-400">— '+esc(e.make_model)+'</span>'):''}</div>
                     <div class="text-[11px] text-gray-500">${e.block_no?('Blok '+esc(e.block_no)):''}${e.apartment?(' · Daire '+esc(e.apartment)):''}${e.note?(' · '+esc(e.note)):''}</div>
                 </div>
             </div>
@@ -308,6 +348,7 @@ function hataGizle(){ document.getElementById('m-error').classList.add('hidden')
 function modalSifirla(){
     editId = null; selPerson = null;
     document.getElementById('m-plate').value='';
+    document.getElementById('m-make').value='';
     document.getElementById('m-note').value='';
     document.getElementById('m-owner').value='';
     document.getElementById('m-block').value='';
@@ -393,6 +434,7 @@ async function plakaDuzenle(id){
     document.getElementById('m-title').textContent = 'Plaka Düzenle';
     document.getElementById('m-mode-wrap').classList.add('hidden');
     document.getElementById('m-plate').value = rec.plate;
+    document.getElementById('m-make').value = rec.make_model || '';
     document.getElementById('m-note').value = rec.note || '';
     if (rec.vehicle_moonwell_id != null && rec._person){
         modTur('linked');
@@ -411,8 +453,9 @@ async function plakaKaydet(){
     const plate = document.getElementById('m-plate').value.trim();
     if (!plate){ hataGoster('Plaka zorunlu.'); return; }
     const note = document.getElementById('m-note').value.trim();
+    const make_model = document.getElementById('m-make').value.trim();
 
-    const body = { plate, note };
+    const body = { plate, note, make_model };
     if (modType === 'linked'){
         if (!selPerson){ hataGoster('Lütfen bir kişi seçin.'); return; }
         body.vehicle_moonwell_id = selPerson.moonwell_id;
@@ -459,6 +502,45 @@ async function senkronizeEt(){
     } catch(e){ toast('Senkronizasyon başarısız', false); }
     finally { btn.disabled=false; btn.textContent=old; }
 }
+
+// ── Excel export (ilerleme kartı gg-download.js'ten) ──
+function araclarExcel(){
+    if (typeof _indirmeBaslat === 'function') {
+        _indirmeBaslat('/api/vehicles/export.xlsx', 'Tanımlı araçlar');
+    } else {
+        // gg-download.js yüklenmediyse düz indir
+        window.location.href = (window.ggAuthedUrl ? window.ggAuthedUrl('/api/vehicles/export.xlsx') : '/api/vehicles/export.xlsx');
+    }
+}
+
+// ── MDB aracına marka/model ──
+let mdbMetaId = null;
+function mdbMarkaAc(moonwellId, ownerName, current){
+    mdbMetaId = moonwellId;
+    document.getElementById('mdb-meta-person').textContent = ownerName || 'İsimsiz kişi';
+    document.getElementById('mdb-meta-input').value = current || '';
+    document.getElementById('mdb-meta-modal').classList.remove('hidden');
+    setTimeout(()=>document.getElementById('mdb-meta-input').focus(), 50);
+}
+function mdbMarkaKapat(){ document.getElementById('mdb-meta-modal').classList.add('hidden'); mdbMetaId = null; }
+async function mdbMarkaKaydet(){
+    if (mdbMetaId == null) return;
+    const val = document.getElementById('mdb-meta-input').value.trim();
+    const btn = document.getElementById('mdb-meta-save');
+    btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+    try {
+        const r = await fetch('/api/vehicles/'+mdbMetaId+'/meta', {
+            method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({make_model: val}),
+        });
+        if (!r.ok){ toast('Kaydedilemedi', false); return; }
+        toast('Marka/Model kaydedildi');
+        mdbMarkaKapat();
+        veriYukle();
+    } catch(e){ toast('Ağ hatası', false); }
+    finally { btn.disabled=false; btn.textContent='Kaydet'; }
+}
+document.getElementById('mdb-meta-input').addEventListener('keydown', e => { if(e.key==='Enter') mdbMarkaKaydet(); });
 
 // Enter ile kaydet
 document.getElementById('m-plate').addEventListener('keydown', e => { if(e.key==='Enter') plakaKaydet(); });

@@ -49,17 +49,34 @@
         body.light-theme [class*="text-gray-300"]{color:#1f2937 !important}
         body.light-theme [class*="text-gray-600"]{color:#64748b !important}
         body.light-theme [class*="border-gray-800"],body.light-theme [class*="border-gray-700"]{border-color:#e2e8f0 !important}
-        /* Açık temada aksan yazı renklerini koyulaştır — beyaz üstünde net okunsun */
-        body.light-theme .text-green-400{color:#15803d !important}
-        body.light-theme .text-red-400{color:#dc2626 !important}
-        body.light-theme .text-cyan-400{color:#0e7490 !important}
-        body.light-theme .text-orange-400{color:#c2410c !important}
-        body.light-theme .text-amber-400{color:#b45309 !important}
+        /* Aksan yazi renkleri — gg-light.css'i attribute seciciyle yen (benimki
+           sonra gelir). Beyaz/acik-kart uzerinde NET okunsun diye daha koyu. */
+        body.light-theme [class*="text-red-400"]{color:#b91c1c !important}
+        body.light-theme [class*="text-orange-400"]{color:#9a3412 !important}
+        body.light-theme [class*="text-cyan-400"]{color:#155e75 !important}
+        body.light-theme [class*="text-green-400"]{color:#15803d !important}
         /* Callout kutuları — koyu arkaplan için tasarlanmıştı; açık temada koyu/net yazı */
         body.light-theme .callout-tip{background:#ecfdf5 !important;border-color:#6ee7b7 !important;color:#065f46 !important}
         body.light-theme .callout-warn{background:#fffbeb !important;border-color:#f59e0b !important;color:#92400e !important}
         body.light-theme .callout-info{background:#eff6ff !important;border-color:#93c5fd !important;color:#1e3a8a !important}
         body.light-theme .callout b{color:inherit !important}
+        /* Ust bar (mk-nav) HER IKI temada da koyu zeminli -> yazilari acik tut,
+           yoksa acik temada koyu-uzerinde-koyu = gorunmez olur */
+        body.light-theme header.mk-nav h1{color:#f1f5f9 !important}
+        body.light-theme header.mk-nav a{color:#cbd5e1 !important}
+        body.light-theme header.mk-nav a:hover{color:#ffffff !important}
+        body.light-theme header.mk-nav .bg-gray-700{background:#334155 !important}
+        /* Klavye tuslari (kbd) acik temada okunur olsun */
+        body.light-theme kbd{background:#e2e8f0 !important;color:#0f172a !important;border:1px solid #cbd5e1}
+        /* Hirsizlik bolumundeki siyah onizleme kutularinda yazi acik kalsin */
+        body.light-theme [class*="bg-black"]{color:#e2e8f0 !important}
+        /* Koyu mockup adalari (.gg-dark, orn. alarm bandi): acik temada da KOYU
+           kalir -> gg-light.css'in text-white/-red-300'u koyuya cevirmesini geri al
+           (yuksek specificity: .gg-dark [class*=...] gg-light'i yener). */
+        body.light-theme .gg-dark [class*="text-white"]{color:#ffffff !important}
+        body.light-theme .gg-dark [class*="text-red-300"]{color:#fecaca !important}
+        /* Alt bilgi (footer) beyaz uzerinde yeterince koyu olsun */
+        body.light-theme .gg-foot{color:#475569 !important}
 
         /* Yazdırma — guardhouse için kağıt kopya */
         @media print {
@@ -270,8 +287,8 @@
             <h2 class="text-xl font-bold mb-3 flex items-center gap-2">🚗 Kayıtsız Araç Alarmı</h2>
             <p class="text-gray-400 text-sm mb-4">Bariyerde <b>kayıtsız</b> bir plaka görülünce ekranın üstünde kırmızı bir uyarı belirir ve siren çalar:</p>
 
-            <!-- Sahte alarm banner -->
-            <div class="rounded-xl border-2 border-red-500 bg-gradient-to-r from-red-900/60 to-red-950/60 p-4 flex items-center justify-between gap-4 mb-4 flex-wrap">
+            <!-- Sahte alarm banner (koyu ada -> .gg-dark) -->
+            <div class="gg-dark rounded-xl border-2 border-red-500 bg-gradient-to-r from-red-900/60 to-red-950/60 p-4 flex items-center justify-between gap-4 mb-4 flex-wrap">
                 <div class="flex items-center gap-3">
                     <span class="text-3xl animate-pulse">🚨</span>
                     <div>
@@ -442,7 +459,7 @@
             </div>
         </section>
 
-        <div class="text-center text-xs text-gray-600 py-6">
+        <div class="gg-foot text-center text-xs text-gray-600 py-6">
             GateGuard Kullanım Kılavuzu · Güvenli nöbetler dileriz 🛡️
         </div>
     </main>
